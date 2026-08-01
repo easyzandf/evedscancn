@@ -1,0 +1,4 @@
+.claude/
+cache/
+*.bak
+.DS_Store
