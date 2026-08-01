@@ -572,32 +572,22 @@ function doScan(silent) {
 // -- ESI character lookup --
 var _esiCache = {};
 function doEsiLookups(names) {
-  // Deduplicate, max 50 unique names for ESI
-  var unique = [];
-  var seen = {};
-  for (var i = 0; i < names.length && unique.length < 50; i++) {
-    var n = names[i].toLowerCase();
-    if (!seen[n]) { seen[n] = true; unique.push(names[i]); }
-  }
-
-  var pending = unique.length;
+  // Take first 50 names (no dedup, keep original order)
+  var lookup = names.slice(0, 50);
+  var pending = lookup.length;
   if (!pending) return;
-  var esiResults = {};
+  var esiResults = [];
 
-  unique.forEach(function(name) {
+  lookup.forEach(function(name) {
     if (_esiCache[name]) {
-      esiResults[name] = _esiCache[name];
+      esiResults.push({ name: name, data: _esiCache[name] });
       pending--;
       if (!pending) showEsiSummary(esiResults);
       return;
     }
     _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
-      if (res && res.name) {
-        _esiCache[name] = res;
-        esiResults[name] = res;
-      } else {
-        _esiCache[name] = null;
-      }
+      if (res && res.name) _esiCache[name] = res; else _esiCache[name] = null;
+      esiResults.push({ name: name, data: _esiCache[name] });
       pending--;
       if (!pending) showEsiSummary(esiResults);
     });
@@ -609,21 +599,22 @@ function showEsiSummary(results) {
   var noAlliance = {}; // corp ticker → { name, members: [] }
   var total = 0;
 
-  Object.keys(results).forEach(function(name) {
-    var r = results[name];
+  results.forEach(function(entry) {
+    var r = entry.data;
     if (!r) return;
     total++;
+    var charName = entry.name;
 
     if (r.alliance_ticker) {
       var ak = r.alliance_ticker;
       if (!alliances[ak]) alliances[ak] = { name: r.alliance_name, ticker: ak, corps: {} };
       var ck = r.corp_ticker || r.corp_name || '?';
-      if (!alliances[ak].corps[ck]) alliances[ak].corps[ck] = { name: r.corp_name, ticker: r.corp_ticker, count: 0 };
-      alliances[ak].corps[ck].count++;
+      if (!alliances[ak].corps[ck]) alliances[ak].corps[ck] = { name: r.corp_name, ticker: r.corp_ticker, members: [] };
+      alliances[ak].corps[ck].members.push(charName);
     } else {
       var ck2 = r.corp_ticker || r.corp_name || '?';
-      if (!noAlliance[ck2]) noAlliance[ck2] = { name: r.corp_name, ticker: r.corp_ticker, count: 0 };
-      noAlliance[ck2].count++;
+      if (!noAlliance[ck2]) noAlliance[ck2] = { name: r.corp_name, ticker: r.corp_ticker, members: [] };
+      noAlliance[ck2].members.push(charName);
     }
   });
 
@@ -634,40 +625,48 @@ function showEsiSummary(results) {
 
   var html = '';
 
-  // Alliances first
   var aList = Object.keys(alliances).sort(function(a, b) {
     var ta = 0, tb = 0;
-    Object.keys(alliances[a].corps).forEach(function(k) { ta += alliances[a].corps[k].count; });
-    Object.keys(alliances[b].corps).forEach(function(k) { tb += alliances[b].corps[k].count; });
+    Object.keys(alliances[a].corps).forEach(function(k) { ta += alliances[a].corps[k].members.length; });
+    Object.keys(alliances[b].corps).forEach(function(k) { tb += alliances[b].corps[k].members.length; });
     return tb - ta;
   });
+
   for (var ai = 0; ai < aList.length; ai++) {
     var a = alliances[aList[ai]];
     var aTotal = 0;
-    var cItems = [];
-    Object.keys(a.corps).forEach(function(ck) {
-      var c = a.corps[ck];
-      aTotal += c.count;
-      cItems.push((c.ticker || c.name) + '×' + c.count);
-    });
-    html += '<div style="margin-bottom:4px">'
-      + '<b style="color:#f0ad4e">' + a.ticker + '</b>'
-      + ' <span style="color:#888;font-size:11px">' + a.name + '</span>'
-      + ' <b>×' + aTotal + '</b>'
-      + ' <span style="color:#888;font-size:11px">(' + cItems.join(', ') + ')</span>'
-      + '</div>';
+    var cList = Object.keys(a.corps).sort(function(x, y) { return a.corps[y].members.length - a.corps[x].members.length; });
+
+    html += '<details open style="margin-bottom:6px">'
+      + '<summary style="cursor:pointer;color:#f0ad4e;font-weight:bold">'
+      + a.ticker + ' <span style="color:#ccc;font-weight:normal">' + a.name + '</span></summary>';
+
+    for (var ci = 0; ci < cList.length; ci++) {
+      var c = a.corps[cList[ci]];
+      aTotal += c.members.length;
+      html += '<div style="margin-left:16px;padding:2px 0">'
+        + '<b>' + (c.ticker || c.name) + '</b>'
+        + ' <span style="color:#888;font-size:11px">×' + c.members.length + '</span>'
+        + ' <span style="color:#666;font-size:11px">' + c.members.join(', ') + '</span>'
+        + '</div>';
+    }
+    html += '</details>';
   }
 
   // Corps without alliance
-  var naList = Object.keys(noAlliance).sort(function(a, b) { return noAlliance[b].count - noAlliance[a].count; });
+  var naList = Object.keys(noAlliance).sort(function(a, b) { return noAlliance[b].members.length - noAlliance[a].members.length; });
   if (naList.length) {
-    html += '<div style="margin-top:6px;margin-bottom:4px;color:#888;font-size:11px">无联盟：</div>';
-    var naItems = [];
-    naList.forEach(function(ck) {
-      var c = noAlliance[ck];
-      naItems.push((c.ticker || c.name) + '×' + c.count);
-    });
-    html += '<div>' + naItems.join(' &nbsp;') + '</div>';
+    html += '<details open style="margin-bottom:6px">'
+      + '<summary style="cursor:pointer;color:#888;font-weight:bold">无联盟</summary>';
+    for (var nai = 0; nai < naList.length; nai++) {
+      var nc = noAlliance[naList[nai]];
+      html += '<div style="margin-left:16px;padding:2px 0">'
+        + '<b>' + (nc.ticker || nc.name) + '</b>'
+        + ' <span style="color:#888;font-size:11px">×' + nc.members.length + '</span>'
+        + ' <span style="color:#666;font-size:11px">' + nc.members.join(', ') + '</span>'
+        + '</div>';
+    }
+    html += '</details>';
   }
 
   document.getElementById('esi-summary-content').innerHTML = html;
