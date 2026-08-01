@@ -292,7 +292,7 @@
   <!-- Browser page -->
   <div id="pg-browse" class="hidden">
     <div class="browbar">
-      <input type="text" id="bs" placeholder="搜索舰船（中文/英文/分类）" oninput="doFilter()">
+      <input type="text" id="bs" placeholder="搜索舰船（中文/英文/分类/定位）" oninput="doFilter()" onfocus="if(this.value)doFilter()">
       <select id="bc" onchange="doFilter()">
         <option value="">全部类别</option>
       </select>
@@ -652,9 +652,13 @@ function doFilter() {
   var cat = document.getElementById('bc').value;
   var tech = document.getElementById('bt').value;
 
+  // If searching by keyword, ignore dropdown filters (they limit results unexpectedly)
+  if (q) { cat = ''; tech = ''; }
+
   _browserData = SHIPS_DATA.filter(function(s) {
     if (q && s.cn.toLowerCase().indexOf(q)===-1 && s.en.toLowerCase().indexOf(q)===-1
-          && s.subcat.toLowerCase().indexOf(q)===-1 && s.role.toLowerCase().indexOf(q)===-1) return false;
+          && s.subcat.toLowerCase().indexOf(q)===-1 && s.role.toLowerCase().indexOf(q)===-1
+          && s.cat.toLowerCase().indexOf(q)===-1 && s.tech.toLowerCase().indexOf(q)===-1) return false;
     if (cat && s.subcat !== cat) return false;
     if (tech && s.tech !== tech) return false;
     return true;
