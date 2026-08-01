@@ -551,16 +551,16 @@ function copyLink() {
 }
 
 function screenshotResult() {
-  var wrap = document.querySelector('.wrap');
+  var area = document.getElementById('resultArea');
   var btn = document.querySelector('#resultSum button:last-child');
   if (btn) { btn.textContent = '生成中...'; btn.disabled = true; }
 
   var bg = document.body.classList.contains('light') ? '#f0f0f0' : '#1a1a2e';
-  html2canvas(wrap, {
+  html2canvas(area, {
     backgroundColor: bg,
     scale: 2,
-    height: wrap.scrollHeight,
-    windowHeight: wrap.scrollHeight
+    height: area.scrollHeight,
+    windowHeight: area.scrollHeight
   }).then(function(canvas) {
     // try clipboard first (only works on https)
     if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
