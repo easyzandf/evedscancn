@@ -450,14 +450,16 @@ function doScan(silent) {
       var dashIdx = desc.lastIndexOf(' - ');
       if (dashIdx > 0) {
         var chName = desc.substring(dashIdx + 3).trim();
-        if (chName.length > 1 && chName.length < 50 && !/[*]/.test(chName)) {
+        // Filter: must be 3+ chars, no *, doesn't look like ship fit (T2, V2, etc.)
+        if (chName.length >= 3 && chName.length < 50 && !/[*]/.test(chName) && !/^[A-Z]?\d/.test(chName)) {
           charNames.push(chName);
         }
       }
     } else if (!ship) {
       // Plain text line (no tabs, not a ship): treat as character name
       var line = lines[i].trim();
-      if (line.length > 1 && line.length < 50 && !/\t/.test(line) && !/[*]/.test(line) && !/\d/.test(line[0])) {
+      // Filter: 3+ chars, no tabs, no *, not purely numeric, not a typeID
+      if (line.length >= 3 && line.length < 50 && !/\t/.test(line) && !/[*]/.test(line) && !/^\d{4,}$/.test(line)) {
         charNames.push(line);
       }
     }
