@@ -572,24 +572,33 @@ function doScan(silent) {
 // -- ESI character lookup --
 var _esiCache = {};
 function doEsiLookups(names) {
-  // Take first 50 names (no dedup, keep original order)
-  var lookup = names.slice(0, 50);
+  // Take all names (no dedup, keep original order)
+  var lookup = names.slice(0, 200);
   var pending = lookup.length;
   if (!pending) return;
   var esiResults = [];
 
-  lookup.forEach(function(name) {
-    if (_esiCache[name]) {
-      esiResults.push({ name: name, data: _esiCache[name] });
-      pending--;
-      if (!pending) showEsiSummary(esiResults);
+  // Probe: check if esi.php is available (not on static hosting like GitHub Pages)
+  _fetch('GET', 'esi.php?name=probe', null, function(probe) {
+    if (!probe || probe.error) {
+      document.getElementById('esi-summary').style.display = 'block';
+      document.getElementById('esi-summary-content').innerHTML = '此站不支持 ESI 查询（需 PHP 后端），请使用 <a href="https://www.evedscancn.cc.cd/">www.evedscancn.cc.cd</a>';
       return;
     }
-    _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
-      if (res && res.name) _esiCache[name] = res; else _esiCache[name] = null;
-      esiResults.push({ name: name, data: _esiCache[name] });
-      pending--;
-      if (!pending) showEsiSummary(esiResults);
+
+    lookup.forEach(function(name) {
+      if (_esiCache[name]) {
+        esiResults.push({ name: name, data: _esiCache[name] });
+        pending--;
+        if (!pending) showEsiSummary(esiResults);
+        return;
+      }
+      _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
+        if (res && res.name) _esiCache[name] = res; else _esiCache[name] = null;
+        esiResults.push({ name: name, data: _esiCache[name] });
+        pending--;
+        if (!pending) showEsiSummary(esiResults);
+      });
     });
   });
 }
