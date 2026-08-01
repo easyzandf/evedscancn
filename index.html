@@ -442,9 +442,10 @@ function doScan(silent) {
         counts[ship.en] = { ship: ship, count: 1 };
       }
     }
-    // Extract character name: tab-split col[1], take part after " - "
+    // Extract character name
     var cols = lines[i].split('\t');
     if (cols.length >= 2) {
+      // Tab format: col[1] might be "shipName - characterName"
       var desc = cols[1].trim();
       var dashIdx = desc.lastIndexOf(' - ');
       if (dashIdx > 0) {
@@ -453,7 +454,22 @@ function doScan(silent) {
           charNames.push(chName);
         }
       }
+    } else if (!ship) {
+      // Plain text line (no tabs, not a ship): treat as character name
+      var line = lines[i].trim();
+      if (line.length > 1 && line.length < 50 && !/\t/.test(line) && !/[*]/.test(line) && !/\d/.test(line[0])) {
+        charNames.push(line);
+      }
     }
+  }
+
+  // If no ships but have character names, show ESI-only results
+  if (!total && charNames.length > 0) {
+    document.getElementById('resultSum').innerHTML = '（共 ' + charNames.length + ' 个角色名）';
+    document.getElementById('resultBody').innerHTML = '<div id="esi-summary"><b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
+    document.getElementById('resultArea').classList.remove('hidden');
+    doEsiLookups(charNames);
+    return;
   }
 
   _scanResults = Object.keys(counts).map(function(k) { return counts[k]; });
