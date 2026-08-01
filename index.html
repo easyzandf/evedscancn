@@ -430,6 +430,7 @@ function doScan(silent) {
   var lines = raw.split('\n');
   var counts = {};   // key=en name -> { ship, count }
   var total = 0;
+  var charNames = []; // collect character names for ESI lookup
 
   for (var i = 0; i < lines.length; i++) {
     var ship = matchShip(lines[i]);
@@ -439,6 +440,18 @@ function doScan(silent) {
         counts[ship.en].count++;
       } else {
         counts[ship.en] = { ship: ship, count: 1 };
+      }
+    }
+    // Extract character name: tab-split col[1], take part after " - "
+    var cols = lines[i].split('\t');
+    if (cols.length >= 2) {
+      var desc = cols[1].trim();
+      var dashIdx = desc.lastIndexOf(' - ');
+      if (dashIdx > 0) {
+        var chName = desc.substring(dashIdx + 3).trim();
+        if (chName.length > 1 && chName.length < 50 && !/[*]/.test(chName)) {
+          charNames.push(chName);
+        }
       }
     }
   }
@@ -481,6 +494,10 @@ function doScan(silent) {
     + ' <button class="btn-clr" onclick="copyLink()" style="font-size:12px;padding:2px 10px;margin-left:10px;">复制分享链接</button>'
     + ' <button class="btn-clr" onclick="screenshotResult()" style="font-size:12px;padding:2px 10px;margin-left:4px;">截图复制</button>';
 
+  // Alliance/Corp summary placeholder (filled by ESI lookup)
+  var esiHTML = '<div id="esi-summary" style="background:#16213e;border:1px solid #2a3a55;padding:8px 14px;margin-bottom:12px;border-radius:3px;font-size:13px;display:none">'
+    + '<b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
+
   // ECM summary
   var ecmCounts = {};
   _scanResults.forEach(function(r) {
@@ -495,7 +512,8 @@ function doScan(silent) {
   }
 
   // build single table with group header rows
-  var html = '<div style="background:#16213e;border:1px solid #2a3a55;padding:8px 14px;margin-bottom:12px;border-radius:3px;font-size:13px">'
+  var html = esiHTML
+    + '<div style="background:#16213e;border:1px solid #2a3a55;padding:8px 14px;margin-bottom:12px;border-radius:3px;font-size:13px">'
     + '<b>ECM建议：</b>' + ecmHTML + '</div>';
   html += '<table class="ship-tbl"><thead><tr>'
     + '<th style="width:38%">舰船</th><th style="width:15%">标签</th><th style="width:18%">势力</th><th style="width:17%">ECM建议</th><th style="width:12%;text-align:right">数量</th>'
@@ -528,6 +546,86 @@ function doScan(silent) {
   document.getElementById('resultBody').innerHTML = html;
   area.classList.remove('hidden');
   if (!silent) area.scrollIntoView();
+
+  // ESI lookups for character names
+  if (charNames.length) doEsiLookups(charNames);
+}
+
+// -- ESI character lookup --
+var _esiCache = {};
+function doEsiLookups(names) {
+  // Deduplicate, take first 20 unique names
+  var unique = [];
+  var seen = {};
+  for (var i = 0; i < names.length && unique.length < 20; i++) {
+    var n = names[i].toLowerCase();
+    if (!seen[n]) { seen[n] = true; unique.push(names[i]); }
+  }
+
+  var pending = unique.length;
+  var esiResults = {}; // name -> { corp_ticker, alliance_ticker, ... }
+
+  unique.forEach(function(name) {
+    if (_esiCache[name]) {
+      esiResults[name] = _esiCache[name];
+      pending--;
+      if (!pending) showEsiSummary(esiResults);
+      return;
+    }
+    _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
+      if (res && res.name) {
+        _esiCache[name] = res;
+        esiResults[name] = res;
+      } else {
+        _esiCache[name] = null;
+      }
+      pending--;
+      if (!pending) showEsiSummary(esiResults);
+    });
+  });
+}
+
+function showEsiSummary(results) {
+  var alliances = {};
+  var corps = {};
+  var total = 0;
+
+  Object.keys(results).forEach(function(name) {
+    var r = results[name];
+    if (!r) return;
+    total++;
+    var aKey = r.alliance_ticker || r.alliance_name || 'No Alliance';
+    var cKey = r.corp_ticker || r.corp_name || 'Unknown Corp';
+    if (!alliances[aKey]) alliances[aKey] = { name: r.alliance_name || 'No Alliance', ticker: r.alliance_ticker || '', count: 0, corps: {} };
+    alliances[aKey].count++;
+    if (!alliances[aKey].corps[cKey]) alliances[aKey].corps[cKey] = { name: r.corp_name || '', ticker: r.corp_ticker || '', count: 0 };
+    alliances[aKey].corps[cKey].count++;
+  });
+
+  if (!total) return;
+  var el = document.getElementById('esi-summary');
+  if (!el) return;
+  el.style.display = 'block';
+
+  var html = '';
+  var aList = Object.keys(alliances).sort(function(a, b) { return alliances[b].count - alliances[a].count; });
+  for (var ai = 0; ai < aList.length; ai++) {
+    var a = alliances[aList[ai]];
+    var label = a.ticker || a.name;
+    html += '<span style="margin-right:16px;white-space:nowrap">'
+      + label + ' <b style="color:#f0ad4e">×' + a.count + '</b>';
+    var cList = Object.keys(a.corps);
+    if (cList.length) {
+      html += ' <span style="color:#888;font-size:11px">(';
+      for (var ci = 0; ci < cList.length; ci++) {
+        var c = a.corps[cList[ci]];
+        html += (ci ? ', ' : '') + (c.ticker || c.name) + '×' + c.count;
+      }
+      html += ')</span>';
+    }
+    html += '</span>';
+  }
+  document.getElementById('esi-summary-content').innerHTML = html;
 }
 
 function copyLink() {
