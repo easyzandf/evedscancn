@@ -365,7 +365,18 @@ function matchShip(line) {
   return null;
 }
 
-// -- base64 for utf8 (hash sharing) --
+// -- base64 for utf8 (hash sharing fallback when no PHP) --
+function encode64(str) {
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(_, p) {
+    return String.fromCharCode('0x' + p);
+  }));
+}
+function decode64(str) {
+  return decodeURIComponent(atob(str).split('').map(function(c) {
+    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+  }).join(''));
+}
+
 // -- Subcategory English names --
 var _subcatEN = {
   '护卫舰': 'Frigate', '巡洋舰': 'Cruiser', '战列舰': 'Battleship', '驱逐舰': 'Destroyer',
@@ -441,18 +452,22 @@ function doScan(silent) {
     return;
   }
 
-  // save to server cache, get short code
+  // generate share link: try PHP short code, fallback to base64 hash
   if (!silent && !_scanCode) {
     var names = [];
     for (var i = 0; i < lines.length; i++) {
       var s = matchShip(lines[i]);
       if (s) names.push(s.en);
     }
-    _fetch('POST', 'api.php', JSON.stringify({scan: names.join('\n')}), function(res) {
+    var scanText = names.join('\n');
+    // Try PHP API first (works on server with PHP)
+    _fetch('POST', 'api.php', JSON.stringify({scan: scanText}), function(res) {
       if (res && res.code) {
         _scanCode = res.code;
-        var hash = '#c=' + _scanCode;
-        if (window.location.hash !== hash) history.replaceState(null, '', hash);
+        history.replaceState(null, '', '#c=' + _scanCode);
+      } else {
+        // Fallback: encode in URL hash (works on static hosting like GitCode Pages)
+        history.replaceState(null, '', '#s=' + encode64(scanText));
       }
     });
   }
@@ -589,6 +604,7 @@ function _fetch(method, url, body, cb) {
 (function() {
   var h = window.location.hash;
   if (h.indexOf('#c=') === 0) {
+    // PHP short code
     _scanCode = h.slice(3);
     _fetch('GET', 'api.php?code=' + encodeURIComponent(_scanCode), null, function(res) {
       if (res && res.scan) {
@@ -596,6 +612,13 @@ function _fetch(method, url, body, cb) {
         doScan(true);
       }
     });
+  } else if (h.indexOf('#s=') === 0) {
+    // Base64 fallback (static hosting)
+    try {
+      var raw = decode64(h.slice(3));
+      document.getElementById('scanInput').value = raw;
+      doScan(true);
+    } catch(e) {}
   }
 })();
 
