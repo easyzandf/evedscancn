@@ -503,9 +503,13 @@ function doScan(silent) {
     });
   }
 
-  // stats
+  // stats (count grouped categories)
+  var _logisticsSubcats = { '后勤护卫舰': 1, '后勤舰': 1, '战力辅助舰': 1 };
   var cats = {};
-  _scanResults.forEach(function(r) { cats[r.ship.subcat] = (cats[r.ship.subcat]||0) + r.count; });
+  _scanResults.forEach(function(r) {
+    var k = _logisticsSubcats[r.ship.subcat] ? '后勤' : (r.ship.subcat || '未分类');
+    cats[k] = (cats[k]||0) + r.count;
+  });
   var catNames = Object.keys(cats);
   document.getElementById('resultSum').innerHTML =
     '（共 ' + total + ' 条记录，' + _scanResults.length + ' 种舰船，' + catNames.length + ' 个类别）'
@@ -529,34 +533,54 @@ function doScan(silent) {
       + ecmList[ei] + ' <b style="color:#f0ad4e">×' + ecmCounts[ecmList[ei]] + '</b></span>';
   }
 
+  // Merge all logistics-related subcats into one "后勤" group
+  function groupKey(ship) {
+    if (_logisticsSubcats[ship.subcat]) return '后勤';
+    return ship.subcat || '未分类';
+  }
+  var groups = {};
+  _scanResults.forEach(function(r) {
+    var k = groupKey(r.ship);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(r);
+  });
+  var gNames = Object.keys(groups).sort(function(a, b) {
+    var ta = 0, tb = 0;
+    groups[a].forEach(function(r) { ta += r.count; });
+    groups[b].forEach(function(r) { tb += r.count; });
+    return tb - ta;
+  });
+
   // build single table with group header rows
   var html = esiHTML
     + '<div style="background:#16213e;border:1px solid #2a3a55;padding:8px 14px;margin-bottom:12px;border-radius:3px;font-size:13px">'
     + '<b>ECM建议：</b>' + ecmHTML + '</div>';
   html += '<table class="ship-tbl"><thead><tr>'
-    + '<th style="width:38%">舰船</th><th style="width:15%">标签</th><th style="width:18%">势力</th><th style="width:17%">ECM建议</th><th style="width:12%;text-align:right">数量</th>'
+    + '<th>舰船</th><th>标签</th><th>势力</th><th>ECM建议</th>'
     + '</tr></thead><tbody>';
-  catNames.sort(function(a, b) { return cats[b] - cats[a]; });
-  for (var c = 0; c < catNames.length; c++) {
-    var cn = catNames[c];
-    var cnEn = _subcatEN[cn] || cn;
-    html += '<tr class="grp"><td colspan="5">' + cn + ' <span class="en">' + cnEn + '</span>（' + cats[cn] + ' 艘）</td></tr>';
 
-    var groupShips = _scanResults.filter(function(r) { return r.ship.subcat === cn; });
+  for (var g = 0; g < gNames.length; g++) {
+    var cn = gNames[g];
+    var groupShips = groups[cn];
+    var gTotal = 0;
+    groupShips.forEach(function(r) { gTotal += r.count; });
+    var cnEn = _subcatEN[cn] || cn;
+    html += '<tr class="grp"><td colspan="4">' + cn + ' <span class="en">' + cnEn + '</span>（' + gTotal + ' 艘）</td></tr>';
+
     groupShips.sort(function(a, b) { return b.count - a.count; });
-    for (var g = 0; g < groupShips.length; g++) {
-      var sh = groupShips[g].ship;
-      var cnt = groupShips[g].count;
+    for (var i = 0; i < groupShips.length; i++) {
+      var sh = groupShips[i].ship;
+      var cnt = groupShips[i].count;
       var tags = '';
       if (sh.tech) tags += '<span class="tag t-tech">' + sh.tech + '</span>';
       if (sh.role) tags += '<span class="tag t-role">' + sh.role + '</span>';
       var ecm = getECM(sh.cat);
       html += '<tr>'
-        + '<td><span class="cn">' + sh.cn + '</span><span class="en">' + sh.en + '</span></td>'
+        + '<td><span class="cn">' + sh.cn + '</span><span class="en">' + sh.en + '</span>'
+        + (cnt > 1 ? ' <b style="color:#f0ad4e">×' + cnt + '</b>' : '') + '</td>'
         + '<td>' + tags + '</td>'
         + '<td>' + (sh.cat||'') + '</td>'
         + '<td><span class="tag t-tech">' + ecm + '</span></td>'
-        + '<td style="color:#f0ad4e;text-align:right;padding-right:16px;">×' + cnt + '</td>'
         + '</tr>';
     }
   }
