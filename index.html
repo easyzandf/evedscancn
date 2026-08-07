@@ -312,44 +312,6 @@
   body.light .trait-item .skill { color: #666; }
   .trait-item .val { color: #f0ad4e; }
 
-  /* fit page */
-  .fit-goals { margin: 10px 0; }
-  .fit-goal {
-    padding: 6px 16px;
-    background: #16213e;
-    border: 1px solid #2a3a55;
-    color: #ccc;
-    cursor: pointer;
-    font-size: 13px;
-    margin-right: 6px;
-    border-radius: 3px;
-  }
-  body.light .fit-goal { background: #fff; color: #333; }
-  .fit-goal.active { background: #f0ad4e; color: #1a1a2e; font-weight: bold; border-color: #f0ad4e; }
-  .fit-result-card {
-    background: #16213e;
-    border: 1px solid #2a3a55;
-    border-radius: 4px;
-    padding: 14px 16px;
-    margin-top: 14px;
-  }
-  body.light .fit-result-card { background: #fff; border-color: #ddd; }
-  .fit-stats { display: flex; gap: 12px; flex-wrap: wrap; margin: 10px 0 14px 0; }
-  .fit-stat {
-    background: rgba(240,173,78,0.08);
-    border: 1px solid #2a3a55;
-    border-radius: 4px;
-    padding: 8px 18px;
-    text-align: center;
-  }
-  body.light .fit-stat { background: #fff3e0; border-color: #ddd; }
-  .fit-stat .v { font-size: 20px; font-weight: bold; color: #f0ad4e; }
-  .fit-stat .k { font-size: 11px; color: #888; }
-  .fit-slot-title { color: #f0ad4e; font-size: 13px; font-weight: bold; margin: 8px 0 4px 0; }
-  .fit-item-row { font-size: 13px; padding: 2px 0; color: #ccc; }
-  body.light .fit-item-row { color: #333; }
-  .fit-item-row .cnt { color: #f0ad4e; margin-left: 4px; }
-
   /* clickable ship name */
   .ship-name-link {
     cursor: pointer;
@@ -395,7 +357,6 @@
   <div class="nav">
     <a href="#" class="on" data-pg="scan">D-Scan 解析</a>
     <a href="#" data-pg="browse">舰船浏览器</a>
-    <a href="#" data-pg="fit">装配建议</a>
   </div>
   <button class="tog" onclick="toggleTheme()">亮/暗</button>
 </div>
@@ -448,29 +409,6 @@
       </thead>
       <tbody id="browBody"></tbody>
     </table>
-  </div>
-
-  <!-- Fit page -->
-  <div id="pg-fit" class="hidden">
-    <div class="browbar">
-      <input type="text" id="fs" placeholder="搜索舰船..." oninput="filterFitShips()">
-      <select id="fc" onchange="renderFitShipList()">
-        <option value="">全部类型</option>
-      </select>
-      <span class="cnt" id="fitCnt"></span>
-    </div>
-    <div class="fit-goals" id="fitGoals">
-      <span style="color:var(--text-secondary);font-weight:600;margin-right:8px">装配目标:</span>
-      <button class="fit-goal active" data-goal="pvp_dps" onclick="setFitGoal('pvp_dps')">PvP 输出</button>
-      <button class="fit-goal" data-goal="pvp_tank" onclick="setFitGoal('pvp_tank')">PvP 坦克</button>
-      <button class="fit-goal" data-goal="pve" onclick="setFitGoal('pve')">PvE 刷怪</button>
-      <button class="fit-goal" data-goal="logistics" onclick="setFitGoal('logistics')">后勤</button>
-    </div>
-    <div class="btnbar">
-      <button class="btn btn-go" onclick="generateFit()">生成装配</button>
-      <span class="hint">基于全技能 V 模拟 + 启发式规则，DPS/EHP 为估算值</span>
-    </div>
-    <div id="fitResult"></div>
   </div>
 
 </div>
@@ -1214,126 +1152,7 @@ function switchPg(pg) {
   document.querySelector('.topbar .nav a[data-pg="' + pg + '"]').classList.add('on');
   document.getElementById('pg-scan').classList.toggle('hidden', pg !== 'scan');
   document.getElementById('pg-browse').classList.toggle('hidden', pg !== 'browse');
-  document.getElementById('pg-fit').classList.toggle('hidden', pg !== 'fit');
-  if (pg === 'fit') renderFitShipList();
 }
-
-// -- fit page --
-var _fitShips = [];
-var _fitGoal = 'pvp_dps';
-var _fitShipId = 0;
-
-function fitShipOptions() {
-  // return ships that can be fitted (have slots)
-  return SHIPS_DATA.filter(function(s) {
-    var a = s.attr;
-    return a && a.attrs && (a.attrs.hi !== undefined || a.attrs.med !== undefined || a.attrs.low !== undefined);
-  });
-}
-
-function renderFitShipList() {
-  var q = (document.getElementById('fs').value || '').toLowerCase();
-  var cat = document.getElementById('fc').value;
-  _fitShips = fitShipOptions().filter(function(s) {
-    if (q && s.cn.toLowerCase().indexOf(q) === -1 && s.en.toLowerCase().indexOf(q) === -1) return false;
-    if (cat && s.subcat !== cat) return false;
-    return true;
-  });
-  document.getElementById('fitCnt').textContent = '共 ' + _fitShips.length + ' 艘';
-  var sel = document.getElementById('fitShipSel');
-  if (!sel) return;
-  sel.innerHTML = '';
-  _fitShips.forEach(function(s) {
-    var o = document.createElement('option');
-    o.value = s.attr.typeID;
-    o.textContent = s.cn + ' (' + s.en + ')';
-    sel.appendChild(o);
-  });
-  if (_fitShipId) sel.value = String(_fitShipId);
-}
-
-function filterFitShips() { renderFitShipList(); }
-
-function setFitGoal(g) {
-  _fitGoal = g;
-  document.querySelectorAll('.fit-goal').forEach(function(b) { b.classList.toggle('active', b.dataset.goal === g); });
-}
-
-function generateFit() {
-  var sel = document.getElementById('fitShipSel');
-  if (!sel || !sel.value) { document.getElementById('fitResult').innerHTML = '<p style="color:#888">请先选择舰船</p>'; return; }
-  _fitShipId = parseInt(sel.value);
-  var goal = _fitGoal;
-  document.getElementById('fitResult').innerHTML = '<p style="color:#888">生成中...</p>';
-  _fetch('GET', 'fit_engine.php?ship=' + _fitShipId + '&goal=' + goal, null, function(d) {
-    if (!d || d.error) { document.getElementById('fitResult').innerHTML = '<p style="color:#d9534f">生成失败</p>'; return; }
-    renderFit(d);
-  });
-}
-
-function renderFit(d) {
-  var html = '<div class="fit-result-card">';
-  html += '<h3 style="margin:0 0 4px 0;color:#f0ad4e;font-size:16px">' + d.ship.name + ' <span class="en">' + d.ship.name_en + '</span></h3>';
-  html += '<div style="color:#888;font-size:12px;margin-bottom:8px">' + d.ship.subcat + ' · ' + goalLabel(d.goal) + ' · 全技能 V</div>';
-
-  html += '<div class="fit-stats">';
-  html += '<div class="fit-stat"><div class="v">' + d.stats.dps + '</div><div class="k">DPS</div></div>';
-  html += '<div class="fit-stat"><div class="v">' + d.stats.ehp + '</div><div class="k">EHP</div></div>';
-  html += '<div class="fit-stat"><div class="v">' + d.stats.speed + '</div><div class="k">速度 m/s</div></div>';
-  html += '<div class="fit-stat"><div class="v">' + d.stats.cap_sustain + '</div><div class="k">电容 GJ/s</div></div>';
-  html += '</div>';
-
-  html += slotSection('高槽', d.fit.high);
-  html += slotSection('中槽', d.fit.mid);
-  html += slotSection('低槽', d.fit.low);
-  html += slotSection('船插', d.fit.rigs);
-  if (d.fit.drone) {
-    html += '<div class="fit-slot-title">无人机 ×' + d.fit.drone.count + '</div>';
-    html += '<div class="fit-item-row">' + d.fit.drone.name + '</div>';
-  }
-
-  if (d.skills && d.skills.length) {
-    html += '<div class="fit-slot-title" style="margin-top:12px">所需技能</div>';
-    d.skills.forEach(function(sk) { html += '<div class="fit-item-row" style="color:#888">· ' + sk + '</div>'; });
-  }
-  html += '<div style="margin-top:10px;font-size:11px;color:#666">' + d.note + '</div>';
-  html += '</div>';
-  document.getElementById('fitResult').innerHTML = html;
-}
-
-function slotSection(title, items) {
-  if (!items || !items.length) return '';
-  var h = '<div class="fit-slot-title">' + title + '</div>';
-  items.forEach(function(it) {
-    h += '<div class="fit-item-row">' + it.name
-      + (it.count > 1 ? ' <span class="cnt">×' + it.count + '</span>' : '') + '</div>';
-  });
-  return h;
-}
-
-function goalLabel(g) {
-  return { 'pvp_dps': 'PvP 输出', 'pvp_tank': 'PvP 坦克', 'pve': 'PvE 刷怪', 'logistics': '后勤' }[g] || g;
-}
-
-// add fit ship selector + fill category dropdown
-(function() {
-  var fc = document.getElementById('fc');
-  if (fc) {
-    // fill category options
-    var cats = {};
-    SHIPS_DATA.forEach(function(s) { if (s.subcat) cats[s.subcat] = true; });
-    Object.keys(cats).sort().forEach(function(c) {
-      var o = document.createElement('option');
-      o.value = c; o.textContent = c;
-      fc.appendChild(o);
-    });
-    // add ship selector after fc
-    var sel = document.createElement('select');
-    sel.id = 'fitShipSel';
-    sel.style.cssText = 'float:left;margin-left:10px;max-width:340px';
-    fc.after(sel);
-  }
-})();
 
 // -- theme --
 function toggleTheme() {
