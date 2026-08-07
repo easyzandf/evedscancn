@@ -289,6 +289,29 @@
   body.light .attr-item .v { color: #333; }
   .attr-full { grid-column: 1 / -1; }
 
+  /* ship traits */
+  .trait-section {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #2a3a55;
+  }
+  body.light .trait-section { border-color: #ddd; }
+  .trait-section .sec-title {
+    color: #f0ad4e;
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+  .trait-item {
+    font-size: 13px;
+    padding: 3px 0;
+    color: #ccc;
+  }
+  body.light .trait-item { color: #333; }
+  .trait-item .skill { color: #9fb6d4; font-weight: bold; }
+  body.light .trait-item .skill { color: #666; }
+  .trait-item .val { color: #f0ad4e; }
+
   /* clickable ship name */
   .ship-name-link {
     cursor: pointer;
@@ -408,6 +431,7 @@
 
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 <script src="ships-data.js"></script>
+<script src="traits-data.js"></script>
 <script>
 // -- ship name matching --
 // build a flat list sorted long→short so longer names match first
@@ -865,6 +889,32 @@ function showShipModal(typeID) {
   html += row('结构', fmtHp(A.structure));
   html += row('电容', fmtCap(A.capCap));
   html += '</div>';
+
+  // ship traits (bonuses)
+  if (typeof TRAITS_DATA !== 'undefined') {
+    var tr = TRAITS_DATA[String(typeID)];
+    if (tr) {
+      if (tr.role && tr.role.length) {
+        html += '<div class="trait-section"><div class="sec-title">角色加成</div>';
+        for (var ri = 0; ri < tr.role.length; ri++) {
+          html += '<div class="trait-item">' + tr.role[ri][1]
+            + ' <span class="val">(+' + tr.role[ri][0] + '%)</span></div>';
+        }
+        html += '</div>';
+      }
+      if (tr.skills && tr.skills.length) {
+        for (var si = 0; si < tr.skills.length; si++) {
+          var sk = tr.skills[si];
+          html += '<div class="trait-section"><div class="sec-title">每升一级' + sk[0] + '</div>';
+          for (var bi = 0; bi < sk[1].length; bi++) {
+            html += '<div class="trait-item">' + sk[1][bi][1]
+              + ' <span class="val">(+' + sk[1][bi][0] + '%)</span></div>';
+          }
+          html += '</div>';
+        }
+      }
+    }
+  }
 
   document.getElementById('modalBody').innerHTML = html;
   document.getElementById('shipModal').classList.add('show');
