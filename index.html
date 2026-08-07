@@ -230,6 +230,74 @@
   .hidden { display: none; }
   .empty { text-align: center; padding: 40px; color: #555; }
 
+  /* ship detail modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 999;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 16px;
+    overflow-y: auto;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #16213e;
+    border: 1px solid #2a3a55;
+    border-radius: 6px;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  body.light .modal { background: #fff; border-color: #ddd; }
+  .modal-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid #2a3a55;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  body.light .modal-head { border-color: #ddd; }
+  .modal-head .title { font-size: 16px; font-weight: bold; color: #f0ad4e; }
+  .modal-head .title .en { color: #888; font-size: 12px; font-weight: normal; margin-left: 8px; }
+  .modal-close {
+    background: none; border: none;
+    color: #888; font-size: 20px; cursor: pointer;
+    line-height: 1; padding: 4px 8px;
+  }
+  .modal-close:hover { color: #f0ad4e; }
+  .modal-body { padding: 14px 16px; }
+  .attr-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 20px;
+  }
+  .attr-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  .attr-item .k { color: #9fb6d4; }
+  body.light .attr-item { background: #f5f5f5; }
+  body.light .attr-item .k { color: #666; }
+  .attr-item .v { color: #ccc; font-weight: bold; }
+  body.light .attr-item .v { color: #333; }
+  .attr-full { grid-column: 1 / -1; }
+
+  /* clickable ship name */
+  .ship-name-link {
+    cursor: pointer;
+    color: #f0ad4e;
+    text-decoration: none;
+    border-bottom: 1px dotted #f0ad4e;
+  }
+  .ship-name-link:hover { color: #ec971f; }
+
   /* light mode */
   body.light { background: #f0f0f0; color: #333; }
   body.light .topbar { background: #fff; border-color: #ddd; }
@@ -323,8 +391,19 @@
 </div>
 
 <div class="footer">
-  <p>数据来源 CCP EVE Online Static Data Export · 中文翻译整理自游戏数据 · 共 423 艘舰船</p>
+  <p>数据来源 CCP EVE Online Static Data Export · 中文翻译整理自游戏数据 · 共 531 艘舰船</p>
   <p>开源项目：<a href="https://gitcode.com/ZANDF/evedscancn" target="_blank">GitCode</a> · <a href="https://github.com/easyzandf/evedscancn" target="_blank">GitHub</a> · 欢迎 Star / Issue</p>
+</div>
+
+<!-- Ship detail modal -->
+<div class="modal-overlay" id="shipModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="title" id="modalTitle">船名</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
 </div>
 
 <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
@@ -610,7 +689,7 @@ function doScan(silent) {
         if (sh.tech) tags += '<span class="tag t-tech">' + sh.tech + '</span>';
         var ecm = getECM(sh.cat);
         html += '<tr>'
-          + '<td style="padding-left:44px"><span class="cn">' + sh.cn + '</span><span class="en">' + sh.en + '</span>'
+          + '<td style="padding-left:44px"><a href="#" class="ship-name-link" onclick="showShipModal(' + sh.attr.typeID + ');return false;">' + sh.cn + '</a><span class="en">' + sh.en + '</span>'
           + (cnt > 1 ? ' <b style="color:#f0ad4e">×' + cnt + '</b>' : '') + '</td>'
           + '<td>' + tags + '</td>'
           + '<td>' + (sh.cat||'') + '</td>'
@@ -739,6 +818,99 @@ function showEsiSummary(results) {
 
   document.getElementById('esi-summary-content').innerHTML = html;
 }
+
+// -- ship detail modal --
+function showShipModal(typeID) {
+  var ship = null;
+  for (var i = 0; i < SHIPS_DATA.length; i++) {
+    if (SHIPS_DATA[i].attr && SHIPS_DATA[i].attr.typeID === typeID) { ship = SHIPS_DATA[i]; break; }
+  }
+  if (!ship) return;
+
+  document.getElementById('modalTitle').innerHTML =
+    ship.cn + '<span class="en">' + ship.en + '</span>';
+
+  var a = ship.attr || {};
+  var A = a.attrs || {};
+
+  function num(v) { return (v === undefined || v === null) ? '—' : v; }
+  function slotStr() {
+    var parts = [];
+    if (A.low !== undefined) parts.push('低槽' + A.low);
+    if (A.med !== undefined) parts.push('中槽' + A.med);
+    if (A.hi !== undefined) parts.push('高槽' + A.hi);
+    return parts.join(' / ') || '—';
+  }
+  function row(k, v, full) {
+    return '<div class="attr-item' + (full ? ' attr-full' : '') + '"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
+  }
+
+  var html = '<div class="attr-grid">';
+  html += row('质量', fmtNum(a.mass));
+  html += row('体积', fmtVol(a.volume));
+  html += row('货舱容量', fmtVol(a.capacity));
+  html += row('最大速度', fmtVel(A.maxVel));
+  html += row('惯性修正', num(A.inertia));
+  html += row('信号半径', num(A.sig) + ' m');
+  html += row('扫描分辨率', num(A.scanRes) + ' mm');
+  html += row('槽位', slotStr(), true);
+  html += row('CPU', num(A.cpu) + ' tf');
+  html += row('能量栅格', fmtPg(A.pg));
+  html += row('发射架', num(A.launcher));
+  html += row('炮台', num(A.turret));
+  html += row('无人机带宽', num(A.droneBw) + ' Mbit/s');
+  html += row('无人机容量', num(A.droneCap) + ' m³');
+  html += row('护盾', fmtHp(A.shield));
+  html += row('装甲', fmtHp(A.armor));
+  html += row('结构', fmtHp(A.structure));
+  html += row('电容', fmtCap(A.capCap));
+  html += '</div>';
+
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('shipModal').classList.add('show');
+}
+
+function fmtNum(v) {
+  if (v === undefined || v === null) return '—';
+  if (v >= 1000000000) return (v/1000000000).toFixed(2) + ' B kg';
+  if (v >= 1000000) return (v/1000000).toFixed(2) + ' M kg';
+  if (v >= 1000) return (v/1000).toFixed(1) + ' K kg';
+  return v + ' kg';
+}
+function fmtVol(v) {
+  if (v === undefined || v === null) return '—';
+  if (v >= 1000000) return (v/1000000).toFixed(2) + ' M m³';
+  if (v >= 1000) return (v/1000).toFixed(1) + ' K m³';
+  return v + ' m³';
+}
+function fmtVel(v) {
+  if (v === undefined || v === null) return '—';
+  return Math.round(v) + ' m/s';
+}
+function fmtPg(v) {
+  if (v === undefined || v === null) return '—';
+  return v + ' MW';
+}
+function fmtHp(v) {
+  if (v === undefined || v === null) return '—';
+  if (v >= 1000000) return (v/1000000).toFixed(2) + ' M';
+  return Math.round(v) + ' HP';
+}
+function fmtCap(v) {
+  if (v === undefined || v === null) return '—';
+  return (v/1000).toFixed(1) + ' GJ';
+}
+function closeModal() {
+  document.getElementById('shipModal').classList.remove('show');
+}
+// close on overlay click
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'shipModal') closeModal();
+});
+// close on ESC
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
 
 function copyLink() {
   var url = window.location.href;
