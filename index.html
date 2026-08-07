@@ -1117,10 +1117,12 @@ function renderBrowser() {
   var html = '';
   for (var i = 0; i < _browserData.length; i++) {
     var s = _browserData[i];
+    var tid = s.attr ? s.attr.typeID : 0;
+    var subEn = _subcatEN[s.subcat] || '';
     html += '<tr>'
-      + '<td><span class="cn">' + s.cn + '</span></td>'
+      + '<td><a href="#" class="ship-name-link" onclick="showShipModal(' + tid + ');return false;">' + s.cn + '</a></td>'
       + '<td><span class="en">' + s.en + '</span></td>'
-      + '<td>' + s.subcat + '</td>'
+      + '<td>' + s.subcat + (subEn ? ' <span class="en">' + subEn + '</span>' : '') + '</td>'
       + '<td>' + (s.tech||'') + '</td>'
       + '<td>' + (s.role||'') + '</td>'
       + '</tr>';
