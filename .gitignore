@@ -1,4 +1,9 @@
 .claude/
 cache/
+esi_cache/
 *.bak
 .DS_Store
+eve.db
+f.json
+fetch_items.log
+fit_test.json
