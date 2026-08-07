@@ -56,13 +56,18 @@ function isRareDrop($nameZh, $nameEn) {
              '真萨沙', '萨沙', '血袭者', '古斯塔斯', '天蛇集团', '天使集团', '莫德团', '官员',
              '限量型', '有标示的', '紧凑型', '原型', '统合部', '金砖', '沙炎', '民团',
              '入侵者', '蛇眼', '毒蛇', '噩梦', '图克尔', '图克',
+             '雷电裔', '恶徒', '突变适应', '死空', '星域', '深邃', '鬼域',
+             '安抚者', '比特尼克', '亲密', '兄弟', '宁静', '扎拉希', '索里卡斯',
+             '阿拉普', '火域', '荒原', '熔岩', '极光',
              'Thukker',
              '帝国海军', '联邦海军', '共和舰队', '共和国', '帝国', '联邦', '天蛇', '天使',
              'Modified', 'Navy', 'Federation', 'Republic', 'Imperial', 'Officer',
              'Serpentis', 'Blood Raider', 'Guristas', 'Sansha', 'Domination',
              'True', 'Dread Guristas', 'Shadow Serpentis', 'Dark Blood', 'Concord',
              'Limited', 'Patterned', 'Compact', 'Prototype', 'Experimental',
-             'Pith', 'Gist', 'Caldari Navy', 'A-type', 'B-type', 'C-type', 'X-type', 'Y-type', 'Z-type'];
+             'Pith', 'Pithum', 'Gist', 'Gistum', 'Centum', 'Centii', 'Centus',
+             'Cormack', 'Viziam', 'Zeugma', 'Zors', 'Deadspace', 'Complex',
+             'A-type', 'B-type', 'C-type', 'X-type', 'Y-type', 'Z-type'];
     foreach ($keys as $k) {
         if (strpos($nameZh, $k) !== false) return true;
         if (strpos($nameEn, $k) !== false) return true;
@@ -209,14 +214,17 @@ function pickMidsAndLows($pdo, $ship, $goal, $tank) {
     $usedCap = 0; // rough capacitor drain (weapons handled separately)
 
     if ($goal === 'logistics') {
-        // repair modules
-        $repair = getStdItems($pdo, "category='armor_repair' AND meta_level BETWEEN 0 AND 8", [], 5);
-        $shieldRepair = getStdItems($pdo, "category='shield_repair' AND meta_level BETWEEN 0 AND 8", [], 5);
-        if ($tank === 'shield' && $shieldRepair) $lows[] = $shieldRepair[0];
-        else if ($repair) $lows[] = $repair[0];
-        if ($med > 0) {
-            $cap = getStdItems($pdo, "category='capacitor' AND meta_level BETWEEN 0 AND 8", [], 3);
-            if ($cap) $mids[] = $cap[0];
+        // repair modules: fill lows with repairers, mids with capacitor
+        $repair = getStdItems($pdo, "category='armor_repair' AND meta_level BETWEEN 0 AND 8", [], 8);
+        $shieldRepair = getStdItems($pdo, "category='shield_repair' AND meta_level BETWEEN 0 AND 8", [], 8);
+        $repairList = ($tank === 'shield' && $shieldRepair) ? $shieldRepair : $repair;
+        foreach ($repairList as $r) {
+            if (count($lows) >= $low) break;
+            $lows[] = $r;
+        }
+        $cap = getStdItems($pdo, "category='capacitor' AND meta_level BETWEEN 0 AND 8", [], 3);
+        while (count($mids) < $med && $cap) {
+            $mids[] = $cap[0];
         }
     } else {
         if ($tank === 'shield') {

@@ -454,7 +454,9 @@
   <div id="pg-fit" class="hidden">
     <div class="browbar">
       <input type="text" id="fs" placeholder="搜索舰船..." oninput="filterFitShips()">
-      <select id="fc" onchange="renderFitShipList()"></select>
+      <select id="fc" onchange="renderFitShipList()">
+        <option value="">全部类型</option>
+      </select>
       <span class="cnt" id="fitCnt"></span>
     </div>
     <div class="fit-goals" id="fitGoals">
@@ -1313,10 +1315,19 @@ function goalLabel(g) {
   return { 'pvp_dps': 'PvP 输出', 'pvp_tank': 'PvP 坦克', 'pve': 'PvE 刷怪', 'logistics': '后勤' }[g] || g;
 }
 
-// add fit ship selector to HTML (injected after fc select)
+// add fit ship selector + fill category dropdown
 (function() {
   var fc = document.getElementById('fc');
   if (fc) {
+    // fill category options
+    var cats = {};
+    SHIPS_DATA.forEach(function(s) { if (s.subcat) cats[s.subcat] = true; });
+    Object.keys(cats).sort().forEach(function(c) {
+      var o = document.createElement('option');
+      o.value = c; o.textContent = c;
+      fc.appendChild(o);
+    });
+    // add ship selector after fc
     var sel = document.createElement('select');
     sel.id = 'fitShipSel';
     sel.style.cssText = 'float:left;margin-left:10px;max-width:340px';
