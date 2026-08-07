@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVE 舰船中文 D-Scan</title>
+<link href="https://fonts.googleapis.com/css?family=Montserrat:400,700" rel="stylesheet">
+<style>
+  body {
+    background: #1a1a2e;
+    color: #ccc;
+    font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    font-size: 14px;
+  }
+
+  .topbar {
+    background: #16213e;
+    border-bottom: 1px solid #2a3a55;
+    padding: 10px 15px;
+    overflow: hidden;
+  }
+  .topbar .title {
+    float: left;
+    font-size: 16px;
+    font-weight: bold;
+    color: #f0ad4e;
+    line-height: 32px;
+  }
+  .topbar .nav {
+    float: left;
+    margin-left: 30px;
+  }
+  .topbar .nav a {
+    color: #999;
+    text-decoration: none;
+    padding: 6px 14px;
+    margin-right: 4px;
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  .topbar .nav a:hover,
+  .topbar .nav a.on {
+    background: rgba(240,173,78,0.12);
+    color: #f0ad4e;
+  }
+  .topbar .tog {
+    float: right;
+    background: none;
+    border: 1px solid #3a4a60;
+    color: #aaa;
+    padding: 5px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: 3px;
+    margin-top: 2px;
+  }
+  .topbar .tog:hover { background: #1f2940; }
+
+  .wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 15px;
+  }
+
+  /* scan page */
+  textarea.scanbox {
+    width: 100%;
+    height: 260px;
+    background: #0d1117;
+    border: 1px solid #2d3a55;
+    color: #ccc;
+    padding: 12px;
+    font-family: Consolas, 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    resize: vertical;
+    box-sizing: border-box;
+  }
+  textarea.scanbox:focus {
+    outline: none;
+    border-color: #f0ad4e;
+  }
+
+  .btnbar {
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .btnbar .btn {
+    padding: 8px 20px;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .btn-go {
+    background: #f0ad4e;
+    color: #1a1a2e;
+    font-weight: bold;
+  }
+  .btn-go:hover { background: #ec971f; }
+  .btn-clr {
+    background: none;
+    border: 1px solid #3a4a60 !important;
+    color: #999;
+    margin-left: 8px;
+  }
+  .btn-clr:hover { background: rgba(255,255,255,0.05); color: #ccc; }
+  .btnbar .hint {
+    float: right;
+    color: #666;
+    font-size: 12px;
+    line-height: 36px;
+  }
+
+  /* results */
+  .result-wrap {
+    margin-top: 24px;
+  }
+  .result-wrap h3 {
+    color: #f0ad4e;
+    font-size: 15px;
+    margin: 0 0 14px 0;
+    font-weight: normal;
+    border-bottom: 1px solid #2a3a55;
+    padding-bottom: 8px;
+  }
+  .result-wrap h3 span {
+    color: #888;
+    font-size: 13px;
+  }
+
+  table.ship-tbl {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+  }
+  table.ship-tbl th {
+    text-align: left;
+    background: #16213e;
+    color: #888;
+    font-size: 12px;
+    font-weight: normal;
+    padding: 8px 12px;
+    border-bottom: 1px solid #2a3a55;
+  }
+  table.ship-tbl td {
+    padding: 6px 12px;
+    border-bottom: 1px solid #1f2940;
+    font-size: 13px;
+  }
+  table.ship-tbl tr:hover td { background: rgba(240,173,78,0.05); }
+  table.ship-tbl .cn { font-weight: bold; color: #e0e0e0; }
+  table.ship-tbl .en { color: #777; margin-left: 8px; font-size: 12px; }
+  table.ship-tbl .grp {
+    background: #16213e;
+    color: #f0ad4e;
+    font-weight: bold;
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+  table.ship-tbl .grp td { padding: 8px 12px; border-bottom: 1px solid #2a3a55; }
+
+  .tag {
+    display: inline-block;
+    padding: 1px 7px;
+    margin-left: 4px;
+    border-radius: 2px;
+    font-size: 11px;
+  }
+  .t-tech { background: rgba(91,192,222,0.15); color: #5bc0de; }
+  .t-role { background: rgba(240,173,78,0.12); color: #f0ad4e; }
+
+  /* browser page */
+  .browbar {
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .browbar input {
+    float: left;
+    background: #0d1117;
+    border: 1px solid #2d3a55;
+    color: #ccc;
+    padding: 7px 12px;
+    font-size: 13px;
+    width: 260px;
+    border-radius: 3px;
+  }
+  .browbar input:focus { outline: none; border-color: #f0ad4e; }
+  .browbar select {
+    float: left;
+    margin-left: 10px;
+    background: #0d1117;
+    border: 1px solid #2d3a55;
+    color: #ccc;
+    padding: 7px 10px;
+    font-size: 13px;
+    border-radius: 3px;
+  }
+  .browbar .cnt {
+    float: right;
+    color: #666;
+    font-size: 12px;
+    line-height: 34px;
+  }
+
+  .browser-tbl { table-layout: fixed; }
+  .browser-tbl th {
+    cursor: pointer;
+    user-select: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .browser-tbl th:hover { color: #f0ad4e; }
+  .browser-tbl .arrow { font-size: 10px; margin-left: 3px; }
+
+  /* footer */
+  .footer {
+    text-align: center;
+    color: #555;
+    font-size: 12px;
+    margin-top: 50px;
+    padding: 16px 0;
+    border-top: 1px solid #1f2940;
+  }
+  .footer a { color: #f0ad4e; }
+
+  /* misc */
+  .hidden { display: none; }
+  .empty { text-align: center; padding: 40px; color: #555; }
+
+  /* ship detail modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 999;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 16px;
+    overflow-y: auto;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #16213e;
+    border: 1px solid #2a3a55;
+    border-radius: 6px;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  body.light .modal { background: #fff; border-color: #ddd; }
+  .modal-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid #2a3a55;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  body.light .modal-head { border-color: #ddd; }
+  .modal-head .title { font-size: 16px; font-weight: bold; color: #f0ad4e; }
+  .modal-head .title .en { color: #888; font-size: 12px; font-weight: normal; margin-left: 8px; }
+  .modal-close {
+    background: none; border: none;
+    color: #888; font-size: 20px; cursor: pointer;
+    line-height: 1; padding: 4px 8px;
+  }
+  .modal-close:hover { color: #f0ad4e; }
+  .modal-body { padding: 14px 16px; }
+  .attr-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 20px;
+  }
+  .attr-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 8px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 3px;
+    font-size: 13px;
+  }
+  .attr-item .k { color: #9fb6d4; }
+  body.light .attr-item { background: #f5f5f5; }
+  body.light .attr-item .k { color: #666; }
+  .attr-item .v { color: #ccc; font-weight: bold; }
+  body.light .attr-item .v { color: #333; }
+  .attr-full { grid-column: 1 / -1; }
+
+  /* ship traits */
+  .trait-section {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #2a3a55;
+  }
+  body.light .trait-section { border-color: #ddd; }
+  .trait-section .sec-title {
+    color: #f0ad4e;
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+  .trait-item {
+    font-size: 13px;
+    padding: 3px 0;
+    color: #ccc;
+  }
+  body.light .trait-item { color: #333; }
+  .trait-item .skill { color: #9fb6d4; font-weight: bold; }
+  body.light .trait-item .skill { color: #666; }
+  .trait-item .val { color: #f0ad4e; }
+
+  /* clickable ship name */
+  .ship-name-link {
+    cursor: pointer;
+    color: #f0ad4e;
+    text-decoration: none;
+    border-bottom: 1px dotted #f0ad4e;
+  }
+  .ship-name-link:hover { color: #ec971f; }
+
+  /* light mode */
+  body.light { background: #f0f0f0; color: #333; }
+  body.light .topbar { background: #fff; border-color: #ddd; }
+  body.light .topbar .title { color: #b85c00; }
+  body.light .topbar .nav a.on,
+  body.light .topbar .nav a:hover { background: #fff3e0; }
+  body.light textarea.scanbox,
+  body.light .browbar input,
+  body.light .browbar select { background: #fff; border-color: #ccc; color: #333; }
+  body.light table.ship-tbl th { background: #f5f5f5; color: #666; }
+  body.light table.ship-tbl .grp { background: #f5f5f5; }
+  body.light table.ship-tbl td { border-color: #eee; }
+  body.light .result-wrap h3 { border-color: #ddd; }
+  body.light .footer { border-color: #ddd; color: #999; }
+  body.light .btn-clr { border-color: #ccc !important; color: #666; }
+  body.light .ship-tbl tr:hover td { background: #fff3e0; }
+  body.light .cn { color: #333; }
+  body.light .en { color: #999; }
+
+  /* quick hack: match dscan vibe */
+  @media (max-width: 700px) {
+    .topbar .nav { margin-left: 10px; }
+    .topbar .nav a { padding: 4px 8px; font-size: 12px; }
+    .browbar input { width: 100%; margin-bottom: 8px; float: none; }
+    .browbar select { margin-left: 0; margin-right: 8px; }
+    .btnbar .hint { float: none; display: block; margin-top: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="title">EVE 舰船中文 D-Scan</div>
+  <div class="nav">
+    <a href="#" class="on" data-pg="scan">D-Scan 解析</a>
+    <a href="#" data-pg="browse">舰船浏览器</a>
+  </div>
+  <button class="tog" onclick="toggleTheme()">亮/暗</button>
+</div>
+
+<div class="wrap">
+
+  <!-- D-Scan page -->
+  <div id="pg-scan">
+    <textarea class="scanbox" id="scanInput"
+      placeholder="在此粘贴 EVE 的扫描结果（D-Scan / 本地 / 舰队扫描均可）&#10;支持中文客户端和英文客户端&#10;&#10;英文客户端输出示例：&#10;Rifter&#9;14.5 AU&#10;Merlin&#9;12.3 AU&#10;&#10;中文客户端输出示例：&#10;裂谷级&#9;14.5 AU&#10;小鹰级&#9;12.3 AU"></textarea>
+
+    <div class="btnbar">
+      <button class="btn btn-go" onclick="doScan()">解析</button>
+      <button class="btn btn-clr" onclick="clearScan()">清空</button>
+      <span class="hint">粘贴扫描文本，自动识别中/英文舰船名</span>
+    </div>
+
+    <div class="result-wrap hidden" id="resultArea">
+      <h3>解析结果 <span id="resultSum"></span></h3>
+      <div id="resultBody"></div>
+    </div>
+  </div>
+
+  <!-- Browser page -->
+  <div id="pg-browse" class="hidden">
+    <div class="browbar">
+      <input type="text" id="bs" placeholder="搜索舰船（中文/英文/分类/定位）" oninput="doFilter()" onfocus="if(this.value)doFilter()">
+      <select id="bc" onchange="doFilter()">
+        <option value="">全部类别</option>
+      </select>
+      <select id="bt" onchange="doFilter()">
+        <option value="">全部科技等级</option>
+        <option value="T1">T1</option>
+        <option value="T2">T2</option>
+        <option value="T3">T3</option>
+        <option value="势力">势力</option>
+        <option value="特别版">特别版</option>
+      </select>
+      <span class="cnt" id="browCnt"></span>
+    </div>
+    <table class="ship-tbl browser-tbl" id="browTbl">
+      <thead>
+        <tr>
+          <th onclick="doSort('cn')" style="width:30%">中文名 <span class="arrow"></span></th>
+          <th onclick="doSort('en')" style="width:22%">英文名 <span class="arrow"></span></th>
+          <th onclick="doSort('subcat')" style="width:14%">分类 <span class="arrow"></span></th>
+          <th onclick="doSort('tech')" style="width:10%">科技等级 <span class="arrow"></span></th>
+          <th onclick="doSort('role')" style="width:24%">定位 <span class="arrow"></span></th>
+        </tr>
+      </thead>
+      <tbody id="browBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<div class="footer">
+  <p>数据来源 CCP EVE Online Static Data Export · 中文翻译整理自游戏数据 · 共 531 艘舰船</p>
+  <p>开源项目：<a href="https://gitcode.com/ZANDF/evedscancn" target="_blank">GitCode</a> · <a href="https://github.com/easyzandf/evedscancn" target="_blank">GitHub</a> · 欢迎 Star / Issue</p>
+</div>
+
+<!-- Ship detail modal -->
+<div class="modal-overlay" id="shipModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="title" id="modalTitle">船名</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+<script src="ships-data.js"></script>
+<script src="traits-data.js"></script>
+<script>
+// -- ship name matching --
+// build a flat list sorted long→short so longer names match first
+var _lookup = [];
+SHIPS_DATA.forEach(function(s) {
+  if (s.en) _lookup.push({ k: s.en.toLowerCase(), d: s });
+  if (s.cn) _lookup.push({ k: s.cn.toLowerCase(), d: s });
+});
+_lookup.sort(function(a, b) { return b.k.length - a.k.length; });
+
+function matchShip(line) {
+  var s = line.trim();
+  if (!s) return null;
+  var lo = s.toLowerCase();
+  // split by tab, try each column
+  var cols = s.split('\t');
+  // exact match
+  for (var i = 0; i < _lookup.length; i++) {
+    if (lo === _lookup[i].k) return _lookup[i].d;
+    for (var j = 0; j < cols.length; j++) {
+      var c = cols[j].trim().toLowerCase();
+      if (!c) continue;
+      if (c === _lookup[i].k) return _lookup[i].d;
+      if (c.slice(-1) === '*' && c.slice(0,-1) === _lookup[i].k) return _lookup[i].d;
+    }
+  }
+  // substring
+  for (var i = 0; i < _lookup.length; i++) {
+    if (lo.indexOf(_lookup[i].k) !== -1) return _lookup[i].d;
+    for (var j = 0; j < cols.length; j++) {
+      var c = cols[j].trim().toLowerCase();
+      if (c && c.indexOf(_lookup[i].k) !== -1) return _lookup[i].d;
+    }
+  }
+  return null;
+}
+
+// -- base64 for utf8 (hash sharing fallback when no PHP) --
+function encode64(str) {
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(_, p) {
+    return String.fromCharCode('0x' + p);
+  }));
+}
+function decode64(str) {
+  return decodeURIComponent(atob(str).split('').map(function(c) {
+    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+  }).join(''));
+}
+
+// -- Subcategory English names --
+var _subcatEN = {
+  '护卫舰': 'Frigate', '巡洋舰': 'Cruiser', '战列舰': 'Battleship', '驱逐舰': 'Destroyer',
+  '战斗战列巡洋舰': 'Combat Battlecruiser', '运载舰': 'Hauler', '突击护卫舰': 'Assault Frigate',
+  '重型突击巡洋舰': 'Heavy Assault Cruiser', '无畏舰': 'Dreadnought', '穿梭机': 'Shuttle',
+  '截击舰': 'Interceptor', '力场侦察舰': 'Force Recon', '轻型护卫舰': 'Corvette',
+  '隐形特勤舰': 'Covert Ops', '指挥舰': 'Command Ship', '泰坦': 'Titan', '后勤舰': 'Logistics',
+  '指挥驱逐舰': 'Command Destroyer', '重型拦截巡洋舰': 'Heavy Interdiction Cruiser',
+  '黑隐特勤舰': 'Black Ops', '货舰': 'Freighter', '超级航母': 'Supercarrier',
+  '战力辅助舰': 'Force Auxiliary', '电子攻击舰': 'Electronic Attack Ship',
+  '隐形轰炸舰': 'Stealth Bomber', '战术驱逐舰': 'Tactical Destroyer',
+  '攻击战列巡洋舰': 'Attack Battlecruiser', '掠夺舰': 'Marauder', '偷运舰': 'Blockade Runner',
+  '深层空间运输舰': 'Deep Space Transport', '特别版游艇': 'Special Edition Yacht',
+  '后勤护卫舰': 'Logistics Frigate', '拦截舰': 'Interdictor', '战斗侦察舰': 'Combat Recon',
+  '战略巡洋舰': 'Strategic Cruiser', '战略货舰': 'Strategic Freighter',
+  '枪骑兵级无畏舰': 'Lancer Dreadnought', '航空母舰': 'Carrier', '指挥航母': 'Command Carrier',
+  '采矿驳船': 'Mining Barge', '采掘者': 'Exhumer', '太空舱': 'Capsule',
+  '勘探护卫舰': 'Exploration Frigate', '工业指挥舰': 'Industrial Command Ship',
+  '战地巡洋舰': 'Battlecruiser', '旗舰级工业舰': 'Capital Industrial Ship',
+  '考察船原型': 'Expedition Frigate', '远征指挥舰': 'Expedition Command Ship'
+};
+
+// -- ECM mapping: faction -> sensor type -> ECM jammer --
+var _ecmMap = {
+  '艾玛': '雷达ECM', '艾玛海军': '雷达ECM',
+  '加达里': '引力ECM', '加达里海军': '引力ECM',
+  '盖伦特': '磁力ECM', '盖伦特海军': '磁力ECM',
+  '米玛塔尔': '光雷达ECM', '米玛塔尔舰队': '光雷达ECM',
+  '血袭者同盟': '雷达ECM', '萨沙共和国': '雷达ECM',
+  '古斯塔斯': '引力ECM', '莫德团': '引力ECM', '死亡之神集团': '引力ECM',
+  '天蛇集团': '磁力ECM',
+  '天使集团': '光雷达ECM',
+  '三神裔': '多谱式ECM', 'EDENCOM': '多谱式ECM', '昇威': '多谱式ECM',
+  '联合矿业(ORE)': '多谱式ECM', 'ORE财团': '多谱式ECM',
+  '姐妹会': '多谱式ECM', '意识社团': '多谱式ECM',
+  'CONCORD': '多谱式ECM', '海盗': '多谱式ECM',
+  '朱庇特/统合部': '多谱式ECM', '特殊/未标注': '多谱式ECM'
+};
+function getECM(faction) {
+  return _ecmMap[faction] || '多谱式ECM';
+}
+
+// -- scan --
+var _scanResults = [];  // { ship: {...}, count: N }
+var _scanCode = null;   // short code from server cache
+
+function doScan(silent) {
+  var raw = document.getElementById('scanInput').value;
+  if (!raw.trim()) return;
+
+  var lines = raw.split('\n');
+  var counts = {};   // key=en name -> { ship, count }
+  var total = 0;
+  var charNames = []; // collect character names for ESI lookup
+
+  for (var i = 0; i < lines.length; i++) {
+    var ship = matchShip(lines[i]);
+    if (ship) {
+      total++;
+      if (counts[ship.en]) {
+        counts[ship.en].count++;
+      } else {
+        counts[ship.en] = { ship: ship, count: 1 };
+      }
+    }
+    // Extract character name
+    var cols = lines[i].split('\t');
+    if (cols.length >= 2) {
+      // Tab format: col[1] might be "shipName - characterName"
+      var desc = cols[1].trim();
+      var dashIdx = desc.lastIndexOf(' - ');
+      if (dashIdx > 0) {
+        var chName = desc.substring(dashIdx + 3).trim();
+        // Filter: must be 3+ chars, no *, doesn't look like ship fit (T2, V2, etc.)
+        if (chName.length >= 3 && chName.length < 50 && !/[*]/.test(chName) && !/^[A-Z]?\d/.test(chName)) {
+          charNames.push(chName);
+        }
+      }
+    } else if (!ship) {
+      // Plain text line (no tabs, not a ship): treat as character name
+      var line = lines[i].trim();
+      // Filter: 3+ chars, no tabs, no *, not purely numeric, not a typeID
+      if (line.length >= 3 && line.length < 50 && !/\t/.test(line) && !/[*]/.test(line) && !/^\d{4,}$/.test(line)) {
+        charNames.push(line);
+      }
+    }
+  }
+
+  // If no ships but have character names, show ESI-only results
+  if (!total && charNames.length > 0) {
+    document.getElementById('resultSum').innerHTML = '（共 ' + charNames.length + ' 个角色名）';
+    document.getElementById('resultBody').innerHTML = '<div id="esi-summary"><b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
+    document.getElementById('resultArea').classList.remove('hidden');
+    doEsiLookups(charNames);
+    return;
+  }
+
+  _scanResults = Object.keys(counts).map(function(k) { return counts[k]; });
+
+  var area = document.getElementById('resultArea');
+  if (!_scanResults.length) {
+    area.classList.add('hidden');
+    if (!silent && window.location.hash) history.replaceState(null, '', window.location.pathname);
+    return;
+  }
+
+  // generate share link: try PHP short code, fallback to base64 hash
+  if (!silent && !_scanCode) {
+    var names = [];
+    for (var i = 0; i < lines.length; i++) {
+      var s = matchShip(lines[i]);
+      if (s) names.push(s.en);
+    }
+    var scanText = names.join('\n');
+    // Try PHP API first (works on server with PHP)
+    _fetch('POST', 'api.php', JSON.stringify({scan: scanText}), function(res) {
+      if (res && res.code) {
+        _scanCode = res.code;
+        history.replaceState(null, '', '#c=' + _scanCode);
+      } else {
+        // Fallback: encode in URL hash (works on static hosting like GitCode Pages)
+        history.replaceState(null, '', '#s=' + encode64(scanText));
+      }
+    });
+  }
+
+  // stats (count grouped categories)
+  var _logisticsSubcats = { '后勤护卫舰': 1, '后勤舰': 1, '战力辅助舰': 1 };
+  var cats = {};
+  _scanResults.forEach(function(r) {
+    var k = _logisticsSubcats[r.ship.subcat] ? '后勤' : (r.ship.subcat || '未分类');
+    cats[k] = (cats[k]||0) + r.count;
+  });
+  var catNames = Object.keys(cats);
+  document.getElementById('resultSum').innerHTML =
+    '（共 ' + total + ' 条记录，' + _scanResults.length + ' 种舰船，' + catNames.length + ' 个类别）'
+    + ' <button class="btn-clr" onclick="copyLink()" style="font-size:12px;padding:2px 10px;margin-left:10px;">复制分享链接</button>'
+    + ' <button class="btn-clr" onclick="screenshotResult()" style="font-size:12px;padding:2px 10px;margin-left:4px;">截图复制</button>';
+
+  // Alliance/Corp summary placeholder (filled by ESI lookup)
+  var esiHTML = '<div id="esi-summary" style="background:#16213e;border:1px solid #2a3a55;padding:8px 14px;margin-bottom:12px;border-radius:3px;font-size:13px;display:none">'
+    + '<b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
+
+  // ECM summary
+  var ecmCounts = {};
+  _scanResults.forEach(function(r) {
+    var e = getECM(r.ship.cat);
+    ecmCounts[e] = (ecmCounts[e]||0) + r.count;
+  });
+  var ecmList = Object.keys(ecmCounts).sort(function(a, b) { return ecmCounts[b] - ecmCounts[a]; });
+  var ecmHTML = '';
+  for (var ei = 0; ei < ecmList.length; ei++) {
+    ecmHTML += '<span style="margin-right:12px;white-space:nowrap">'
+      + ecmList[ei] + ' <b style="color:#f0ad4e">×' + ecmCounts[ecmList[ei]] + '</b></span>';
+  }
+
+  // Group by combat role: 后勤 / 特种 / 火力 / 运输 / 其他
+  var _roleGroup = {
+    '后勤': '后勤', '旗舰后勤': '后勤', '后勤/火力': '后勤',
+    '拦截': '特种', '侦查/隐形': '特种', '电子战': '特种',
+    '隐形/桥接': '特种', '隐形/轰炸': '特种', '指挥': '特种',
+    '战术': '特种', '战略': '特种', '指挥航母': '特种',
+    '指挥/舰队': '特种', '远征指挥': '特种', '侦查/探索': '特种',
+    '火力/通用': '火力', '火力': '火力', '火力/高速': '火力',
+    '火力/导弹': '火力', '火力/无人机': '火力', '旗舰火力': '火力',
+    '泰坦': '火力', '超级航母': '火力', '航母': '火力',
+    '运输': '运输', '运输/隐形': '运输', '运输/厚甲': '运输', '跳跃运输': '运输'
+  };
+  var _groupOrder = ['后勤', '特种', '火力', '运输', '其他'];
+  var _groupEN = { '后勤': 'Logistics', '特种': 'Special', '火力': 'Firepower', '运输': 'Transport', '其他': 'Other' };
+  function roleGroup(ship) {
+    var r = ship.role || '';
+    if (_roleGroup[r]) return _roleGroup[r];
+    // fallback by subcat: logistics subs in 后勤, else 其他
+    if (_logisticsSubcats[ship.subcat]) return '后勤';
+    return '其他';
+  }
+
+  // Build big groups, each containing subcat subgroups
+  var bigGroups = {};
+  _scanResults.forEach(function(r) {
+    var g = roleGroup(r.ship);
+    if (!bigGroups[g]) bigGroups[g] = {};
+    var sub = r.ship.subcat || '未分类';
+    if (!bigGroups[g][sub]) bigGroups[g][sub] = [];
+    bigGroups[g][sub].push(r);
+  });
+
+  // build single table with big-group header + subcat sub-header rows
+  var html = esiHTML
+    + '<div style="background:#16213e;border:1px solid #2a3a55;padding:8px 14px;margin-bottom:12px;border-radius:3px;font-size:13px">'
+    + '<b>ECM建议：</b>' + ecmHTML + '</div>';
+  html += '<table class="ship-tbl"><thead><tr>'
+    + '<th>舰船</th><th>标签</th><th>势力</th><th>ECM建议</th>'
+    + '</tr></thead><tbody>';
+
+  for (var bi = 0; bi < _groupOrder.length; bi++) {
+    var bg = _groupOrder[bi];
+    if (!bigGroups[bg]) continue;
+
+    var bgTotal = 0;
+    Object.keys(bigGroups[bg]).forEach(function(sk) {
+      bigGroups[bg][sk].forEach(function(r) { bgTotal += r.count; });
+    });
+    var bgEn = _groupEN[bg] || bg;
+    html += '<tr class="grp"><td colspan="4"><span style="font-size:15px">' + bg + ' ' + bgEn + '</span>'
+      + ' <span style="color:#888;font-size:12px">（共 ' + bgTotal + ' 艘）</span></td></tr>';
+
+    // subcat subgroups sorted by count
+    var subKeys = Object.keys(bigGroups[bg]).sort(function(a, b) {
+      var ta = 0, tb = 0;
+      bigGroups[bg][a].forEach(function(r) { ta += r.count; });
+      bigGroups[bg][b].forEach(function(r) { tb += r.count; });
+      return tb - ta;
+    });
+    for (var si = 0; si < subKeys.length; si++) {
+      var sk = subKeys[si];
+      var subShips = bigGroups[bg][sk];
+      var sTotal = 0;
+      subShips.forEach(function(r) { sTotal += r.count; });
+      var skEn = _subcatEN[sk] || sk;
+      html += '<tr><td colspan="4" style="padding:6px 12px 6px 28px;color:#9fb6d4;background:#18233a">'
+        + sk + ' <span class="en">' + skEn + '</span>（' + sTotal + ' 艘）</td></tr>';
+
+      subShips.sort(function(a, b) { return b.count - a.count; });
+      for (var i = 0; i < subShips.length; i++) {
+        var sh = subShips[i].ship;
+        var cnt = subShips[i].count;
+        var tags = '';
+        if (sh.tech) tags += '<span class="tag t-tech">' + sh.tech + '</span>';
+        var ecm = getECM(sh.cat);
+        html += '<tr>'
+          + '<td style="padding-left:44px"><a href="#" class="ship-name-link" onclick="showShipModal(' + sh.attr.typeID + ');return false;">' + sh.cn + '</a><span class="en">' + sh.en + '</span>'
+          + (cnt > 1 ? ' <b style="color:#f0ad4e">×' + cnt + '</b>' : '') + '</td>'
+          + '<td>' + tags + '</td>'
+          + '<td>' + (sh.cat||'') + '</td>'
+          + '<td><span class="tag t-tech">' + ecm + '</span></td>'
+          + '</tr>';
+      }
+    }
+  }
+  html += '</tbody></table>';
+  document.getElementById('resultBody').innerHTML = html;
+  area.classList.remove('hidden');
+  if (!silent) area.scrollIntoView();
+
+  // ESI lookups for character names
+  if (charNames.length) doEsiLookups(charNames);
+}
+
+// -- ESI character lookup --
+var _esiCache = {};
+function doEsiLookups(names) {
+  // Take all names (no dedup, keep original order)
+  var lookup = names.slice(0, 200);
+  var pending = lookup.length;
+  if (!pending) return;
+  var esiResults = [];
+
+  // Probe: check if esi.php is available (not on static hosting like GitHub Pages)
+  _fetch('GET', 'esi.php?name=probe', null, function(probe) {
+    if (!probe || probe.error) {
+      document.getElementById('esi-summary').style.display = 'block';
+      document.getElementById('esi-summary-content').innerHTML = '此站不支持 ESI 查询（需 PHP 后端），请使用 <a href="https://www.evedscancn.cc.cd/">www.evedscancn.cc.cd</a>';
+      return;
+    }
+
+    lookup.forEach(function(name) {
+      if (_esiCache[name]) {
+        esiResults.push({ name: name, data: _esiCache[name] });
+        pending--;
+        if (!pending) showEsiSummary(esiResults);
+        return;
+      }
+      _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
+        if (res && res.name) _esiCache[name] = res; else _esiCache[name] = null;
+        esiResults.push({ name: name, data: _esiCache[name] });
+        pending--;
+        if (!pending) showEsiSummary(esiResults);
+      });
+    });
+  });
+}
+
+function showEsiSummary(results) {
+  var alliances = {}; // key=ticker → { name, corps: { ticker → { name, members: [] } } }
+  var noAlliance = {}; // corp ticker → { name, members: [] }
+  var total = 0;
+
+  results.forEach(function(entry) {
+    var r = entry.data;
+    if (!r) return;
+    total++;
+    var charName = entry.name;
+
+    if (r.alliance_ticker) {
+      var ak = r.alliance_ticker;
+      if (!alliances[ak]) alliances[ak] = { name: r.alliance_name, ticker: ak, corps: {} };
+      var ck = r.corp_ticker || r.corp_name || '?';
+      if (!alliances[ak].corps[ck]) alliances[ak].corps[ck] = { name: r.corp_name, ticker: r.corp_ticker, members: [] };
+      alliances[ak].corps[ck].members.push(charName);
+    } else {
+      var ck2 = r.corp_ticker || r.corp_name || '?';
+      if (!noAlliance[ck2]) noAlliance[ck2] = { name: r.corp_name, ticker: r.corp_ticker, members: [] };
+      noAlliance[ck2].members.push(charName);
+    }
+  });
+
+  if (!total) return;
+  var el = document.getElementById('esi-summary');
+  if (!el) return;
+  el.style.display = 'block';
+
+  var html = '';
+
+  var aList = Object.keys(alliances).sort(function(a, b) {
+    var ta = 0, tb = 0;
+    Object.keys(alliances[a].corps).forEach(function(k) { ta += alliances[a].corps[k].members.length; });
+    Object.keys(alliances[b].corps).forEach(function(k) { tb += alliances[b].corps[k].members.length; });
+    return tb - ta;
+  });
+
+  for (var ai = 0; ai < aList.length; ai++) {
+    var a = alliances[aList[ai]];
+    var aTotal = 0;
+    var cList = Object.keys(a.corps).sort(function(x, y) { return a.corps[y].members.length - a.corps[x].members.length; });
+
+    html += '<details open style="margin-bottom:6px">'
+      + '<summary style="cursor:pointer;color:#f0ad4e;font-weight:bold">'
+      + a.ticker + ' <span style="color:#ccc;font-weight:normal">' + a.name + '</span></summary>';
+
+    for (var ci = 0; ci < cList.length; ci++) {
+      var c = a.corps[cList[ci]];
+      aTotal += c.members.length;
+      html += '<div style="margin-left:16px;padding:2px 0">'
+        + '<b>' + (c.ticker || c.name) + '</b>'
+        + ' <span style="color:#888;font-size:11px">×' + c.members.length + '</span>'
+        + ' <span style="color:#666;font-size:11px">' + c.members.join(', ') + '</span>'
+        + '</div>';
+    }
+    html += '</details>';
+  }
+
+  // Corps without alliance
+  var naList = Object.keys(noAlliance).sort(function(a, b) { return noAlliance[b].members.length - noAlliance[a].members.length; });
+  if (naList.length) {
+    html += '<details open style="margin-bottom:6px">'
+      + '<summary style="cursor:pointer;color:#888;font-weight:bold">无联盟</summary>';
+    for (var nai = 0; nai < naList.length; nai++) {
+      var nc = noAlliance[naList[nai]];
+      html += '<div style="margin-left:16px;padding:2px 0">'
+        + '<b>' + (nc.ticker || nc.name) + '</b>'
+        + ' <span style="color:#888;font-size:11px">×' + nc.members.length + '</span>'
+        + ' <span style="color:#666;font-size:11px">' + nc.members.join(', ') + '</span>'
+        + '</div>';
+    }
+    html += '</details>';
+  }
+
+  document.getElementById('esi-summary-content').innerHTML = html;
+}
+
+// -- ship detail modal --
+function showShipModal(typeID) {
+  var ship = null;
+  for (var i = 0; i < SHIPS_DATA.length; i++) {
+    if (SHIPS_DATA[i].attr && SHIPS_DATA[i].attr.typeID === typeID) { ship = SHIPS_DATA[i]; break; }
+  }
+  if (!ship) return;
+
+  document.getElementById('modalTitle').innerHTML =
+    ship.cn + '<span class="en">' + ship.en + '</span>';
+
+  var a = ship.attr || {};
+  var A = a.attrs || {};
+
+  function num(v) { return (v === undefined || v === null) ? '—' : v; }
+  function slotStr() {
+    var parts = [];
+    if (A.low !== undefined) parts.push('低槽' + A.low);
+    if (A.med !== undefined) parts.push('中槽' + A.med);
+    if (A.hi !== undefined) parts.push('高槽' + A.hi);
+    return parts.join(' / ') || '—';
+  }
+  function row(k, v, full) {
+    return '<div class="attr-item' + (full ? ' attr-full' : '') + '"><span class="k">' + k + '</span><span class="v">' + v + '</span></div>';
+  }
+
+  var html = '<div class="attr-grid">';
+  html += row('质量', fmtNum(a.mass));
+  html += row('体积', fmtVol(a.volume));
+  html += row('货舱容量', fmtVol(a.capacity));
+  html += row('最大速度', fmtVel(A.maxVel));
+  html += row('惯性修正', num(A.inertia));
+  html += row('信号半径', num(A.sig) + ' m');
+  html += row('扫描分辨率', num(A.scanRes) + ' mm');
+  html += row('槽位', slotStr(), true);
+  html += row('CPU', num(A.cpu) + ' tf');
+  html += row('能量栅格', fmtPg(A.pg));
+  html += row('发射架', num(A.launcher));
+  html += row('炮台', num(A.turret));
+  html += row('无人机带宽', num(A.droneBw) + ' Mbit/s');
+  html += row('无人机容量', num(A.droneCap) + ' m³');
+  html += row('护盾', fmtHp(A.shield));
+  html += row('装甲', fmtHp(A.armor));
+  html += row('结构', fmtHp(A.structure));
+  html += row('电容', fmtCap(A.capCap));
+  html += '</div>';
+
+  // ship traits (bonuses)
+  if (typeof TRAITS_DATA !== 'undefined') {
+    var tr = TRAITS_DATA[String(typeID)];
+    if (tr) {
+      if (tr.role && tr.role.length) {
+        html += '<div class="trait-section"><div class="sec-title">角色加成</div>';
+        for (var ri = 0; ri < tr.role.length; ri++) {
+          html += '<div class="trait-item">' + tr.role[ri][1]
+            + ' <span class="val">(+' + tr.role[ri][0] + '%)</span></div>';
+        }
+        html += '</div>';
+      }
+      if (tr.skills && tr.skills.length) {
+        for (var si = 0; si < tr.skills.length; si++) {
+          var sk = tr.skills[si];
+          html += '<div class="trait-section"><div class="sec-title">每升一级' + sk[0] + '</div>';
+          for (var bi = 0; bi < sk[1].length; bi++) {
+            html += '<div class="trait-item">' + sk[1][bi][1]
+              + ' <span class="val">(+' + sk[1][bi][0] + '%)</span></div>';
+          }
+          html += '</div>';
+        }
+      }
+    }
+  }
+
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('shipModal').classList.add('show');
+}
+
+function fmtNum(v) {
+  if (v === undefined || v === null) return '—';
+  if (v >= 1000000000) return (v/1000000000).toFixed(2) + ' B kg';
+  if (v >= 1000000) return (v/1000000).toFixed(2) + ' M kg';
+  if (v >= 1000) return (v/1000).toFixed(1) + ' K kg';
+  return v + ' kg';
+}
+function fmtVol(v) {
+  if (v === undefined || v === null) return '—';
+  if (v >= 1000000) return (v/1000000).toFixed(2) + ' M m³';
+  if (v >= 1000) return (v/1000).toFixed(1) + ' K m³';
+  return v + ' m³';
+}
+function fmtVel(v) {
+  if (v === undefined || v === null) return '—';
+  return Math.round(v) + ' m/s';
+}
+function fmtPg(v) {
+  if (v === undefined || v === null) return '—';
+  return v + ' MW';
+}
+function fmtHp(v) {
+  if (v === undefined || v === null) return '—';
+  if (v >= 1000000) return (v/1000000).toFixed(2) + ' M';
+  return Math.round(v) + ' HP';
+}
+function fmtCap(v) {
+  if (v === undefined || v === null) return '—';
+  return (v/1000).toFixed(1) + ' GJ';
+}
+function closeModal() {
+  document.getElementById('shipModal').classList.remove('show');
+}
+// close on overlay click
+document.addEventListener('click', function(e) {
+  if (e.target && e.target.id === 'shipModal') closeModal();
+});
+// close on ESC
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+
+function copyLink() {
+  var url = window.location.href;
+  var ok = false;
+
+  // try execCommand first (works on http)
+  var ta = document.createElement('textarea');
+  ta.value = url; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+  document.body.appendChild(ta); ta.select();
+  try { ok = document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta);
+
+  // if that failed, try clipboard API (needs https)
+  if (!ok && navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(function() { ok = true; });
+  }
+
+  var btn = document.querySelector('#resultSum button');
+  if (btn) { btn.textContent = ok ? '已复制!' : '复制失败'; setTimeout(function() { btn.textContent = '复制分享链接'; }, 1500); }
+}
+
+function screenshotResult() {
+  var area = document.getElementById('resultArea');
+  var btn = document.querySelector('#resultSum button:last-child');
+  if (btn) { btn.textContent = '生成中...'; btn.disabled = true; }
+
+  var bg = document.body.classList.contains('light') ? '#f0f0f0' : '#1a1a2e';
+  html2canvas(area, {
+    backgroundColor: bg,
+    scale: 2,
+    height: area.scrollHeight,
+    windowHeight: area.scrollHeight
+  }).then(function(canvas) {
+    // try clipboard first (only works on https)
+    if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+      canvas.toBlob(function(blob) {
+        navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]).then(function() {
+          if (btn) { btn.textContent = '已复制!'; setTimeout(function() { btn.textContent = '截图复制'; btn.disabled = false; }, 1500); }
+        }).catch(function() { doDownload(); });
+      }, 'image/png');
+    } else {
+      doDownload();
+    }
+
+    function doDownload() {
+      var a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = 'eve-dscan-' + new Date().toISOString().slice(0,10) + '.png';
+      a.click();
+      if (btn) { btn.textContent = '已下载'; setTimeout(function() { btn.textContent = '截图复制'; btn.disabled = false; }, 1500); }
+    }
+  }).catch(function() {
+    if (btn) { btn.textContent = '失败'; setTimeout(function() { btn.textContent = '截图复制'; btn.disabled = false; }, 1500); }
+  });
+}
+
+// -- simple ajax helper --
+function _fetch(method, url, body, cb) {
+  var xhr = new XMLHttpRequest();
+  xhr.open(method, url, true);
+  xhr.setRequestHeader('Content-Type', 'application/json');
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+      try { cb(JSON.parse(xhr.responseText)); } catch(e) { cb(null); }
+    }
+  };
+  xhr.send(body || null);
+}
+
+// -- load from shared link on page load --
+(function() {
+  var h = window.location.hash;
+  if (h.indexOf('#c=') === 0) {
+    // PHP short code
+    _scanCode = h.slice(3);
+    _fetch('GET', 'api.php?code=' + encodeURIComponent(_scanCode), null, function(res) {
+      if (res && res.scan) {
+        document.getElementById('scanInput').value = res.scan;
+        doScan(true);
+      }
+    });
+  } else if (h.indexOf('#s=') === 0) {
+    // Base64 fallback (static hosting)
+    try {
+      var raw = decode64(h.slice(3));
+      document.getElementById('scanInput').value = raw;
+      doScan(true);
+    } catch(e) {}
+  }
+})();
+
+function clearScan() {
+  document.getElementById('scanInput').value = '';
+  document.getElementById('resultArea').classList.add('hidden');
+  _scanCode = null;
+  if (window.location.hash) history.replaceState(null, '', window.location.pathname);
+}
+
+// -- browser --
+var _browserData = [];
+var _sortCol = 'cn';
+var _sortDir = 1;
+
+(function initBrowser() {
+  // fill category dropdown
+  var cats = {};
+  SHIPS_DATA.forEach(function(s) { if (s.subcat) cats[s.subcat] = true; });
+  var catList = Object.keys(cats).sort();
+  var sel = document.getElementById('bc');
+  catList.forEach(function(c) {
+    var o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    sel.appendChild(o);
+  });
+})();
+
+function doFilter() {
+  var q = document.getElementById('bs').value.toLowerCase();
+  var cat = document.getElementById('bc').value;
+  var tech = document.getElementById('bt').value;
+
+  // If searching by keyword, ignore dropdown filters (they limit results unexpectedly)
+  if (q) { cat = ''; tech = ''; }
+
+  _browserData = SHIPS_DATA.filter(function(s) {
+    if (q && s.cn.toLowerCase().indexOf(q)===-1 && s.en.toLowerCase().indexOf(q)===-1
+          && s.subcat.toLowerCase().indexOf(q)===-1 && s.role.toLowerCase().indexOf(q)===-1
+          && s.cat.toLowerCase().indexOf(q)===-1 && s.tech.toLowerCase().indexOf(q)===-1) return false;
+    if (cat && s.subcat !== cat) return false;
+    if (tech && s.tech !== tech) return false;
+    return true;
+  });
+
+  _browserData.sort(function(a, b) {
+    var va = (a[_sortCol]||'').toLowerCase();
+    var vb = (b[_sortCol]||'').toLowerCase();
+    if (va < vb) return -1 * _sortDir;
+    if (va > vb) return 1 * _sortDir;
+    return 0;
+  });
+
+  renderBrowser();
+}
+
+function doSort(col) {
+  if (_sortCol === col) _sortDir *= -1;
+  else { _sortCol = col; _sortDir = 1; }
+  doFilter();
+}
+
+function renderBrowser() {
+  var html = '';
+  for (var i = 0; i < _browserData.length; i++) {
+    var s = _browserData[i];
+    html += '<tr>'
+      + '<td><span class="cn">' + s.cn + '</span></td>'
+      + '<td><span class="en">' + s.en + '</span></td>'
+      + '<td>' + s.subcat + '</td>'
+      + '<td>' + (s.tech||'') + '</td>'
+      + '<td>' + (s.role||'') + '</td>'
+      + '</tr>';
+  }
+  document.getElementById('browBody').innerHTML = html || '<tr><td colspan="5" class="empty">没有匹配的舰船</td></tr>';
+  document.getElementById('browCnt').textContent = '共 ' + _browserData.length + ' 艘';
+}
+
+// init browser with full list
+_browserData = SHIPS_DATA.slice();
+_browserData.sort(function(a, b) {
+  var va = (a.cn||'').toLowerCase();
+  var vb = (b.cn||'').toLowerCase();
+  return va < vb ? -1 : va > vb ? 1 : 0;
+});
+renderBrowser();
+
+// -- pages --
+document.querySelectorAll('.topbar .nav a').forEach(function(a) {
+  a.addEventListener('click', function(e) {
+    e.preventDefault();
+    var pg = this.dataset.pg;
+    document.querySelectorAll('.topbar .nav a').forEach(function(x) { x.classList.remove('on'); });
+    this.classList.add('on');
+    document.getElementById('pg-scan').classList.toggle('hidden', pg !== 'scan');
+    document.getElementById('pg-browse').classList.toggle('hidden', pg !== 'browse');
+  });
+});
+
+// -- theme --
+function toggleTheme() {
+  document.body.classList.toggle('light');
+  localStorage.setItem('eve-theme', document.body.classList.contains('light') ? 'light' : 'dark');
+}
+if (localStorage.getItem('eve-theme') === 'light') document.body.classList.add('light');
+</script>
+</body>
+</html>
