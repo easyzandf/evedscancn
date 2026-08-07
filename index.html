@@ -599,7 +599,7 @@ function doScan(silent) {
       var sTotal = 0;
       subShips.forEach(function(r) { sTotal += r.count; });
       var skEn = _subcatEN[sk] || sk;
-      html += '<tr><td colspan="4" style="padding:6px 12px;color:#9fb6d4;background:#18233a">'
+      html += '<tr><td colspan="4" style="padding:6px 12px 6px 28px;color:#9fb6d4;background:#18233a">'
         + sk + ' <span class="en">' + skEn + '</span>（' + sTotal + ' 艘）</td></tr>';
 
       subShips.sort(function(a, b) { return b.count - a.count; });
@@ -610,7 +610,7 @@ function doScan(silent) {
         if (sh.tech) tags += '<span class="tag t-tech">' + sh.tech + '</span>';
         var ecm = getECM(sh.cat);
         html += '<tr>'
-          + '<td><span class="cn">' + sh.cn + '</span><span class="en">' + sh.en + '</span>'
+          + '<td style="padding-left:44px"><span class="cn">' + sh.cn + '</span><span class="en">' + sh.en + '</span>'
           + (cnt > 1 ? ' <b style="color:#f0ad4e">×' + cnt + '</b>' : '') + '</td>'
           + '<td>' + tags + '</td>'
           + '<td>' + (sh.cat||'') + '</td>'
