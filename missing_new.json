@@ -1,0 +1,974 @@
+[
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "T1",
+    "cn": "毒蝎级异株湖保安型",
+    "en": "Scorpion Ishukone Watch",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 4005"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "护卫舰",
+    "tech": "势力",
+    "cn": "卡尼迪海军护卫舰",
+    "en": "Khanid Navy Frigate",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 17705"
+  },
+  {
+    "cat": "莫德团",
+    "subcat": "护卫舰",
+    "tech": "T1",
+    "cn": "莫德团护卫舰",
+    "en": "Mordus Frigate",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 17707"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "特别版游艇",
+    "tech": "T1",
+    "cn": "奥普克斯龙神级豪华游轮",
+    "en": "Opux Dragoon Yacht",
+    "role": "火力/通用",
+    "note": "官方组: Special Edition Yachts / Special Edition Yachts；typeID: 25560"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "穿梭机",
+    "tech": "T1",
+    "cn": "民用艾玛穿梭机",
+    "en": "Civilian Amarr Shuttle",
+    "role": "穿梭",
+    "note": "官方组: Shuttle / Shuttle；typeID: 27299"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "穿梭机",
+    "tech": "T1",
+    "cn": "民用加达里穿梭机",
+    "en": "Civilian Caldari Shuttle",
+    "role": "穿梭",
+    "note": "官方组: Shuttle / Shuttle；typeID: 27301"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "穿梭机",
+    "tech": "T1",
+    "cn": "民用盖伦特穿梭机",
+    "en": "Civilian Gallente Shuttle",
+    "role": "穿梭",
+    "note": "官方组: Shuttle / Shuttle；typeID: 27303"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "穿梭机",
+    "tech": "T1",
+    "cn": "民用米玛塔尔穿梭机",
+    "en": "Civilian Minmatar Shuttle",
+    "role": "穿梭",
+    "note": "官方组: Shuttle / Shuttle；typeID: 27305"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "穿梭机",
+    "tech": "T1",
+    "cn": "艾玛传媒穿梭机",
+    "en": "Amarr Media Shuttle",
+    "role": "穿梭",
+    "note": "官方组: Shuttle / Shuttle；typeID: 29328"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "穿梭机",
+    "tech": "T1",
+    "cn": "加达里传媒穿梭机",
+    "en": "Caldari Media Shuttle",
+    "role": "穿梭",
+    "note": "官方组: Shuttle / Shuttle；typeID: 29330"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "穿梭机",
+    "tech": "T1",
+    "cn": "盖伦特传媒穿梭机",
+    "en": "Gallente Media Shuttle",
+    "role": "穿梭",
+    "note": "官方组: Shuttle / Shuttle；typeID: 29332"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "穿梭机",
+    "tech": "T1",
+    "cn": "米玛塔尔传媒穿梭机",
+    "en": "Minmatar Media Shuttle",
+    "role": "穿梭",
+    "note": "官方组: Shuttle / Shuttle；typeID: 29334"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "驱逐舰",
+    "tech": "T1",
+    "cn": "星际捷运促进级",
+    "en": "InterBus Catalyst",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 32840"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "驱逐舰",
+    "tech": "T1",
+    "cn": "印塔基联合财团促进级",
+    "en": "Intaki Syndicate Catalyst",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 32842"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "驱逐舰",
+    "tech": "T1",
+    "cn": "短途物流促进级",
+    "en": "Inner Zone Shipping Catalyst",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 32844"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "驱逐舰",
+    "tech": "T1",
+    "cn": "酷菲促进级",
+    "en": "Quafe Catalyst",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 32846"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "驱逐舰",
+    "tech": "T1",
+    "cn": "埃拉斯多集团促进级",
+    "en": "Aliastra Catalyst",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 32848"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "护卫舰",
+    "tech": "T1",
+    "cn": "斯库维塔苍鹭级",
+    "en": "Sukuuvestaa Heron",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 32983"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "护卫舰",
+    "tech": "T1",
+    "cn": "短途物流伊米卡斯级",
+    "en": "Inner Zone Shipping Imicus",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 32985"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "护卫舰",
+    "tech": "T1",
+    "cn": "萨拉姆富豪级",
+    "en": "Sarum Magnate",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 32987"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "护卫舰",
+    "tech": "T1",
+    "cn": "维洛奇亚探索级",
+    "en": "Vherokior Probe",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 32989"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "驱逐舰",
+    "tech": "势力",
+    "cn": "内凡达长尾鲛级",
+    "en": "Nefantar Thrasher",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 33099"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "护卫舰",
+    "tech": "势力",
+    "cn": "塔什蒙贡富豪级",
+    "en": "Tash-Murkon Magnate",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33190"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "地狱天使级塔什蒙贡版",
+    "en": "Abaddon Tash-Murkon Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 33623"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "地狱天使级卡多尔版",
+    "en": "Abaddon Kador Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 33625"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "鹏鲲级纳基维版",
+    "en": "Rokh Nugoeihuvi Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 33627"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "鹏鲲级维克米集团版",
+    "en": "Rokh Wiyrkomi Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 33629"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "死亡漩涡级内凡达版",
+    "en": "Maelstrom Nefantar Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 33631"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "死亡漩涡级克鲁夏版",
+    "en": "Maelstrom Krusual Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 33633"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "亥伯龙神级埃拉斯多集团版",
+    "en": "Hyperion Aliastra Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 33635"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "亥伯龙神级短途物流版",
+    "en": "Hyperion Inner Zone Shipping Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 33637"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "启示级卡多尔版",
+    "en": "Omen Kador Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 33639"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "启示级塔什蒙贡版",
+    "en": "Omen Tash-Murkon Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 33641"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "狞獾级纳基维版",
+    "en": "Caracal Nugoeihuvi Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 33643"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "狞獾级维克米集团版",
+    "en": "Caracal Wiyrkomi Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 33645"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "刺客级内凡达版",
+    "en": "Stabber Nefantar Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 33647"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "刺客级克鲁夏版",
+    "en": "Stabber Krusual Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 33649"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "托勒克斯级埃拉斯多集团版",
+    "en": "Thorax Aliastra Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 33651"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "托勒克斯级短途物流版",
+    "en": "Thorax Inner Zone Shipping Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 33653"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "惩罚者级卡多尔版",
+    "en": "Punisher Kador Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33655"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "惩罚者级塔什蒙贡版",
+    "en": "Punisher Tash-Murkon Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33657"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "小鹰级纳基维版",
+    "en": "Merlin Nugoeihuvi Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33659"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "小鹰级维克米集团版",
+    "en": "Merlin Wiyrkomi Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33661"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "裂谷级内凡达版",
+    "en": "Rifter Nefantar Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33663"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "裂谷级克鲁夏版",
+    "en": "Rifter Krusual Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33665"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "因卡萨斯级埃拉斯多集团版",
+    "en": "Incursus Aliastra Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33667"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "因卡萨斯级短途物流版",
+    "en": "Incursus Inner Zone Shipping Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 33669"
+  },
+  {
+    "cat": "联合矿业(ORE)",
+    "subcat": "采掘者",
+    "tech": "特别版",
+    "cn": "麦基诺级ORE开发版",
+    "en": "Mackinaw ORE Development Edition",
+    "role": "火力/通用",
+    "note": "官方组: Exhumer / Exhumer；typeID: 33683"
+  },
+  {
+    "cat": "联合矿业(ORE)",
+    "subcat": "工业指挥舰",
+    "tech": "特别版",
+    "cn": "逆戟鲸级ORE开发版",
+    "en": "Orca ORE Development Edition",
+    "role": "火力/通用",
+    "note": "官方组: Industrial Command Ship / Industrial Command Ship；typeID: 33685"
+  },
+  {
+    "cat": "联合矿业(ORE)",
+    "subcat": "旗舰级工业舰",
+    "tech": "特别版",
+    "cn": "长须鲸级ORE开发版",
+    "en": "Rorqual ORE Development Edition",
+    "role": "火力/通用",
+    "note": "官方组: Capital Industrial Ship / Capital Industrial Ship；typeID: 33687"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "运载舰",
+    "tech": "特别版",
+    "cn": "伊特龙级短途物流版",
+    "en": "Iteron Inner Zone Shipping Edition",
+    "role": "火力/通用",
+    "note": "官方组: Hauler / Hauler；typeID: 33689"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "运载舰",
+    "tech": "特别版",
+    "cn": "狐鼬级维克米集团版",
+    "en": "Tayra Wiyrkomi Edition",
+    "role": "火力/通用",
+    "note": "官方组: Hauler / Hauler；typeID: 33691"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "运载舰",
+    "tech": "特别版",
+    "cn": "猛犸级内凡达版",
+    "en": "Mammoth Nefantar Edition",
+    "role": "火力/通用",
+    "note": "官方组: Hauler / Hauler；typeID: 33693"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "运载舰",
+    "tech": "特别版",
+    "cn": "恩赐者级塔什蒙贡版",
+    "en": "Bestower Tash-Murkon Edition",
+    "role": "火力/通用",
+    "note": "官方组: Hauler / Hauler；typeID: 33695"
+  },
+  {
+    "cat": "天蛇",
+    "subcat": "战斗战列巡洋舰",
+    "tech": "特别版",
+    "cn": "布鲁提克斯级天蛇版",
+    "en": "Brutix Serpentis Edition",
+    "role": "火力",
+    "note": "官方组: Combat Battlecruiser / Combat Battlecruiser；typeID: 33869"
+  },
+  {
+    "cat": "天使",
+    "subcat": "战斗战列巡洋舰",
+    "tech": "特别版",
+    "cn": "飓风级图克尔部族版",
+    "en": "Cyclone Thukker Tribe Edition",
+    "role": "火力",
+    "note": "官方组: Combat Battlecruiser / Combat Battlecruiser；typeID: 33871"
+  },
+  {
+    "cat": "古斯塔斯",
+    "subcat": "战斗战列巡洋舰",
+    "tech": "特别版",
+    "cn": "猛鲑级古斯塔斯版",
+    "en": "Ferox Guristas Edition",
+    "role": "火力",
+    "note": "官方组: Combat Battlecruiser / Combat Battlecruiser；typeID: 33873"
+  },
+  {
+    "cat": "血袭者",
+    "subcat": "战斗战列巡洋舰",
+    "tech": "特别版",
+    "cn": "先知级血袭者版",
+    "en": "Prophecy Blood Raiders Edition",
+    "role": "火力",
+    "note": "官方组: Combat Battlecruiser / Combat Battlecruiser；typeID: 33875"
+  },
+  {
+    "cat": "天蛇",
+    "subcat": "驱逐舰",
+    "tech": "特别版",
+    "cn": "促进级天蛇版",
+    "en": "Catalyst Serpentis Edition",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 33877"
+  },
+  {
+    "cat": "血袭者",
+    "subcat": "驱逐舰",
+    "tech": "特别版",
+    "cn": "强制者级血袭者版",
+    "en": "Coercer Blood Raiders Edition",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 33879"
+  },
+  {
+    "cat": "古斯塔斯",
+    "subcat": "驱逐舰",
+    "tech": "特别版",
+    "cn": "海燕级古斯塔斯版",
+    "en": "Cormorant Guristas Edition",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 33881"
+  },
+  {
+    "cat": "天使",
+    "subcat": "驱逐舰",
+    "tech": "特别版",
+    "cn": "长尾鲛级图克尔部族版",
+    "en": "Thrasher Thukker Tribe Edition",
+    "role": "火力",
+    "note": "官方组: Destroyer / Destroyer；typeID: 33883"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "万王宝座级酷菲版",
+    "en": "Megathron Quafe Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34118"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "响尾蛇级胜利版",
+    "en": "Rattlesnake Victory Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34151"
+  },
+  {
+    "cat": "血袭者",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "灾难级血袭者版",
+    "en": "Apocalypse Blood Raider Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34213"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "灾难级卡多尔版",
+    "en": "Apocalypse Kador Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34215"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "灾难级塔什蒙贡版",
+    "en": "Apocalypse Tash-Murkon Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34217"
+  },
+  {
+    "cat": "血袭者",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "帕拉丁级血袭者版",
+    "en": "Paladin Blood Raider Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34219"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "帕拉丁级卡多尔版",
+    "en": "Paladin Kador Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34221"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "帕拉丁级塔什蒙贡版",
+    "en": "Paladin Tash-Murkon Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34223"
+  },
+  {
+    "cat": "古斯塔斯",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "乌鸦级古斯塔斯版",
+    "en": "Raven Guristas Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34225"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "乌鸦级卡拉吉塔集团版",
+    "en": "Raven Kaalakiota Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34227"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "乌鸦级纳基维版",
+    "en": "Raven Nugoeihuvi Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34229"
+  },
+  {
+    "cat": "古斯塔斯",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "魔像级古斯塔斯版",
+    "en": "Golem Guristas Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34231"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "魔像级卡拉吉塔集团版",
+    "en": "Golem Kaalakiota Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34233"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "魔像级纳基维版",
+    "en": "Golem Nugoeihuvi Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34235"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "万王宝座级短途物流版",
+    "en": "Megathron Inner Zone Shipping Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34239"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "克洛诺斯级酷菲版",
+    "en": "Kronos Quafe Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34243"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "克洛诺斯短途物流版",
+    "en": "Kronos Inner Zone Shipping Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34245"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "狂暴级司法局版",
+    "en": "Tempest Justice Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34247"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "狂暴级克鲁夏版",
+    "en": "Tempest Krusual Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34249"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "狂暴级内凡达版",
+    "en": "Tempest Nefantar Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34251"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "恶狼级司法局版",
+    "en": "Vargur Justice Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34253"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "恶狼级克鲁夏版",
+    "en": "Vargur Krusual Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34255"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "掠夺舰",
+    "tech": "特别版",
+    "cn": "恶狼级内凡达版",
+    "en": "Vargur Nefantar Edition",
+    "role": "火力/通用",
+    "note": "官方组: Marauder / Marauder；typeID: 34257"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "无畏舰",
+    "tech": "特别版",
+    "cn": "莫洛级星际捷运版",
+    "en": "Moros Interbus Edition",
+    "role": "火力/通用",
+    "note": "官方组: Dreadnought / Dreadnought；typeID: 34339"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "无畏舰",
+    "tech": "特别版",
+    "cn": "纳迦法级司法局版",
+    "en": "Naglfar Justice Edition",
+    "role": "火力/通用",
+    "note": "官方组: Dreadnought / Dreadnought；typeID: 34341"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "无畏舰",
+    "tech": "特别版",
+    "cn": "凤凰级维克米集团版",
+    "en": "Phoenix Wiyrkomi Edition",
+    "role": "火力/通用",
+    "note": "官方组: Dreadnought / Dreadnought；typeID: 34343"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "无畏舰",
+    "tech": "特别版",
+    "cn": "神示级萨拉姆版",
+    "en": "Revelation Sarum Edition",
+    "role": "火力/通用",
+    "note": "官方组: Dreadnought / Dreadnought；typeID: 34345"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "多米尼克斯级酷菲版",
+    "en": "Dominix Quafe Edition",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34441"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "护卫舰",
+    "tech": "特别版",
+    "cn": "特里斯坦级酷菲版",
+    "en": "Tristan Quafe Edition",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 34443"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "狂怒者级酷菲版",
+    "en": "Vexor Quafe Edition",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 34445"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "末日沙场级YC117年特别版",
+    "en": "末日沙场级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34457"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "地狱天使级YC117年特别版",
+    "en": "地狱天使级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34459"
+  },
+  {
+    "cat": "米玛塔尔",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "马克瑞级YC117年特别版",
+    "en": "马克瑞级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34461"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "响尾蛇级YC117年特别版",
+    "en": "响尾蛇级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34463"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "多米尼克斯级YC117年特别版",
+    "en": "多米尼克斯级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34465"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "万王宝座级YC117年特别版",
+    "en": "万王宝座级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34467"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "乌鸦级YC117年特别版",
+    "en": "乌鸦级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34469"
+  },
+  {
+    "cat": "艾玛",
+    "subcat": "战列舰",
+    "tech": "特别版",
+    "cn": "灾难级YC117年特别版",
+    "en": "灾难级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Battleship / Battleship；typeID: 34471"
+  },
+  {
+    "cat": "加达里",
+    "subcat": "战斗战列巡洋舰",
+    "tech": "特别版",
+    "cn": "幼龙级YC117年特别版",
+    "en": "幼龙级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Combat Battlecruiser / Combat Battlecruiser；typeID: 34473"
+  },
+  {
+    "cat": "古斯塔斯",
+    "subcat": "巡洋舰",
+    "tech": "特别版",
+    "cn": "毒蜥级YC117年特别版",
+    "en": "毒蜥级YC117年特别版",
+    "role": "火力",
+    "note": "官方组: Cruiser / Cruiser；typeID: 34475"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "重型突击巡洋舰",
+    "tech": "特别版",
+    "cn": "银鹰级YC117年特别版",
+    "en": "银鹰级YC117年特别版",
+    "role": "火力/通用",
+    "note": "官方组: Heavy Assault Cruiser / Heavy Assault Cruiser；typeID: 34477"
+  },
+  {
+    "cat": "盖伦特",
+    "subcat": "重型突击巡洋舰",
+    "tech": "特别版",
+    "cn": "伊什塔级YC117年特别版",
+    "en": "伊什塔级YC117年特别版",
+    "role": "火力/通用",
+    "note": "官方组: Heavy Assault Cruiser / Heavy Assault Cruiser；typeID: 34479"
+  },
+  {
+    "cat": "特殊/未标注",
+    "subcat": "航空母舰",
+    "tech": "T1",
+    "cn": "先锋级",
+    "en": "Vanguard",
+    "role": "火力/通用",
+    "note": "官方组: Carrier / Carrier；typeID: 42132"
+  },
+  {
+    "cat": "特殊/未标注",
+    "subcat": "战力辅助舰",
+    "tech": "T1",
+    "cn": "尊者级",
+    "en": "Venerable",
+    "role": "火力/通用",
+    "note": "官方组: Force Auxiliary / Force Auxiliary；typeID: 42133"
+  },
+  {
+    "cat": "特殊/未标注",
+    "subcat": "Citizen Ships",
+    "tech": "T1",
+    "cn": "公民冲锋者级",
+    "en": "Citizen Venture",
+    "role": "火力/通用",
+    "note": "官方组: Citizen Ships / Citizen Ships；typeID: 48648"
+  },
+  {
+    "cat": "姐妹会",
+    "subcat": "护卫舰",
+    "tech": "T1",
+    "cn": "星空会民用阿斯特罗级",
+    "en": "AIR Civilian Astero",
+    "role": "火力",
+    "note": "官方组: Frigate / Frigate；typeID: 58745"
+  }
+]
