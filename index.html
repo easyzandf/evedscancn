@@ -400,11 +400,12 @@
     <table class="ship-tbl browser-tbl" id="browTbl">
       <thead>
         <tr>
-          <th onclick="doSort('cn')" style="width:30%">中文名 <span class="arrow"></span></th>
-          <th onclick="doSort('en')" style="width:22%">英文名 <span class="arrow"></span></th>
-          <th onclick="doSort('subcat')" style="width:14%">分类 <span class="arrow"></span></th>
-          <th onclick="doSort('tech')" style="width:10%">科技等级 <span class="arrow"></span></th>
-          <th onclick="doSort('role')" style="width:24%">定位 <span class="arrow"></span></th>
+          <th onclick="doSort('cn')" style="width:26%">中文名 <span class="arrow"></span></th>
+          <th onclick="doSort('en')" style="width:20%">英文名 <span class="arrow"></span></th>
+          <th onclick="doSort('subcat')" style="width:12%">分类 <span class="arrow"></span></th>
+          <th onclick="doSort('tech')" style="width:9%">科技等级 <span class="arrow"></span></th>
+          <th onclick="doSort('role')" style="width:20%">定位 <span class="arrow"></span></th>
+          <th onclick="doSort('ecm')" style="width:13%">ECM建议 <span class="arrow"></span></th>
         </tr>
       </thead>
       <tbody id="browBody"></tbody>
@@ -509,10 +510,10 @@ var _ecmMap = {
   '加达里': '引力ECM', '加达里海军': '引力ECM',
   '盖伦特': '磁力ECM', '盖伦特海军': '磁力ECM',
   '米玛塔尔': '光雷达ECM', '米玛塔尔舰队': '光雷达ECM',
-  '血袭者同盟': '雷达ECM', '萨沙共和国': '雷达ECM',
+  '血袭者同盟': '雷达ECM', '血袭者': '雷达ECM', '萨沙共和国': '雷达ECM',
   '古斯塔斯': '引力ECM', '莫德团': '引力ECM', '死亡之神集团': '引力ECM',
-  '天蛇集团': '磁力ECM',
-  '天使集团': '光雷达ECM',
+  '天蛇集团': '磁力ECM', '天蛇': '磁力ECM',
+  '天使集团': '光雷达ECM', '天使': '光雷达ECM',
   '三神裔': '多谱式ECM', 'EDENCOM': '多谱式ECM', '昇威': '多谱式ECM',
   '联合矿业(ORE)': '多谱式ECM', 'ORE财团': '多谱式ECM',
   '姐妹会': '多谱式ECM', '意识社团': '多谱式ECM',
@@ -1097,8 +1098,8 @@ function doFilter() {
   });
 
   _browserData.sort(function(a, b) {
-    var va = (a[_sortCol]||'').toLowerCase();
-    var vb = (b[_sortCol]||'').toLowerCase();
+    var va = (_sortCol === 'ecm' ? getECM(a.cat) : (a[_sortCol]||'')).toLowerCase();
+    var vb = (_sortCol === 'ecm' ? getECM(b.cat) : (b[_sortCol]||'')).toLowerCase();
     if (va < vb) return -1 * _sortDir;
     if (va > vb) return 1 * _sortDir;
     return 0;
@@ -1125,9 +1126,10 @@ function renderBrowser() {
       + '<td>' + s.subcat + (subEn ? ' <span class="en">' + subEn + '</span>' : '') + '</td>'
       + '<td>' + (s.tech||'') + '</td>'
       + '<td>' + (s.role||'') + '</td>'
+      + '<td><span class="tag t-tech">' + (getECM(s.cat) || '') + '</span></td>'
       + '</tr>';
   }
-  document.getElementById('browBody').innerHTML = html || '<tr><td colspan="5" class="empty">没有匹配的舰船</td></tr>';
+  document.getElementById('browBody').innerHTML = html || '<tr><td colspan="6" class="empty">没有匹配的舰船</td></tr>';
   document.getElementById('browCnt').textContent = '共 ' + _browserData.length + ' 艘';
 }
 
