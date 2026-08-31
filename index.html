@@ -451,6 +451,14 @@ SHIPS_DATA.forEach(function(s) {
   if (s.cn) _lookup.push({ k: s.cn.toLowerCase(), d: s });
 });
 _lookup.sort(function(a, b) { return b.k.length - a.k.length; });
+// hash maps for fast, unambiguous lookup (name -> ship, typeID -> ship)
+var _lookupMap = {};
+var _typeIDMap = {};
+SHIPS_DATA.forEach(function(s) {
+  if (s.en) _lookupMap[s.en.toLowerCase()] = s;
+  if (s.cn) _lookupMap[s.cn.toLowerCase()] = s;
+  if (s.attr && s.attr.typeID) _typeIDMap[s.attr.typeID] = s;
+});
 
 function matchShip(line) {
   var s = line.trim();
@@ -458,6 +466,20 @@ function matchShip(line) {
   var lo = s.toLowerCase();
   // split by tab, try each column
   var cols = s.split('\t');
+
+  // Priority 1: leading column is a numeric typeID (Chinese client: <typeID>\t<name>\t<shipType>\t<dist>)
+  var tid = cols[0].trim();
+  if (/^\d+$/.test(tid) && _typeIDMap[+tid]) return _typeIDMap[+tid];
+
+  // Priority 2: column ending with '*' is the ship type column (Chinese client)
+  for (var j = 0; j < cols.length; j++) {
+    var c = cols[j].trim();
+    if (c.slice(-1) === '*') {
+      var hit = _lookupMap[c.slice(0, -1).trim().toLowerCase()];
+      if (hit) return hit;
+    }
+  }
+
   // exact match
   for (var i = 0; i < _lookup.length; i++) {
     if (lo === _lookup[i].k) return _lookup[i].d;
