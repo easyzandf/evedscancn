@@ -356,7 +356,26 @@
     .browbar input { width: 100%; margin-bottom: 8px; float: none; }
     .browbar select { margin-left: 0; margin-right: 8px; }
     .btnbar .hint { float: none; display: block; margin-top: 8px; }
+    .buy-cols { flex-direction: column; }
+    .buy-cols .col { width: 100%; }
   }
+
+  /* buy list page */
+  .buy-cols { display: flex; gap: 14px; }
+  .buy-cols .col { flex: 1; min-width: 0; }
+  .buy-cols textarea.scanbox { height: 230px; }
+  .lbl { color: #999; font-size: 12px; margin: 14px 0 6px; }
+  .buy-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  .buy-bar label { color: #ccc; font-size: 14px; }
+  .buy-bar input[type=number] {
+    width: 70px; background: #0d1117; border: 1px solid #2d3a55; color: #ccc;
+    padding: 6px 8px; font-size: 14px; border-radius: 3px;
+  }
+  .buy-bar .hint2 { color: #666; font-size: 12px; margin-left: auto; }
+  #buyResult .qty-need { color: #f0ad4e; font-weight: bold; }
+  #buyResult .qty-have { color: #6fae6f; }
+  #buyResult .qty-buy { color: #ff7a7a; font-weight: bold; }
+  #buyResult .qty-zero { color: #555; }
 </style>
 </head>
 <body>
@@ -366,6 +385,7 @@
   <div class="nav">
     <a href="#" class="on" data-pg="scan">D-Scan 解析</a>
     <a href="#" data-pg="browse">舰船浏览器</a>
+    <a href="#" data-pg="buy">装备购买</a>
   </div>
   <button class="tog" onclick="toggleTheme()">亮/暗</button>
 </div>
@@ -419,6 +439,31 @@
       </thead>
       <tbody id="browBody"></tbody>
     </table>
+  </div>
+
+  <!-- Buy list page -->
+  <div id="pg-buy" class="hidden">
+    <div class="buy-cols">
+      <div class="col">
+        <div class="lbl">① 粘贴你的<strong>现有资产</strong>（游戏内 资产/机库 窗口 全选复制，中文或英文均可）</div>
+        <textarea class="scanbox" id="assetInput"
+          placeholder="在此粘贴 EVE 资产列表，中英文均可&#10;&#10;中文客户端示例（资产窗口复制）：&#10;125mm磁轨炮 II&#9;3&#10;1600mm钢附甲板 II&#9;7&#10;帝国海军多频晶体 M&#9;34855&#10;&#10;英文客户端示例：&#10;125mm Railgun II&#9;3&#10;Warrior II&#9;35"></textarea>
+      </div>
+      <div class="col">
+        <div class="lbl">② 粘贴<strong>配装</strong>（EFT 格式：游戏内复制 / Pyfa / EVE Workbench，中英文均可）</div>
+        <textarea class="scanbox" id="fitInput"
+          placeholder="在此粘贴配装，例如：&#10;[Prophecy Navy Issue, My Fit]&#10;Damage Control II&#10;Multispectrum Energized Membrane II&#10;Heavy Beam Laser II&#10;Medium Trimark Armor Pump I&#10;Warrior II x5&#10;Imperial Navy Multifrequency M x10"></textarea>
+      </div>
+    </div>
+
+    <div class="buy-bar">
+      <label>③ 要装 <input type="number" id="fitCount" value="1" min="1"> 艘</label>
+      <button class="btn btn-go" onclick="computeBuyList()">计算购买清单</button>
+      <button class="btn btn-clr" onclick="clearBuy()">清空</button>
+      <span class="hint2">需要 = 单船配装 × 艘数 − 已有资产；弹药/无人机按配装里 xN 计算</span>
+    </div>
+
+    <div class="result-wrap hidden" id="buyResult"></div>
   </div>
 
 </div>
@@ -1185,6 +1230,7 @@ function switchPg(pg) {
   document.querySelector('.topbar .nav a[data-pg="' + pg + '"]').classList.add('on');
   document.getElementById('pg-scan').classList.toggle('hidden', pg !== 'scan');
   document.getElementById('pg-browse').classList.toggle('hidden', pg !== 'browse');
+  document.getElementById('pg-buy').classList.toggle('hidden', pg !== 'buy');
 }
 
 // -- theme --
@@ -1193,6 +1239,252 @@ function toggleTheme() {
   localStorage.setItem('eve-theme', document.body.classList.contains('light') ? 'light' : 'dark');
 }
 if (localStorage.getItem('eve-theme') === 'light') document.body.classList.add('light');
+
+/* ===================== 装备购买计算 ===================== */
+
+// -- lazy-load item name dictionary (items-data.js) --
+var _itemEn = {}, _itemZh = {}, _itemsReady = false;
+function loadItems(cb) {
+  if (_itemsReady) { if (cb) cb(); return; }
+  if (window.ITEMS_DATA) { buildItemIndex(); _itemsReady = true; if (cb) cb(); return; }
+  var s = document.createElement('script');
+  s.src = 'items-data.js';
+  s.onload = function() { buildItemIndex(); _itemsReady = true; if (cb) cb(); };
+  s.onerror = function() { if (cb) cb(); };   // dict missing -> fall back to raw-name matching
+  document.head.appendChild(s);
+}
+function buildItemIndex() {
+  var d = window.ITEMS_DATA || {};
+  Object.keys(d).forEach(function(tid) {
+    var en = (d[tid].en || '').trim().toLowerCase();
+    var zh = (d[tid].zh || '').trim();
+    if (en) _itemEn[en] = tid;
+    if (zh) _itemZh[zh] = tid;
+  });
+}
+function lookupItemId(name) {
+  if (!name) return null;
+  var n = name.trim().replace(/\*+$/, '').trim();
+  if (!n) return null;
+  var en = n.toLowerCase();
+  return _itemEn[en] || _itemZh[n] || null;
+}
+// ship name -> ship record (en/zh), reuse SHIPS_DATA
+var _shipEn = {}, _shipZh = {};
+SHIPS_DATA.forEach(function(s) {
+  if (s.en) _shipEn[s.en.trim().toLowerCase()] = s;
+  if (s.cn) _shipZh[s.cn.trim()] = s;
+});
+function lookupShip(name) {
+  if (!name) return null;
+  var n = name.trim();
+  return _shipEn[n.toLowerCase()] || _shipZh[n] || null;
+}
+
+// -- parse pasted assets (game asset/hangar copy): name / qty among tab columns --
+function parseAssets(text) {
+  var out = [];
+  (text || '').split(/\r?\n/).forEach(function(line) {
+    if (!line || !line.trim()) return;
+    var cells = line.split('\t').map(function(c) { return c.trim(); });
+    var name = null;
+    for (var i = 0; i < cells.length; i++) {
+      var c = cells[i];
+      if (!c) continue;
+      if (/^[\d,.]+$/.test(c)) continue;                              // pure number = qty column
+      if (/^\d+(\.\d+)?\s*(m3|m|km|au|mm)\s*$/i.test(c)) continue;    // volume / distance
+      name = c;
+      break;
+    }
+    if (!name) return;
+    var qty = 1;
+    for (var j = 0; j < cells.length; j++) {
+      var c2 = cells[j].replace(/[,' ]/g, '');   // strip 1,000 / 1'000 separators
+      if (/^\d+$/.test(c2)) { qty = parseInt(c2, 10); break; }
+    }
+    out.push({ name: name.replace(/\*+$/, '').trim(), qty: Math.max(1, qty) });
+  });
+  return out;
+}
+
+// -- parse EFT-format fit (handles Module, Charge inline, /offline, "Name xN") --
+function parseFit(text) {
+  var ship = '', modules = {};
+  function add(name, qty) { if (name) modules[name] = (modules[name] || 0) + qty; }
+  (text || '').split(/\r?\n/).forEach(function(raw) {
+    var line = raw.trim();
+    if (!line) return;
+    if (/^\[empty/i.test(line)) return;                       // [empty low slot] etc.
+    var hm = line.match(/^\[(.*)\]$/);
+    if (hm) {                                                  // header: [ShipName, FitName]
+      var inner = hm[1];
+      var ci = inner.indexOf(',');
+      ship = (ci >= 0 ? inner.slice(0, ci) : inner).trim();
+      return;
+    }
+    var qty = 1, body = line;
+    var xm = line.match(/^(.*?)\s+[xX]\s*(\d+)\s*$/);          // drones/cargo: "Name xN"
+    if (xm) { body = xm[1].trim(); qty = parseInt(xm[2], 10); }
+    body = body.replace(/\s*\/offline\s*$/i, '').trim();       // "Name /offline"
+    var ci = body.indexOf(',');                                // loaded charge: "Module, Charge"
+    if (ci > 0) {
+      var mod = body.slice(0, ci).trim(), chg = body.slice(ci + 1).trim();
+      if (mod && chg) { add(mod, qty); add(chg, qty); return; }
+    }
+    add(body, qty);
+  });
+  return { ship: ship, modules: modules };
+}
+
+// -- main calc --
+function computeBuyList() {
+  var assetText = document.getElementById('assetInput').value;
+  var fitText = document.getElementById('fitInput').value;
+  var count = parseInt(document.getElementById('fitCount').value, 10) || 1;
+  if (!fitText.trim()) { alert('请先在②粘贴配装（EFT 格式）'); return; }
+  if (count < 1) count = 1;
+  loadItems(function() { renderBuy(parseAssets(assetText), parseFit(fitText), count); });
+}
+
+function renderBuy(assets, fit, count) {
+  // 1) owned: resolvable items by typeID, ships by en, others by raw lower name
+  var owned = {}, rawOwned = {}, ownedShips = {};
+  assets.forEach(function(a) {
+    var id = lookupItemId(a.name);
+    if (id) { owned[id] = (owned[id] || 0) + a.qty; return; }
+    var sh = lookupShip(a.name);
+    if (sh) { var ke = (sh.en || '').toLowerCase(); ownedShips[ke] = (ownedShips[ke] || 0) + a.qty; return; }
+    var kr = 'r' + a.name.trim().toLowerCase();
+    rawOwned[kr] = (rawOwned[kr] || 0) + a.qty;
+  });
+
+  // 2) needed from fit modules
+  var needMap = {};   // key -> { id, name, per }
+  Object.keys(fit.modules).forEach(function(name) {
+    var per = fit.modules[name];
+    var id = lookupItemId(name);
+    var key = id ? id : ('r' + name.trim().toLowerCase());
+    if (!needMap[key]) needMap[key] = { id: id || null, name: name, per: 0 };
+    needMap[key].per += per;
+  });
+
+  // 3) rows
+  var rows = [];
+  Object.keys(needMap).forEach(function(key) {
+    var e = needMap[key];
+    var need = e.per * count;
+    var have = e.id ? (owned[e.id] || 0) : (rawOwned[key] || 0);
+    rows.push({ id: e.id, name: e.name, per: e.per, need: need, have: have, buy: Math.max(0, need - have) });
+  });
+
+  // hull row (ship in fit header vs ships owned)
+  var hull = null;
+  if (fit.ship) {
+    var sh = lookupShip(fit.ship);
+    var haveH = sh ? (ownedShips[(sh.en || '').toLowerCase()] || 0) : 0;
+    hull = { ship: fit.ship, known: sh || null, have: haveH, buy: Math.max(0, count - haveH) };
+  }
+
+  // sort: need-to-buy first, then by name
+  rows.sort(function(a, b) {
+    if (b.buy !== a.buy) return b.buy - a.buy;
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  });
+
+  // 4) render
+  var el = document.getElementById('buyResult');
+  el.classList.remove('hidden');
+  var html = '<h3>购买清单 <span id="buySum"></span></h3>';
+  var buyTotal = 0, buyKinds = 0;
+  rows.forEach(function(r) { if (r.buy > 0) { buyTotal += r.buy; buyKinds++; } });
+  html += '<p style="color:#888;font-size:12px;margin:0 0 10px">配装船型：'
+    + (hull ? '<b style="color:#f0ad4e">' + (hull.known ? (hull.known.cn + ' ' + hull.known.en) : hull.ship) + '</b>'
+             : '<i>未识别</i>')
+    + ' × ' + count + ' 艘</p>';
+
+  html += '<table class="ship-tbl"><thead><tr>'
+    + '<th style="width:44%">装备</th><th>单船×' + count + '</th><th>已有</th><th>需购买</th></tr></thead><tbody>';
+
+  if (hull) {
+    var cls = hull.buy > 0 ? 'qty-buy' : 'qty-zero';
+    html += '<tr><td>' + (hull.known ? hull.known.cn + ' <span class="en">' + hull.known.en + '</span>' : hull.ship)
+      + '</td><td>' + count + '</td><td class="qty-have">' + hull.have + '</td>'
+      + '<td class="' + cls + '">' + (hull.buy > 0 ? hull.buy : '已有') + '</td></tr>';
+  }
+
+  rows.forEach(function(r) {
+    var disp = r.name;
+    if (r.id && window.ITEMS_DATA && window.ITEMS_DATA[r.id]) {
+      var m = window.ITEMS_DATA[r.id];
+      disp = (m.zh || m.en || r.name);
+      if (m.zh && m.en && m.zh !== m.en) disp += ' <span class="en">' + m.en + '</span>';
+      else if (m.en && !m.zh) disp += ' <span class="en">' + m.en + '</span>';
+    }
+    var cls = r.buy > 0 ? 'qty-buy' : 'qty-zero';
+    html += '<tr><td>' + disp + '</td>'
+      + '<td class="qty-need">' + r.need + '</td>'
+      + '<td class="qty-have">' + r.have + '</td>'
+      + '<td class="' + cls + '">' + (r.buy > 0 ? r.buy : '已有') + '</td></tr>';
+  });
+  html += '</tbody></table>';
+
+  var covCount = rows.filter(function(r) { return r.have >= r.need; }).length;
+  html += '<p style="color:#666;font-size:12px">共需购买 <b style="color:#ff7a7a">' + buyKinds + ' 种 / ' + buyTotal
+    + ' 件</b>；已有 ' + assets.length + ' 条资产记录，其中 ' + covCount + ' 种装备已够用（不需买）。'
+    + (hull && hull.buy > 0 ? ' 另需购买 <b style="color:#ff7a7a">' + hull.buy + ' 艘</b>船体。' : ' 船体数量已足够。')
+    + '</p>';
+  html += '<div class="btnbar">'
+    + '<button class="btn btn-go" onclick="copyBuyList(this)">复制购买清单(Multi-Buy)</button> '
+    + '<button class="btn btn-clr" onclick="clearBuy()">清空</button></div>';
+  el.innerHTML = html;
+  _lastBuy = { rows: rows, hull: hull, count: count };
+  if (buyTotal === 0 && hull && hull.buy === 0) {
+    el.querySelector('h3').textContent += '（全部已有，无需购买）';
+  }
+}
+
+var _lastBuy = null;
+function _copyText(t, btn, ok) {
+  var ta = document.createElement('textarea');
+  ta.value = t; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+  document.body.appendChild(ta); ta.select();
+  var done = false;
+  try { done = document.execCommand('copy'); } catch (e) {}
+  document.body.removeChild(ta);
+  if (!done && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(t).then(function() { if (ok) ok(); });
+  } else if (done && ok) { ok(); }
+}
+function _buyName(r) {
+  if (r.id && window.ITEMS_DATA && window.ITEMS_DATA[r.id]) {
+    var m = window.ITEMS_DATA[r.id];
+    return m.zh || m.en || r.name;
+  }
+  return r.name;   // unknown item: keep as pasted
+}
+function copyBuyList(btn) {
+  if (!_lastBuy) return;
+  var lines = [];
+  if (_lastBuy.hull && _lastBuy.hull.buy > 0) {
+    var h = _lastBuy.hull.known;
+    var hn = h ? (h.cn || h.en) : _lastBuy.hull.ship;
+    lines.push(hn + '\t' + _lastBuy.hull.buy);
+  }
+  _lastBuy.rows.forEach(function(r) { if (r.buy > 0) lines.push(_buyName(r) + '\t' + r.buy); });
+  if (!lines.length) { alert('全部已有，无需购买'); return; }
+  _copyText(lines.join('\n'), btn, function() {
+    if (btn) { var o = btn.textContent; btn.textContent = '已复制!'; setTimeout(function() { btn.textContent = o; }, 1500); }
+  });
+}
+
+function clearBuy() {
+  document.getElementById('assetInput').value = '';
+  document.getElementById('fitInput').value = '';
+  document.getElementById('fitCount').value = '1';
+  var el = document.getElementById('buyResult');
+  el.classList.add('hidden');
+  el.innerHTML = '';
+}
 </script>
 </body>
 </html>
