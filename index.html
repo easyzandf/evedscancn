@@ -376,6 +376,41 @@
   #buyResult .qty-have { color: #6fae6f; }
   #buyResult .qty-buy { color: #ff7a7a; font-weight: bold; }
   #buyResult .qty-zero { color: #555; }
+
+  /* about / help page */
+  .doc { max-width: 860px; line-height: 1.75; }
+  .doc-hero { text-align: center; padding: 26px 0 18px; border-bottom: 1px solid #2a3a55; margin-bottom: 6px; }
+  .doc-hero h1 { margin: 0 0 6px; font-size: 24px; color: #f0ad4e; }
+  .doc-hero p { margin: 0; color: #999; font-size: 13px; }
+  .doc h2 {
+    color: #f0ad4e; font-size: 16px; font-weight: normal;
+    margin: 26px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #2a3a55;
+  }
+  .doc h3 { color: #e0e0e0; font-size: 14px; margin: 16px 0 6px; }
+  .doc p, .doc li { color: #bbb; font-size: 13px; }
+  .doc ul { padding-left: 20px; margin: 6px 0; }
+  .doc ul li { margin: 4px 0; }
+  .doc-steps { padding-left: 0; list-style: none; counter-reset: step; }
+  .doc-steps li {
+    counter-increment: step; position: relative; padding-left: 34px; margin: 10px 0; color: #bbb; font-size: 13px;
+  }
+  .doc-steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 1px;
+    width: 22px; height: 22px; border-radius: 50%; line-height: 22px; text-align: center;
+    background: #f0ad4e; color: #1a1a2e; font-weight: bold; font-size: 12px;
+  }
+  .doc-pre {
+    background: #0d1117; border: 1px solid #2d3a55; border-radius: 4px;
+    padding: 12px 14px; overflow-x: auto; font-size: 12px; color: #9fd0ff;
+    line-height: 1.6; margin: 8px 0;
+  }
+  .doc .ship-tbl th { color: #999; }
+  .doc a { color: #6db3ff; }
+  .doc a:hover { color: #9fd0ff; }
+  body.light .doc h2 { border-color: #ddd; color: #b57300; }
+  body.light .doc p, body.light .doc li, body.light .doc .doc-steps li { color: #555; }
+  body.light .doc-hero { border-color: #ddd; }
+  body.light .doc-pre { background: #f7f7f7; color: #1a4d8f; border-color: #ddd; }
 </style>
 </head>
 <body>
@@ -386,6 +421,7 @@
     <a href="#" class="on" data-pg="scan">D-Scan 解析</a>
     <a href="#" data-pg="browse">舰船浏览器</a>
     <a href="#" data-pg="buy">装备购买</a>
+    <a href="#" data-pg="about">帮助</a>
   </div>
   <button class="tog" onclick="toggleTheme()">亮/暗</button>
 </div>
@@ -464,6 +500,82 @@
     </div>
 
     <div class="result-wrap hidden" id="buyResult"></div>
+  </div>
+
+  <!-- About / README page -->
+  <div id="pg-about" class="hidden">
+    <div class="doc">
+      <div class="doc-hero">
+        <h1>EVE 舰船中文 D-Scan</h1>
+        <p>基于 <a href="https://dscan.info/" target="_blank" rel="noopener">dscan.info</a> 设计理念的纯中文舰船识别工具 · 线上：<a href="https://www.evedscancn.cc.cd/" target="_blank" rel="noopener">www.evedscancn.cc.cd</a></p>
+      </div>
+
+      <h2>功能一览</h2>
+      <ul>
+        <li><b>D-Scan 解析</b> — 粘贴 EVE 扫描结果（本地 / 舰队 / D-Scan），自动识别中英文舰船名并按作战功能分组；精确到 typeID，玩家自定义船名不会误判</li>
+        <li><b>ECM 建议</b> — 扫描结果与浏览器中按舰船势力推荐 ECM 干扰（雷达 / 引力 / 磁力 / 光雷达 / 多谱式）</li>
+        <li><b>舰船浏览器</b> — 浏览全部 531 艘舰船的中文数据，支持搜索 / 分类 / 科技等级 / 排序，每行附 ECM 建议；点船名查看详情</li>
+        <li><b>舰船详情弹窗</b> — 空船属性（质量 / 槽位 / HP / 电容 / 无人机等）+ 船体加成（中文 traits）</li>
+        <li><b>装备购买 Buy List</b> — 粘贴资产 + 配装 → 扣除已有 → 生成需购买清单（资产 / 配装中英文混用均可）</li>
+        <li><b>ESI 查询</b> — 粘贴角色名列表，自动查询军团 / 联盟</li>
+        <li><b>分享链接</b> — 每次解析生成独立短码，发给队友即看同结果 · <b>一键截图</b> 结果存剪贴板 · <b>亮 / 暗主题</b></li>
+      </ul>
+
+      <h2>装备购买怎么用</h2>
+      <ol class="doc-steps">
+        <li>游戏内 <b>资产 / 机库窗口</b> 全选 → 复制 → 粘贴到「装备购买」①（支持中英文，可多段 / 多角色拼一起）</li>
+        <li>复制一套 <b>配装</b>（游戏内复制 / Pyfa / EVE Workbench，中英文模块名都行）→ 粘贴到②</li>
+        <li>在 ③ 填要装的<b>艘数</b> → 点「计算购买清单」</li>
+        <li>结果按需购买数排序（装备、弹药、无人机、船体都会算）；点「复制购买清单(Multi-Buy)」回游戏批量购买直接粘贴，或点「截图复制」存图</li>
+      </ol>
+      <p style="color:#777;font-size:12px">原理：通过 typeID 物品词典把中文资产与英文配装统一归并；需要量 = 单船配装 × 艘数，需购买 = 需要 − 已有。弹药 / 无人机按配装里的 xN 计算，船体单独抵扣。</p>
+
+      <h2>技术栈</h2>
+      <table class="ship-tbl">
+        <thead><tr><th style="width:22%">层面</th><th>技术</th></tr></thead>
+        <tbody>
+          <tr><td>前端</td><td>原生 HTML / CSS / JavaScript（无框架，单文件）</td></tr>
+          <tr><td>后端 API</td><td>PHP（缓存分享链接、ESI 代理）</td></tr>
+          <tr><td>物品词典</td><td>everef reference-data（中英文名，按需懒加载）</td></tr>
+          <tr><td>截图</td><td>html2canvas</td></tr>
+          <tr><td>Web 服务器</td><td>OpenResty (Nginx) Docker</td></tr>
+          <tr><td>SSL</td><td>Let's Encrypt（certbot 自动续期）</td></tr>
+          <tr><td>管理面板</td><td>1Panel</td></tr>
+        </tbody>
+      </table>
+
+      <h2>项目结构</h2>
+      <pre class="doc-pre">eve-dscan-cn/
+├── index.html          主页面（页面 + CSS + JS 内嵌）
+├── ships-data.js       舰船数据 531 艘（CCP SDE + ESI）
+├── traits-data.js      船体加成中文数据 517 艘（everef ref-data）
+├── items-data.js       物品中英文词典 5976 种（装备购买用，懒加载）
+├── api.php / esi.php   PHP 缓存 API / ESI 代理
+├── favicon.*           站点图标（make_icon.py 生成）
+├── fetch_*.py          数据抓取脚本（属性 / 缺失船 / 加成）
+├── build_items_vps.py  从 everef reference-data 生成物品词典
+└── README.md</pre>
+
+      <h2>数据来源</h2>
+      <ul>
+        <li>舰船数据：CCP EVE Online Static Data Export (latest JSONL) + ESI</li>
+        <li>中文翻译：游戏内官方中文</li>
+        <li>原始 Excel：<code>EVE舰船分类大全_修正版.xlsx</code>（423 艘，2026-07-20），后经 ESI 补充 108 艘（合计 531）</li>
+        <li>物品中英文名：everef reference-data</li>
+      </ul>
+
+      <h2>ECM 对应规则</h2>
+      <table class="ship-tbl">
+        <thead><tr><th style="width:34%">势力</th><th style="width:26%">传感器</th><th>ECM 干扰</th></tr></thead>
+        <tbody>
+          <tr><td>艾玛 / 血袭者 / 萨沙</td><td>雷达</td><td>雷达 ECM</td></tr>
+          <tr><td>加达里 / 古斯塔斯 / 莫德团</td><td>引力</td><td>引力 ECM</td></tr>
+          <tr><td>盖伦特 / 天蛇集团</td><td>磁力</td><td>磁力 ECM</td></tr>
+          <tr><td>米玛塔尔 / 天使集团</td><td>光雷达</td><td>光雷达 ECM</td></tr>
+          <tr><td>三神裔 / ORE / 姐妹会 等</td><td>混合</td><td>多谱式 ECM</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
 </div>
@@ -1231,6 +1343,7 @@ function switchPg(pg) {
   document.getElementById('pg-scan').classList.toggle('hidden', pg !== 'scan');
   document.getElementById('pg-browse').classList.toggle('hidden', pg !== 'browse');
   document.getElementById('pg-buy').classList.toggle('hidden', pg !== 'buy');
+  document.getElementById('pg-about').classList.toggle('hidden', pg !== 'about');
 }
 
 // -- theme --
