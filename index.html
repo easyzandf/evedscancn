@@ -1435,6 +1435,7 @@ function renderBuy(assets, fit, count) {
     + '</p>';
   html += '<div class="btnbar">'
     + '<button class="btn btn-go" onclick="copyBuyList(this)">复制购买清单(Multi-Buy)</button> '
+    + '<button class="btn btn-clr" onclick="screenshotBuy(this)">截图复制</button> '
     + '<button class="btn btn-clr" onclick="clearBuy()">清空</button></div>';
   el.innerHTML = html;
   _lastBuy = { rows: rows, hull: hull, count: count };
@@ -1474,6 +1475,45 @@ function copyBuyList(btn) {
   if (!lines.length) { alert('全部已有，无需购买'); return; }
   _copyText(lines.join('\n'), btn, function() {
     if (btn) { var o = btn.textContent; btn.textContent = '已复制!'; setTimeout(function() { btn.textContent = o; }, 1500); }
+  });
+}
+
+// screenshot the buy-list result block to clipboard (needs HTTPS; falls back to download)
+function screenshotBuy(btn) {
+  var area = document.getElementById('buyResult');
+  if (!area || area.classList.contains('hidden')) return;
+  var label = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '生成中...'; btn.disabled = true; }
+  var bg = document.body.classList.contains('light') ? '#f0f0f0' : '#1a1a2e';
+  html2canvas(area, {
+    backgroundColor: bg,
+    scale: 2,
+    height: area.scrollHeight,
+    windowHeight: area.scrollHeight
+  }).then(function(canvas) {
+    function finish(msg) {
+      if (btn) { btn.textContent = msg; setTimeout(function() { btn.textContent = label; btn.disabled = false; }, 1500); }
+    }
+    function download() {
+      var a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = 'eve-buylist-' + new Date().toISOString().slice(0, 10) + '.png';
+      a.click();
+      finish('已下载');
+    }
+    if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+      canvas.toBlob(function(blob) {
+        if (blob) {
+          navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+            .then(function() { finish('已复制!'); })
+            .catch(function() { download(); });
+        } else { download(); }
+      }, 'image/png');
+    } else {
+      download();
+    }
+  }).catch(function() {
+    if (btn) { btn.textContent = '失败'; setTimeout(function() { btn.textContent = label; btn.disabled = false; }, 1500); }
   });
 }
 
