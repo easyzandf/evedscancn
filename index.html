@@ -1346,6 +1346,17 @@ function computeBuyList() {
   loadItems(function() { renderBuy(parseAssets(assetText), parseFit(fitText), count); });
 }
 
+// escape user-derived text before inserting into HTML (XSS hardening)
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+// strip tabs/newlines from names before writing Multi-Buy TSV
+function _sanName(s) {
+  return String(s == null ? '' : s).replace(/[\t\r\n]+/g, ' ');
+}
+
 function renderBuy(assets, fit, count) {
   // 1) owned: resolvable items by typeID, ships by en, others by raw lower name
   var owned = {}, rawOwned = {}, ownedShips = {};
@@ -1398,7 +1409,7 @@ function renderBuy(assets, fit, count) {
   var buyTotal = 0, buyKinds = 0;
   rows.forEach(function(r) { if (r.buy > 0) { buyTotal += r.buy; buyKinds++; } });
   html += '<p style="color:#888;font-size:12px;margin:0 0 10px">配装船型：'
-    + (hull ? '<b style="color:#f0ad4e">' + (hull.known ? (hull.known.cn + ' ' + hull.known.en) : hull.ship) + '</b>'
+    + (hull ? '<b style="color:#f0ad4e">' + (hull.known ? esc(hull.known.cn + ' ' + hull.known.en) : esc(hull.ship)) + '</b>'
              : '<i>未识别</i>')
     + ' × ' + count + ' 艘</p>';
 
@@ -1407,21 +1418,20 @@ function renderBuy(assets, fit, count) {
 
   if (hull) {
     var cls = hull.buy > 0 ? 'qty-buy' : 'qty-zero';
-    html += '<tr><td>' + (hull.known ? hull.known.cn + ' <span class="en">' + hull.known.en + '</span>' : hull.ship)
+    html += '<tr><td>' + (hull.known ? esc(hull.known.cn) + ' <span class="en">' + esc(hull.known.en) + '</span>' : esc(hull.ship))
       + '</td><td>' + count + '</td><td class="qty-have">' + hull.have + '</td>'
       + '<td class="' + cls + '">' + (hull.buy > 0 ? hull.buy : '已有') + '</td></tr>';
   }
 
   rows.forEach(function(r) {
-    var disp = r.name;
+    var zhTxt = r.name, enTxt = '';
     if (r.id && window.ITEMS_DATA && window.ITEMS_DATA[r.id]) {
       var m = window.ITEMS_DATA[r.id];
-      disp = (m.zh || m.en || r.name);
-      if (m.zh && m.en && m.zh !== m.en) disp += ' <span class="en">' + m.en + '</span>';
-      else if (m.en && !m.zh) disp += ' <span class="en">' + m.en + '</span>';
+      if (m.zh) { zhTxt = m.zh; enTxt = (m.en && m.en !== m.zh) ? m.en : ''; }
+      else if (m.en) { zhTxt = m.en; }
     }
     var cls = r.buy > 0 ? 'qty-buy' : 'qty-zero';
-    html += '<tr><td>' + disp + '</td>'
+    html += '<tr><td>' + esc(zhTxt) + (enTxt ? ' <span class="en">' + esc(enTxt) + '</span>' : '') + '</td>'
       + '<td class="qty-need">' + r.need + '</td>'
       + '<td class="qty-have">' + r.have + '</td>'
       + '<td class="' + cls + '">' + (r.buy > 0 ? r.buy : '已有') + '</td></tr>';
@@ -1468,10 +1478,9 @@ function copyBuyList(btn) {
   var lines = [];
   if (_lastBuy.hull && _lastBuy.hull.buy > 0) {
     var h = _lastBuy.hull.known;
-    var hn = h ? (h.cn || h.en) : _lastBuy.hull.ship;
-    lines.push(hn + '\t' + _lastBuy.hull.buy);
+    lines.push(_sanName(h ? (h.cn || h.en) : _lastBuy.hull.ship) + '\t' + _lastBuy.hull.buy);
   }
-  _lastBuy.rows.forEach(function(r) { if (r.buy > 0) lines.push(_buyName(r) + '\t' + r.buy); });
+  _lastBuy.rows.forEach(function(r) { if (r.buy > 0) lines.push(_sanName(_buyName(r)) + '\t' + r.buy); });
   if (!lines.length) { alert('全部已有，无需购买'); return; }
   _copyText(lines.join('\n'), btn, function() {
     if (btn) { var o = btn.textContent; btn.textContent = '已复制!'; setTimeout(function() { btn.textContent = o; }, 1500); }
