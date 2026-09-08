@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
 """Fetch ship traits (bonuses) from everef ref-data, generate traits-data.js."""
-import json, re, sys, urllib.request
+import argparse, json, re, sys, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 sys.stdout.reconfigure(encoding='utf-8')
+
+_p = argparse.ArgumentParser(description='Fetch ship traits (bonuses) from everef ref-data, generate traits-data.js.')
+_p.add_argument('--input', default='eve-ships-data.json', help='input ship data JSON (default: eve-ships-data.json)')
+_p.add_argument('--output', default='traits-data.js', help='output traits JS (default: traits-data.js)')
+_p.add_argument('--json-out', default='traits-data.json', help='intermediate raw traits JSON (default: traits-data.json)')
+_args = _p.parse_args()
+INP = _args.input
+OUT = _args.output
+JSON_OUT = _args.json_out
 
 def get(url, t=40):
     req = urllib.request.Request(url, headers={'User-Agent': 'EVE-DScan-CN/1.0 (ship traits)'})
@@ -59,7 +68,7 @@ def extract_traits(tid):
 
     return tid, {'role': role, 'skills': skills}, skill_ids
 
-with open('C:/Users/zandf/projects/eve-ships-data.json', encoding='utf-8') as f:
+with open(INP, encoding='utf-8') as f:
     data = json.load(f)
 
 typeids = []
@@ -107,15 +116,15 @@ for tid, tr in traits_map.items():
         entry['skills'] = sk_list
     out[tid] = entry
 
-with open('traits-data.json', 'w', encoding='utf-8') as f:
+with open(JSON_OUT, 'w', encoding='utf-8') as f:
     json.dump(out, f, ensure_ascii=False, indent=2)
 
 js = '// EVE Ship Traits Data\nconst TRAITS_DATA = ' + json.dumps(out, ensure_ascii=False) + ';\n'
-with open('traits-data.js', 'w', encoding='utf-8') as f:
+with open(OUT, 'w', encoding='utf-8') as f:
     f.write(js)
 
 import os
-print('traits-data.js 生成:', os.path.getsize('traits-data.js'), 'bytes')
+print(f'{OUT} 生成:', os.path.getsize(OUT), 'bytes')
 
 # sample
 tid = '587'

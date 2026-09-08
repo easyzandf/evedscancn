@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """Fetch base attributes for all ships from ESI, merge into ships-data."""
-import json, re, sys, urllib.request
+import argparse, json, re, sys, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 sys.stdout.reconfigure(encoding='utf-8')
+
+_p = argparse.ArgumentParser(description='Fetch base attributes for all ships from ESI, merge into ships-data.')
+_p.add_argument('--input', default='eve-ships-data.json', help='input ship data JSON (default: eve-ships-data.json)')
+_p.add_argument('--output', default='ships-data.js', help='output ship data JS (default: ships-data.js)')
+_args = _p.parse_args()
+INP = _args.input
+OUT = _args.output
 
 def esi(url):
     req = urllib.request.Request(url, headers={'User-Agent': 'EVE-DScan-CN/1.0'})
@@ -37,7 +44,7 @@ def get_type(tid):
     except Exception:
         return None
 
-with open('C:/Users/zandf/projects/eve-ships-data.json', encoding='utf-8') as f:
+with open(INP, encoding='utf-8') as f:
     data = json.load(f)
 
 # collect typeIDs
@@ -64,10 +71,10 @@ for d in data:
 
 print(f'成功附加属性: {merged} 艘')
 
-with open('C:/Users/zandf/projects/eve-ships-data.json', 'w', encoding='utf-8') as f:
+with open(INP, 'w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
 
 js = '// EVE Ship Data - ' + str(len(data)) + ' ships\n// Generated from CCP EVE Online Static Data Export\nconst SHIPS_DATA = ' + json.dumps(data, ensure_ascii=False) + ';\n'
-with open('ships-data.js', 'w', encoding='utf-8') as f:
+with open(OUT, 'w', encoding='utf-8') as f:
     f.write(js)
-print('ships-data.js 已更新')
+print(f'{OUT} 已更新')

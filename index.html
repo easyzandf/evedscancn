@@ -412,31 +412,416 @@
   body.light .doc-hero { border-color: #ddd; }
   body.light .doc-pre { background: #f7f7f7; color: #1a4d8f; border-color: #ddd; }
 </style>
+<style>
+  /* ===== EVE D-Scan modern theme (override layer) ===== */
+  :root {
+    --bg: #0c0f18;
+    --bg-2: #10141f;
+    --surface: #141826;
+    --surface-2: #1a1f2e;
+    --border: #272e42;
+    --border-soft: #202636;
+    --text: #e9ecf4;
+    --muted: #9aa5bd;
+    --dim: #67718a;
+    --brand: #f3a83c;
+    --brand-2: #ffd489;
+    --brand-dim: rgba(243,168,60,.13);
+    --cyan: #54d6e2;
+    --cyan-dim: rgba(84,214,226,.14);
+    --green: #62cd85;
+    --green-dim: rgba(98,205,133,.14);
+    --red: #ff7171;
+    --red-dim: rgba(255,113,113,.15);
+    --shadow: 0 14px 40px rgba(0,0,0,.40);
+    --shadow-sm: 0 6px 18px rgba(0,0,0,.28);
+    --radius: 8px;
+  }
+  body.light {
+    --bg: #f3f4f7;
+    --bg-2: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f1f2f6;
+    --border: #dfe2ea;
+    --border-soft: #eceef4;
+    --text: #1e2432;
+    --muted: #5a6377;
+    --dim: #8a92a6;
+    --brand: #c07b0e;
+    --brand-2: #9a630a;
+    --brand-dim: rgba(192,123,14,.10);
+    --cyan: #0b7d95;
+    --cyan-dim: rgba(11,125,149,.10);
+    --green: #2c9a55;
+    --green-dim: rgba(44,154,85,.10);
+    --red: #c94a4a;
+    --red-dim: rgba(201,74,74,.10);
+    --shadow: 0 14px 34px rgba(30,36,50,.14);
+    --shadow-sm: 0 6px 16px rgba(30,36,50,.10);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Montserrat', 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--brand-dim); color: var(--brand-2); }
+  a { color: var(--cyan); }
+
+  .wrap { max-width: 1180px; padding: 26px 20px 40px; }
+
+  /* topbar */
+  .topbar {
+    background: rgba(16,20,31,.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border-soft);
+    padding: 12px 22px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: var(--shadow-sm);
+  }
+  body.light .topbar { background: rgba(255,255,255,.92); }
+  .topbar .title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0;
+    color: var(--brand-2);
+  }
+  .topbar .title .logo { width: 30px; height: 30px; border-radius: 7px; box-shadow: 0 0 0 1px var(--border); }
+  .topbar .nav { display: flex; gap: 4px; margin-left: auto; }
+  .topbar .nav a {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--muted);
+    padding: 8px 14px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 500;
+    transition: all .18s ease;
+  }
+  .topbar .nav a svg, .topbar .nav a i { width: 16px; height: 16px; }
+  .topbar .nav a:hover { color: var(--text); background: var(--surface-2); }
+  .topbar .nav a.on { color: var(--brand-2); background: var(--brand-dim); box-shadow: inset 0 0 0 1px var(--brand-dim); }
+  .topbar .tog {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: all .18s ease;
+  }
+  .topbar .tog:hover { color: var(--brand-2); border-color: var(--brand-dim); background: var(--brand-dim); }
+  .topbar .tog svg { width: 16px; height: 16px; }
+  .to-ic { display: inline-flex; }
+  body:not(.light) .to-moon { display: none; }
+  body.light .to-sun { display: none; }
+
+  /* page headings */
+  .page-head { margin: 6px 0 18px; }
+  .page-head h1 { margin: 0; font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: 0; }
+  .page-head p { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
+
+  /* label component */
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--brand-2);
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0;
+    margin-bottom: 8px;
+  }
+  .eyebrow svg { width: 15px; height: 15px; }
+
+  /* inputs */
+  input, select, textarea {
+    font-family: inherit;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: border-color .18s ease, box-shadow .18s ease;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-dim); }
+  textarea.scanbox {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius);
+    line-height: 1.8;
+    font-size: 13px;
+  }
+
+  /* buttons */
+  .btnbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+  .btnbar .btn, .buy-bar .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px;
+    border: 1px solid transparent;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--radius);
+    transition: transform .12s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+  }
+  .btnbar .btn svg, .buy-bar .btn svg { width: 16px; height: 16px; }
+  .btnbar .btn:active, .buy-bar .btn:active { transform: translateY(1px); }
+  .btn-go {
+    background: linear-gradient(180deg, var(--brand-2) 0%, #e7931f 100%);
+    color: #20180a;
+    box-shadow: 0 4px 14px var(--brand-dim);
+  }
+  .btn-go:hover { box-shadow: 0 6px 20px rgba(243,168,60,.30); filter: brightness(1.03); }
+  .btn-clr {
+    background: var(--surface-2);
+    border-color: var(--border) !important;
+    color: var(--muted);
+  }
+  .btn-clr:hover { color: var(--text); background: var(--surface); }
+  .btnbar .hint, .buy-bar .hint2 { color: var(--dim); font-size: 12px; margin-left: 6px; }
+
+  /* result */
+  .result-wrap { margin-top: 26px; }
+  .result-wrap h3 {
+    color: var(--brand-2);
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 14px;
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 10px;
+  }
+  .result-wrap h3 span { color: var(--muted); font-size: 13px; font-weight: 500; }
+  .result-wrap .btn-clr { margin-left: 0; }
+  #resultSum button { margin-left: 8px; }
+
+  /* summary boxes injected by JS */
+  .summary-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    box-shadow: var(--shadow-sm);
+  }
+  .summary-box b { color: var(--brand-2); }
+
+  /* tables */
+  table.ship-tbl {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-bottom: 20px;
+    font-size: 13px;
+  }
+  table.ship-tbl th {
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: .3px;
+  }
+  table.ship-tbl td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    color: var(--text);
+  }
+  table.ship-tbl tbody tr:hover td { background: var(--brand-dim); }
+  body.light table.ship-tbl tbody tr:hover td { background: var(--brand-dim); }
+  table.ship-tbl .cn { font-weight: 600; color: var(--text); }
+  table.ship-tbl .en { color: var(--dim); margin-left: 8px; font-size: 12px; }
+  table.ship-tbl tbody tr:last-child td { border-bottom: none; }
+
+  table.ship-tbl tr.grp { background: var(--surface-2); }
+  table.ship-tbl tr.grp td { padding: 10px 14px; font-weight: 700; color: var(--brand-2); border-bottom: 1px solid var(--border); }
+  table.ship-tbl tr.grp .sub-count { color: var(--muted); font-weight: 500; font-size: 12px; margin-left: 6px; }
+  table.ship-tbl tr.subhead td {
+    background: var(--surface);
+    color: var(--muted);
+    padding: 8px 14px 8px 30px;
+    font-size: 13px;
+    font-weight: 600;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  table.ship-tbl tr.subhead .en { margin-left: 6px; color: var(--dim); }
+
+  .tbl-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--radius); }
+  .tbl-wrap table.ship-tbl { margin: 0; min-width: 620px; }
+
+  /* tags / pills */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    margin-left: 6px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .t-tech { background: var(--cyan-dim); color: var(--cyan); }
+  .t-role { background: var(--brand-dim); color: var(--brand-2); }
+  .qty-need-inline { color: var(--brand-2); font-weight: 700; margin-left: 4px; }
+
+  /* browser */
+  .browbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius);
+  }
+  .browbar input, .browbar select { padding: 8px 12px; font-size: 13px; }
+  .browbar input { width: 260px; }
+  .browbar select { margin-left: 0; }
+  .browbar .cnt { color: var(--dim); font-size: 12px; margin-left: auto; white-space: nowrap; }
+  .browser-tbl { table-layout: fixed; min-width: 720px; }
+  .browser-tbl th:hover { color: var(--brand-2); }
+  .browser-tbl .arrow { font-size: 10px; margin-left: 3px; }
+
+  /* footer */
+  .footer {
+    color: var(--dim);
+    font-size: 12px;
+    margin-top: 40px;
+    padding: 22px 0;
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-2);
+  }
+  .footer a { color: var(--brand-2); }
+
+  /* modal */
+  .modal-overlay { background: rgba(5,7,12,.7); backdrop-filter: blur(3px); }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    max-width: 540px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .modal-head { padding: 14px 18px; border-bottom: 1px solid var(--border-soft); }
+  .modal-head .title { color: var(--brand-2); font-weight: 700; }
+  .modal-head .title .en { color: var(--dim); font-size: 12px; margin-left: 8px; }
+  .modal-close { color: var(--dim); border-radius: 6px; }
+  .modal-close:hover { color: var(--brand-2); background: var(--surface-2); }
+  .modal-body { padding: 16px 18px; }
+  .attr-item {
+    background: var(--surface-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    font-size: 13px;
+    padding: 7px 10px;
+  }
+  .attr-item .k { color: var(--muted); }
+  .attr-item .v { color: var(--text); font-weight: 700; }
+  .trait-section { border-top: 1px solid var(--border-soft); }
+  .trait-section .sec-title { color: var(--brand-2); }
+  .trait-item { color: var(--text); }
+  .trait-item .val { color: var(--brand-2); font-weight: 600; }
+  .trait-item .skill { color: var(--cyan); }
+  .ship-name-link { color: var(--cyan); border-bottom: 1px dotted var(--cyan); }
+  .ship-name-link:hover { color: var(--cyan); border-bottom-color: var(--cyan); }
+
+  /* buy page */
+  .buy-cols .col .lbl { color: var(--muted); }
+  .buy-bar { gap: 12px; }
+  .buy-bar label { color: var(--text); }
+  .buy-bar input[type=number] { background: var(--surface); border-color: var(--border); color: var(--text); padding: 8px 10px; }
+  #buyResult .qty-need { color: var(--brand-2); font-weight: 700; }
+  #buyResult .qty-have { color: var(--green); }
+  #buyResult .qty-buy { color: var(--red); font-weight: 700; }
+  #buyResult .qty-zero { color: var(--dim); }
+
+  /* doc */
+  .doc { line-height: 1.8; }
+  .doc-hero { border-bottom: 1px solid var(--border-soft); }
+  .doc-hero h1 { color: var(--brand-2); }
+  .doc-hero p { color: var(--muted); }
+  .doc h2 { color: var(--brand-2); border-bottom: 1px solid var(--border-soft); }
+  .doc h3 { color: var(--text); }
+  .doc p, .doc li { color: var(--muted); }
+  .doc-steps li::before { background: var(--brand); color: #1c1408; }
+  .doc-pre { background: var(--surface); border-color: var(--border); color: var(--cyan); }
+  .doc a { color: var(--cyan); }
+
+  /* misc */
+  .empty { color: var(--dim); }
+
+  /* responsive */
+  @media (max-width: 760px) {
+    .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
+    .topbar .nav { order: 3; width: 100%; margin-left: 0; overflow-x: auto; }
+    .topbar .nav a { flex: 0 0 auto; padding: 7px 10px; font-size: 13px; }
+    .page-head h1 { font-size: 19px; }
+    .browbar input { width: 100%; }
+    .browbar .cnt { margin-left: 0; }
+    .btnbar .hint, .buy-bar .hint2 { width: 100%; margin-left: 0; }
+    .buy-cols { flex-direction: column; }
+    .buy-cols .col { width: 100%; }
+  }
+</style>
 </head>
 <body>
 
 <div class="topbar">
   <div class="title"><img src="favicon.png" alt="" class="logo">EVE 舰船中文 D-Scan</div>
   <div class="nav">
-    <a href="#" class="on" data-pg="scan">D-Scan 解析</a>
-    <a href="#" data-pg="browse">舰船浏览器</a>
-    <a href="#" data-pg="buy">装备购买</a>
-    <a href="#" data-pg="about">帮助</a>
+    <a href="#" class="on" data-pg="scan"><i data-lucide="radar"></i>D-Scan 解析</a>
+    <a href="#" data-pg="browse"><i data-lucide="ship"></i>舰船浏览器</a>
+    <a href="#" data-pg="buy"><i data-lucide="shopping-cart"></i>装备购买</a>
+    <a href="#" data-pg="about"><i data-lucide="info"></i>帮助</a>
   </div>
-  <button class="tog" onclick="toggleTheme()">亮/暗</button>
+  <button class="tog" onclick="toggleTheme()" aria-label="切换主题">
+    <span class="to-ic to-sun"><i data-lucide="sun"></i></span>
+    <span class="to-ic to-moon"><i data-lucide="moon"></i></span>
+    <span class="to-txt">主题</span>
+  </button>
 </div>
 
 <div class="wrap">
 
   <!-- D-Scan page -->
   <div id="pg-scan">
+    <div class="page-head">
+      <span class="eyebrow"><i data-lucide="radar"></i>EVE Online</span>
+      <h1>D-Scan 解析</h1>
+      <p>粘贴扫描文本，自动识别中英文舰船并按作战功能分组</p>
+    </div>
     <textarea class="scanbox" id="scanInput"
       placeholder="在此粘贴 EVE 的扫描结果（D-Scan / 本地 / 舰队扫描均可）&#10;支持中文客户端和英文客户端&#10;&#10;英文客户端输出示例：&#10;Rifter&#9;14.5 AU&#10;Merlin&#9;12.3 AU&#10;&#10;中文客户端输出示例：&#10;裂谷级&#9;14.5 AU&#10;小鹰级&#9;12.3 AU"></textarea>
 
     <div class="btnbar">
-      <button class="btn btn-go" onclick="doScan()">解析</button>
-      <button class="btn btn-clr" onclick="clearScan()">清空</button>
-      <span class="hint">粘贴扫描文本，自动识别中/英文舰船名</span>
+      <button class="btn btn-go" onclick="doScan()"><i data-lucide="play"></i>解析</button>
+      <button class="btn btn-clr" onclick="clearScan()"><i data-lucide="x"></i>清空</button>
+      <span class="hint">支持本地 / 舰队 / D-Scan，中英文皆可</span>
     </div>
 
     <div class="result-wrap hidden" id="resultArea">
@@ -761,7 +1146,7 @@ function doScan(silent) {
   // If no ships but have character names, show ESI-only results
   if (!total && charNames.length > 0) {
     document.getElementById('resultSum').innerHTML = '（共 ' + charNames.length + ' 个角色名）';
-    document.getElementById('resultBody').innerHTML = '<div id="esi-summary"><b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
+    document.getElementById('resultBody').innerHTML = '<div id="esi-summary" class="summary-box"><b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
     document.getElementById('resultArea').classList.remove('hidden');
     doEsiLookups(charNames);
     return;
@@ -810,7 +1195,7 @@ function doScan(silent) {
     + ' <button class="btn-clr" onclick="screenshotResult()" style="font-size:12px;padding:2px 10px;margin-left:4px;">截图复制</button>';
 
   // Alliance/Corp summary placeholder (filled by ESI lookup)
-  var esiHTML = '<div id="esi-summary" style="background:#16213e;border:1px solid #2a3a55;padding:8px 14px;margin-bottom:12px;border-radius:3px;font-size:13px;display:none">'
+  var esiHTML = '<div id="esi-summary" class="summary-box" style="display:none">'
     + '<b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
 
   // ECM summary
@@ -860,9 +1245,9 @@ function doScan(silent) {
 
   // build single table with big-group header + subcat sub-header rows
   var html = esiHTML
-    + '<div style="background:#16213e;border:1px solid #2a3a55;padding:8px 14px;margin-bottom:12px;border-radius:3px;font-size:13px">'
+    + '<div class="summary-box">'
     + '<b>ECM建议：</b>' + ecmHTML + '</div>';
-  html += '<table class="ship-tbl"><thead><tr>'
+  html += '<div class="tbl-wrap"><table class="ship-tbl"><thead><tr>'
     + '<th>舰船</th><th>标签</th><th>势力</th><th>ECM建议</th>'
     + '</tr></thead><tbody>';
 
@@ -875,8 +1260,8 @@ function doScan(silent) {
       bigGroups[bg][sk].forEach(function(r) { bgTotal += r.count; });
     });
     var bgEn = _groupEN[bg] || bg;
-    html += '<tr class="grp"><td colspan="4"><span style="font-size:15px">' + bg + ' ' + bgEn + '</span>'
-      + ' <span style="color:#888;font-size:12px">（共 ' + bgTotal + ' 艘）</span></td></tr>';
+    html += '<tr class="grp"><td colspan="4"><span>' + bg + ' ' + bgEn + '</span>'
+      + ' <span class="sub-count">（共 ' + bgTotal + ' 艘）</span></td></tr>';
 
     // subcat subgroups sorted by count
     var subKeys = Object.keys(bigGroups[bg]).sort(function(a, b) {
@@ -891,7 +1276,7 @@ function doScan(silent) {
       var sTotal = 0;
       subShips.forEach(function(r) { sTotal += r.count; });
       var skEn = _subcatEN[sk] || sk;
-      html += '<tr><td colspan="4" style="padding:6px 12px 6px 28px;color:#9fb6d4;background:#18233a">'
+      html += '<tr class="subhead"><td colspan="4">'
         + sk + ' <span class="en">' + skEn + '</span>（' + sTotal + ' 艘）</td></tr>';
 
       subShips.sort(function(a, b) { return b.count - a.count; });
@@ -903,7 +1288,7 @@ function doScan(silent) {
         var ecm = getECM(sh.cat);
         html += '<tr>'
           + '<td style="padding-left:44px"><a href="#" class="ship-name-link" onclick="showShipModal(' + sh.attr.typeID + ');return false;">' + sh.cn + '</a><span class="en">' + sh.en + '</span>'
-          + (cnt > 1 ? ' <b style="color:#f0ad4e">×' + cnt + '</b>' : '') + '</td>'
+          + (cnt > 1 ? ' <b class="qty-need-inline">×' + cnt + '</b>' : '') + '</td>'
           + '<td>' + tags + '</td>'
           + '<td>' + (sh.cat||'') + '</td>'
           + '<td><span class="tag t-tech">' + ecm + '</span></td>'
@@ -911,7 +1296,7 @@ function doScan(silent) {
       }
     }
   }
-  html += '</tbody></table>';
+  html += '</tbody></table></div>';
   document.getElementById('resultBody').innerHTML = html;
   area.classList.remove('hidden');
   if (!silent) area.scrollIntoView();

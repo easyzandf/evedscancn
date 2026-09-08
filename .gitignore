@@ -7,3 +7,8 @@ eve.db
 f.json
 fetch_items.log
 fit_test.json
+# build intermediates
+eve-ships-data.json
+missing_new.json
+traits-data.json
+__pycache__/

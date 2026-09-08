@@ -5,10 +5,14 @@ Runs on the VPS where the 14MB reference-data tarball is available. Extracts
 en+zh names for Module(7)/Charge(8)/Drone(18) types via mmap streaming so the
 252MB types.json is never fully loaded into RAM.
 """
-import json, mmap, os, sys
+import argparse, json, mmap, os, sys
 
-BASE = '/tmp/refx'          # extracted reference-data
-OUT = '/tmp/items-data.js'  # output
+_p = argparse.ArgumentParser(description='Build items-data.js from everef reference-data.')
+_p.add_argument('--base', default='refx', help='extracted reference-data directory (default: refx)')
+_p.add_argument('--output', default='items-data.js', help='output items-data.js (default: items-data.js)')
+_args = _p.parse_args()
+BASE = _args.base          # extracted reference-data
+OUT = _args.output         # output
 
 def main():
     cats = json.load(open(os.path.join(BASE, 'categories.json')))

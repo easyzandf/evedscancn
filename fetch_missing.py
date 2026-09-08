@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """Fetch missing player ships from ESI, generate records to merge into ships-data."""
-import json, re, sys, time, urllib.request
+import argparse, json, re, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-with open('C:/Users/zandf/projects/eve-ships-data.json', encoding='utf-8') as f:
+_p = argparse.ArgumentParser(description='Fetch missing player ships from ESI, generate records to merge into ships-data.')
+_p.add_argument('--input', default='eve-ships-data.json', help='input ship data JSON (default: eve-ships-data.json)')
+_p.add_argument('--output', default='missing_new.json', help='output missing-ships JSON (default: missing_new.json)')
+_args = _p.parse_args()
+INP = _args.input
+OUT = _args.output
+
+with open(INP, encoding='utf-8') as f:
     local = json.load(f)
 local_ids = set(int(re.search(r'typeID[:：]\s*(\d+)', d['note']).group(1)) for d in local)
 
@@ -177,7 +184,7 @@ for tid, reason in skipped[:20]:
     print(f'  skip {tid}: {reason}')
 print(f'... (共跳过 {len(skipped)})')
 
-with open('missing_new.json', 'w', encoding='utf-8') as f:
+with open(OUT, 'w', encoding='utf-8') as f:
     json.dump(records, f, ensure_ascii=False, indent=2)
 
 # print summary of what we're adding

@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """Compare local ship data against latest ESI (CCP Static Data)."""
-import json, re, sys, time, urllib.request
+import argparse, json, re, sys, time, urllib.request
 
 sys.stdout.reconfigure(encoding='utf-8')
 
+_p = argparse.ArgumentParser(description='Compare local ship data against latest ESI (CCP Static Data).')
+_p.add_argument('--input', default='eve-ships-data.json', help='local ship data JSON (default: eve-ships-data.json)')
+_args = _p.parse_args()
+INP = _args.input
+
 # 1. Load local data
-with open('C:/Users/zandf/projects/eve-ships-data.json', encoding='utf-8') as f:
+with open(INP, encoding='utf-8') as f:
     local = json.load(f)
 
 local_by_id = {}
