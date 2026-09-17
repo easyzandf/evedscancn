@@ -892,7 +892,7 @@
     <div class="doc">
       <div class="doc-hero">
         <h1>EVE 舰船中文 D-Scan</h1>
-        <p>基于 <a href="https://dscan.info/" target="_blank" rel="noopener">dscan.info</a> 设计理念的纯中文舰船识别工具 · 线上：<a href="https://www.evedscancn.cc.cd/" target="_blank" rel="noopener">www.evedscancn.cc.cd</a></p>
+        <p>基于 <a href="https://dscan.info/" target="_blank" rel="noopener">dscan.info</a> 设计理念的纯中文舰船识别工具 · 线上：<a href="https://dscan.dpdns.org/" target="_blank" rel="noopener">dscan.dpdns.org</a></p>
       </div>
 
       <h2>功能一览</h2>
@@ -1318,7 +1318,7 @@ function doEsiLookups(names) {
   _fetch('GET', 'esi.php?name=probe', null, function(probe) {
     if (!probe || probe.error) {
       document.getElementById('esi-summary').style.display = 'block';
-      document.getElementById('esi-summary-content').innerHTML = '此站不支持 ESI 查询（需 PHP 后端），请使用 <a href="https://www.evedscancn.cc.cd/">www.evedscancn.cc.cd</a>';
+      document.getElementById('esi-summary-content').innerHTML = '此站不支持 ESI 查询（需 PHP 后端），请使用 <a href="https://dscan.dpdns.org/">dscan.dpdns.org</a>';
       return;
     }
 

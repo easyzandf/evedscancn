@@ -4,7 +4,9 @@
 
 ## 线上地址
 
-**https://www.evedscancn.cc.cd/**
+**https://dscan.dpdns.org/**
+
+> 旧域名 `www.evedscancn.cc.cd` 因 `cc.cd` 后缀在国内被网络阻断，已停用，请使用上方新域名。
 
 ## 功能
 
