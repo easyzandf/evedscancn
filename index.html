@@ -1100,9 +1100,22 @@ function getECM(faction) {
 // -- scan --
 var _scanResults = [];  // { ship: {...}, count: N }
 var _scanCode = null;   // short code from server cache
+var _scanGen = 0;       // bump per scan; stale async ESI callbacks check this
+
+// Wipe the result area entirely (DOM + visibility) so a previous scan can never
+// leak into the next one, and stale ESI lookups have nothing to write into.
+function _resetResultArea() {
+  var area = document.getElementById('resultArea');
+  if (!area) return;
+  area.classList.add('hidden');
+  document.getElementById('resultBody').innerHTML = '';
+  document.getElementById('resultSum').innerHTML = '';
+}
 
 function doScan(silent) {
   var raw = document.getElementById('scanInput').value;
+  var gen = ++_scanGen;   // invalidates any in-flight ESI lookups from earlier scans
+  _resetResultArea();
   if (!raw.trim()) return;
 
   var lines = raw.split('\n');
@@ -1148,7 +1161,7 @@ function doScan(silent) {
     document.getElementById('resultSum').innerHTML = '（共 ' + charNames.length + ' 个角色名）';
     document.getElementById('resultBody').innerHTML = '<div id="esi-summary" class="summary-box"><b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
     document.getElementById('resultArea').classList.remove('hidden');
-    doEsiLookups(charNames);
+    doEsiLookups(charNames, gen);
     return;
   }
 
@@ -1302,44 +1315,53 @@ function doScan(silent) {
   if (!silent) area.scrollIntoView();
 
   // ESI lookups for character names
-  if (charNames.length) doEsiLookups(charNames);
+  if (charNames.length) doEsiLookups(charNames, gen);
 }
 
 // -- ESI character lookup --
 var _esiCache = {};
-function doEsiLookups(names) {
+function doEsiLookups(names, gen) {
   // Take all names (no dedup, keep original order)
   var lookup = names.slice(0, 200);
   var pending = lookup.length;
   if (!pending) return;
   var esiResults = [];
 
+  // Ignore everything from a superseded scan (user scanned again / cleared).
+  function stale() { return gen !== _scanGen; }
+
   // Probe: check if esi.php is available (not on static hosting like GitHub Pages)
   _fetch('GET', 'esi.php?name=probe', null, function(probe) {
+    if (stale()) return;
     if (!probe || probe.error) {
-      document.getElementById('esi-summary').style.display = 'block';
-      document.getElementById('esi-summary-content').innerHTML = '此站不支持 ESI 查询（需 PHP 后端），请使用 <a href="https://dscan.dpdns.org/">dscan.dpdns.org</a>';
+      var box = document.getElementById('esi-summary');
+      var boxContent = document.getElementById('esi-summary-content');
+      if (box) box.style.display = 'block';
+      if (boxContent) boxContent.innerHTML = '此站不支持 ESI 查询（需 PHP 后端），请使用 <a href="https://dscan.dpdns.org/">dscan.dpdns.org</a>';
       return;
     }
 
     lookup.forEach(function(name) {
+      if (stale()) return;
       if (_esiCache[name]) {
         esiResults.push({ name: name, data: _esiCache[name] });
         pending--;
-        if (!pending) showEsiSummary(esiResults);
+        if (!pending) showEsiSummary(esiResults, gen);
         return;
       }
       _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
+        if (stale()) return;
         if (res && res.name) _esiCache[name] = res; else _esiCache[name] = null;
         esiResults.push({ name: name, data: _esiCache[name] });
         pending--;
-        if (!pending) showEsiSummary(esiResults);
+        if (!pending) showEsiSummary(esiResults, gen);
       });
     });
   });
 }
 
-function showEsiSummary(results) {
+function showEsiSummary(results, gen) {
+  if (gen !== _scanGen) return;   // belongs to a superseded scan
   var alliances = {}; // key=ticker → { name, corps: { ticker → { name, members: [] } } }
   var noAlliance = {}; // corp ticker → { name, members: [] }
   var total = 0;
@@ -1630,7 +1652,8 @@ function _fetch(method, url, body, cb) {
 
 function clearScan() {
   document.getElementById('scanInput').value = '';
-  document.getElementById('resultArea').classList.add('hidden');
+  _scanGen++;              // invalidate in-flight ESI lookups from the cleared scan
+  _resetResultArea();      // wipe the DOM, not just hide it
   _scanCode = null;
   if (window.location.hash) history.replaceState(null, '', window.location.pathname);
 }
