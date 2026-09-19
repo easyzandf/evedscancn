@@ -1628,17 +1628,20 @@ function _fetch(method, url, body, cb) {
   xhr.send(body || null);
 }
 
-// -- load from shared link on page load --
-(function() {
+// -- load from shared link: on page load AND whenever the hash changes --
+// (pasting a #c= link while the page is already open only fires hashchange,
+//  the document is not reloaded, so a load-time-only handler would do nothing)
+function loadFromHash(isInitial) {
   var h = window.location.hash;
   if (h.indexOf('#c=') === 0) {
     // PHP short code
     _scanCode = h.slice(3);
     var loadGen = _scanGen;
     _fetch('GET', 'api.php?code=' + encodeURIComponent(_scanCode), null, function(res) {
-      // If the user already ran their own scan (or cleared) while this was in
-      // flight, don't clobber their input/results with the old shared scan.
-      if (_scanGen !== loadGen || document.getElementById('scanInput').value.trim()) return;
+      // Drop the response if a scan ran meanwhile; on the very first load also
+      // drop it if the user has already typed their own text.
+      if (_scanGen !== loadGen) return;
+      if (isInitial && document.getElementById('scanInput').value.trim()) return;
       if (res && res.scan) {
         document.getElementById('scanInput').value = res.scan;
         doScan(true);
@@ -1652,7 +1655,9 @@ function _fetch(method, url, body, cb) {
       doScan(true);
     } catch(e) {}
   }
-})();
+}
+loadFromHash(true);
+window.addEventListener('hashchange', function() { loadFromHash(false); });
 
 function clearScan() {
   document.getElementById('scanInput').value = '';
