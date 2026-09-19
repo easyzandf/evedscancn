@@ -1156,6 +1156,22 @@ function doScan(silent) {
     }
   }
 
+  // Generate the share link from the ORIGINAL pasted text, so reloading the link
+  // reproduces exactly the same result. Storing only the matched ship names used
+  // to silently drop character names and any line that isn't a ship.
+  if (!silent && !_scanCode) {
+    var shareText = raw;
+    _fetch('POST', 'api.php', JSON.stringify({scan: shareText}), function(res) {
+      if (res && res.code) {
+        _scanCode = res.code;
+        history.replaceState(null, '', '#c=' + _scanCode);
+      } else {
+        // Fallback: encode in URL hash (works on static hosting like GitCode Pages)
+        history.replaceState(null, '', '#s=' + encode64(shareText));
+      }
+    });
+  }
+
   // If no ships but have character names, show ESI-only results
   if (!total && charNames.length > 0) {
     document.getElementById('resultSum').innerHTML = '（共 ' + charNames.length + ' 个角色名）';
@@ -1172,26 +1188,6 @@ function doScan(silent) {
     area.classList.add('hidden');
     if (!silent && window.location.hash) history.replaceState(null, '', window.location.pathname);
     return;
-  }
-
-  // generate share link: try PHP short code, fallback to base64 hash
-  if (!silent && !_scanCode) {
-    var names = [];
-    for (var i = 0; i < lines.length; i++) {
-      var s = matchShip(lines[i]);
-      if (s) names.push(s.en);
-    }
-    var scanText = names.join('\n');
-    // Try PHP API first (works on server with PHP)
-    _fetch('POST', 'api.php', JSON.stringify({scan: scanText}), function(res) {
-      if (res && res.code) {
-        _scanCode = res.code;
-        history.replaceState(null, '', '#c=' + _scanCode);
-      } else {
-        // Fallback: encode in URL hash (works on static hosting like GitCode Pages)
-        history.replaceState(null, '', '#s=' + encode64(scanText));
-      }
-    });
   }
 
   // stats (count grouped categories)
