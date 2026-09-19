@@ -1634,7 +1634,11 @@ function _fetch(method, url, body, cb) {
   if (h.indexOf('#c=') === 0) {
     // PHP short code
     _scanCode = h.slice(3);
+    var loadGen = _scanGen;
     _fetch('GET', 'api.php?code=' + encodeURIComponent(_scanCode), null, function(res) {
+      // If the user already ran their own scan (or cleared) while this was in
+      // flight, don't clobber their input/results with the old shared scan.
+      if (_scanGen !== loadGen || document.getElementById('scanInput').value.trim()) return;
       if (res && res.scan) {
         document.getElementById('scanInput').value = res.scan;
         doScan(true);
