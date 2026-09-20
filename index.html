@@ -960,6 +960,7 @@
     <a href="#" data-pg="browse"><i data-lucide="ship"></i>舰船浏览器</a>
     <a href="#" data-pg="buy"><i data-lucide="shopping-cart"></i>装备购买</a>
     <a href="#" data-pg="raid"><i data-lucide="users"></i>30人本</a>
+    <a href="#" data-pg="battle"><i data-lucide="swords"></i>战斗</a>
     <a href="#" data-pg="about"><i data-lucide="info"></i>帮助</a>
   </div>
   <button class="tog" onclick="toggleTheme()" aria-label="切换主题">
@@ -1051,7 +1052,7 @@
   </div>
 
   <!-- 30人本记录 page -->
-  <div id="pg-raid" class="hidden">
+  <div id="pg-raid" class="hidden" data-kind="raid">
     <div class="page-head">
       <span class="eyebrow"><i data-lucide="users"></i>EVE Online</span>
       <h1>30人本记录</h1>
@@ -1066,10 +1067,10 @@
         </div>
         <div id="raidList" class="raid-list"></div>
         <div class="raid-side-foot">
-          <button class="btn-clr raid-mini" onclick="raidExport()">导出</button>
+          <button class="btn-clr raid-mini" onclick="raidExport('raid')">导出</button>
           <button class="btn-clr raid-mini" onclick="document.getElementById('raidImportFile').click()">导入</button>
-          <button class="btn-clr raid-mini" onclick="raidShowSync()">同步码</button>
-          <input type="file" id="raidImportFile" accept=".json,application/json" style="display:none" onchange="raidImport(this)">
+          <button class="btn-clr raid-mini" onclick="raidShowSync('raid')">同步码</button>
+          <input type="file" id="raidImportFile" accept=".json,application/json" style="display:none" onchange="raidImport('raid', this)">
         </div>
       </aside>
 
@@ -1078,17 +1079,60 @@
         <textarea class="scanbox raid-input" id="raidInput"
           placeholder="每行一个角色名，例如：&#10;autofei&#10;zhong jh&#10;Xinxinxinnn"></textarea>
         <div class="btnbar">
-          <button class="btn btn-go" onclick="raidAddRecord()"><i data-lucide="plus"></i>解析并记录</button>
+          <button class="btn btn-go" onclick="raidAddRecord('raid')"><i data-lucide="plus"></i>解析并记录</button>
           <button class="btn btn-clr" onclick="document.getElementById('raidInput').value=''">清空</button>
           <span class="hint" id="raidHint">解析后自动按当前时间生成一条记录</span>
         </div>
 
         <div class="raid-tabs">
-          <button class="raid-tab on" data-view="detail" onclick="raidSwitchView('detail')">本场详情</button>
-          <button class="raid-tab" data-view="stats" onclick="raidSwitchView('stats')">分析</button>
+          <button class="raid-tab on" data-view="detail" onclick="raidSwitchView('raid','detail')">本场详情</button>
+          <button class="raid-tab" data-view="stats" onclick="raidSwitchView('raid','stats')">分析</button>
         </div>
         <div id="raidDetail" class="raid-view"></div>
         <div id="raidStats" class="raid-view hidden"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- 战斗记录 page（与 30人本 同一套逻辑，数据完全独立） -->
+  <div id="pg-battle" class="hidden" data-kind="battle">
+    <div class="page-head">
+      <span class="eyebrow"><i data-lucide="swords"></i>EVE Online</span>
+      <h1>战斗记录</h1>
+      <p>粘贴本场参战角色名，按当前时间存档；点记录复现参战者，点角色名看个人出战统计</p>
+    </div>
+
+    <div class="raid-cols">
+      <aside class="raid-side">
+        <div class="raid-side-head">
+          <span class="lbl">记录 <b id="battleCount">0</b></span>
+          <span class="sync" id="battleSync">…</span>
+        </div>
+        <div id="battleList" class="raid-list"></div>
+        <div class="raid-side-foot">
+          <button class="btn-clr raid-mini" onclick="raidExport('battle')">导出</button>
+          <button class="btn-clr raid-mini" onclick="document.getElementById('battleImportFile').click()">导入</button>
+          <button class="btn-clr raid-mini" onclick="raidShowSync('battle')">同步码</button>
+          <input type="file" id="battleImportFile" accept=".json,application/json" style="display:none" onchange="raidImport('battle', this)">
+        </div>
+      </aside>
+
+      <section class="raid-main">
+        <div class="lbl">① 粘贴本场参战角色名（每行一个，也可直接粘贴扫描原文自动提取）</div>
+        <textarea class="scanbox raid-input" id="battleInput"
+          placeholder="每行一个角色名，例如：&#10;autofei&#10;zhong jh&#10;Xinxinxinnn"></textarea>
+        <div class="btnbar">
+          <button class="btn btn-go" onclick="raidAddRecord('battle')"><i data-lucide="plus"></i>解析并记录</button>
+          <button class="btn btn-clr" onclick="document.getElementById('battleInput').value=''">清空</button>
+          <span class="hint" id="battleHint">解析后自动按当前时间生成一条记录</span>
+        </div>
+
+        <div class="raid-tabs">
+          <button class="raid-tab on" data-view="detail" onclick="raidSwitchView('battle','detail')">本场详情</button>
+          <button class="raid-tab" data-view="stats" onclick="raidSwitchView('battle','stats')">分析</button>
+        </div>
+        <div id="battleDetail" class="raid-view"></div>
+        <div id="battleStats" class="raid-view hidden"></div>
       </section>
     </div>
   </div>
@@ -1999,12 +2043,11 @@ document.querySelectorAll('.topbar .nav a').forEach(function(a) {
 function switchPg(pg) {
   document.querySelectorAll('.topbar .nav a').forEach(function(x) { x.classList.remove('on'); });
   document.querySelector('.topbar .nav a[data-pg="' + pg + '"]').classList.add('on');
-  document.getElementById('pg-scan').classList.toggle('hidden', pg !== 'scan');
-  document.getElementById('pg-browse').classList.toggle('hidden', pg !== 'browse');
-  document.getElementById('pg-buy').classList.toggle('hidden', pg !== 'buy');
-  document.getElementById('pg-raid').classList.toggle('hidden', pg !== 'raid');
-  document.getElementById('pg-about').classList.toggle('hidden', pg !== 'about');
-  if (pg === 'raid' && typeof raidInit === 'function') raidInit();
+  ['scan', 'browse', 'buy', 'raid', 'battle', 'about'].forEach(function(p) {
+    var el = document.getElementById('pg-' + p);
+    if (el) el.classList.toggle('hidden', p !== pg);
+  });
+  if (LOG_KINDS.indexOf(pg) !== -1) raidInit(pg);   // 30人本 / 战斗 共用同一套逻辑
 }
 
 // -- theme --
@@ -2296,16 +2339,24 @@ function clearBuy() {
 
 /* ===================== 30人本记录 ===================== */
 
-var RAID_LS_RECORDS = 'eve-raid-records';
-var RAID_LS_CODE    = 'eve-raid-sync-code';
-var RAID_LS_TOMB    = 'eve-raid-tombstones';
+// 两类记录（30人本 / 战斗）完全独立：各自的 localStorage 键、各自的同步码、
+// 各自在服务器上的数据。代码共用，靠 kind 参数区分。
+var LOG_KINDS = ['raid', 'battle'];
+var LOG_LABEL = { raid: '30人本', battle: '战斗' };
+var LOG_KEYS = {
+  raid:   { recs: 'eve-raid-records',   code: 'eve-raid-sync-code',   tomb: 'eve-raid-tombstones' },
+  battle: { recs: 'eve-battle-records', code: 'eve-battle-sync-code', tomb: 'eve-battle-tombstones' }
+};
+var _log = {};
+LOG_KINDS.forEach(function(k) {
+  _log[k] = { recs: [], tomb: [], sel: null, view: 'detail', sync: 'idle', ready: false,
+              dGen: 0, sGen: 0, agg: null };
+});
+// 页面元素统一用 kind 前缀：raidInput / battleInput ...
+function _le(k, n) { return document.getElementById(k + n); }
 
-var _raidRecords = [];      // 工作副本（localStorage 为准，服务器做持久化）
-var _raidTomb = [];         // 已删除的 id，防止从服务器合并时"复活"
-var _raidSel = null;        // 当前选中的记录 id
-var _raidView = 'detail';
-var _raidSync = 'idle';     // idle | syncing | synced | pending | offline
-var _raidReady = false;
+// 内联处理器直接带上 kind（如 raidAddRecord('raid')），不做同名包装——
+// 那会把原函数覆盖掉，包装里再调用它就变成自己调自己。
 
 // ---------- 时间格式化（本地时区）----------
 function _pad2(n) { return (n < 10 ? '0' : '') + n; }
@@ -2324,66 +2375,70 @@ function toLocalInput(ms) {   // <input type="datetime-local"> 用
 }
 
 // ---------- 本地存储 ----------
-function raidCode() {
-  var c = localStorage.getItem(RAID_LS_CODE);
+function raidCode(k) {
+  var c = localStorage.getItem(LOG_KEYS[k].code);
   if (!c) {
-    c = 'raid' + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 8);
-    localStorage.setItem(RAID_LS_CODE, c);
+    c = k + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem(LOG_KEYS[k].code, c);
   }
   return c;
 }
-function raidLoad() {
-  try { _raidRecords = JSON.parse(localStorage.getItem(RAID_LS_RECORDS) || '[]') || []; }
-  catch (e) { _raidRecords = []; }
-  try { _raidTomb = JSON.parse(localStorage.getItem(RAID_LS_TOMB) || '[]') || []; }
-  catch (e) { _raidTomb = []; }
-  if (!Array.isArray(_raidRecords)) _raidRecords = [];
-  if (!Array.isArray(_raidTomb)) _raidTomb = [];
+function raidLoad(k) {
+  var S = _log[k];
+  try { S.recs = JSON.parse(localStorage.getItem(LOG_KEYS[k].recs) || '[]') || []; }
+  catch (e) { S.recs = []; }
+  try { S.tomb = JSON.parse(localStorage.getItem(LOG_KEYS[k].tomb) || '[]') || []; }
+  catch (e) { S.tomb = []; }
+  if (!Array.isArray(S.recs)) S.recs = [];
+  if (!Array.isArray(S.tomb)) S.tomb = [];
 }
-function raidSaveLocal() {
-  try { localStorage.setItem(RAID_LS_RECORDS, JSON.stringify(_raidRecords)); } catch (e) {}
-  try { localStorage.setItem(RAID_LS_TOMB, JSON.stringify(_raidTomb.slice(-500))); } catch (e) {}
+function raidSaveLocal(k) {
+  var S = _log[k];
+  try { localStorage.setItem(LOG_KEYS[k].recs, JSON.stringify(S.recs)); } catch (e) {}
+  try { localStorage.setItem(LOG_KEYS[k].tomb, JSON.stringify(S.tomb.slice(-500))); } catch (e) {}
 }
 
 // ---------- 服务器同步（best-effort，失败不影响本地）----------
-function _raidSetSync(s) { _raidSync = s; raidRenderSync(); }
-function raidRenderSync() {
-  var el = document.getElementById('raidSync');
+function _raidSetSync(k, s) { _log[k].sync = s; raidRenderSync(k); }
+function raidRenderSync(k) {
+  var el = _le(k, 'Sync');
   if (!el) return;
-  var txt = { idle: '…', syncing: '同步中…', synced: '已同步', pending: '待同步', offline: '离线' }[_raidSync] || '';
+  var s = _log[k].sync;
+  var txt = { idle: '…', syncing: '同步中…', synced: '已同步', pending: '待同步', offline: '离线' }[s] || '';
   el.textContent = txt;
-  el.className = 'sync' + ((_raidSync === 'pending' || _raidSync === 'offline') ? ' warn' : '');
+  el.className = 'sync' + ((s === 'pending' || s === 'offline') ? ' warn' : '');
 }
-function raidPush(rec, cb) {
-  _fetch('POST', 'raid.php', JSON.stringify({ action: 'save', code: raidCode(), record: rec }), function(res) {
+function raidPush(k, rec, cb) {
+  _fetch('POST', 'raid.php', JSON.stringify({ action: 'save', code: raidCode(k), record: rec }), function(res) {
     var ok = !!(res && res.ok);
-    if (ok) _raidSetSync('synced'); else _raidSetSync('offline');
+    _raidSetSync(k, ok ? 'synced' : 'offline');
     if (cb) cb(ok);
   });
 }
-function raidPushDelete(id, cb) {
-  _fetch('POST', 'raid.php', JSON.stringify({ action: 'delete', code: raidCode(), id: id }), function(res) {
+function raidPushDelete(k, id, cb) {
+  _fetch('POST', 'raid.php', JSON.stringify({ action: 'delete', code: raidCode(k), id: id }), function(res) {
     var ok = !!(res && res.ok);
-    if (ok) _raidSetSync('synced'); else _raidSetSync('offline');
+    _raidSetSync(k, ok ? 'synced' : 'offline');
     if (cb) cb(ok);
   });
 }
 // 拉取服务器记录并与本地合并
-function raidPull() {
-  _raidSetSync('syncing');
-  _fetch('GET', 'raid.php?action=list&code=' + encodeURIComponent(raidCode()), null, function(res) {
-    if (!res || !Array.isArray(res.records)) { _raidSetSync('offline'); return; }
+function raidPull(k) {
+  var S = _log[k];
+  _raidSetSync(k, 'syncing');
+  _fetch('GET', 'raid.php?action=list&code=' + encodeURIComponent(raidCode(k)), null, function(res) {
+    if (!res || !Array.isArray(res.records)) { _raidSetSync(k, 'offline'); return; }
     var byId = {};
-    _raidRecords.forEach(function(r) { byId[r.id] = r; });
+    S.recs.forEach(function(r) { byId[r.id] = r; });
     res.records.forEach(function(remote) {
-      if (_raidTomb.indexOf(remote.id) !== -1) return;          // 本地已删，忽略
+      if (S.tomb.indexOf(remote.id) !== -1) return;             // 本地已删，忽略
       var local = byId[remote.id];
       if (!local || (remote.updatedAt || 0) > (local.updatedAt || 0)) byId[remote.id] = remote;
     });
-    _raidRecords = Object.keys(byId).map(function(k) { return byId[k]; });
-    raidSaveLocal();
-    _raidSetSync('synced');
-    raidRenderAll();
+    S.recs = Object.keys(byId).map(function(id) { return byId[id]; });
+    raidSaveLocal(k);
+    _raidSetSync(k, 'synced');
+    raidRenderAll(k);
   });
 }
 
@@ -2418,8 +2473,8 @@ function parseNameList(raw) {
 }
 
 // ---------- 记录增删改 ----------
-function raidAddRecord() {
-  var names = parseNameList(document.getElementById('raidInput').value);
+function raidAddRecord(k) {
+  var names = parseNameList(_le(k, 'Input').value);
   if (!names.length) { alert('没有解析到角色名，请检查粘贴内容'); return; }
   var now = Date.now();
   var rec = {
@@ -2429,29 +2484,29 @@ function raidAddRecord() {
     names: names,
     updatedAt: now
   };
-  _raidRecords.unshift(rec);
-  _raidSel = rec.id;
-  raidSaveLocal();
-  raidRenderAll();
-  document.getElementById('raidInput').value = '';
-  _raidSetSync('syncing');
-  raidPush(rec);
-  document.getElementById('raidHint').textContent =
-    '已记录 ' + names.length + ' 人' + (names.length === 30 ? '' : '（非 30 人）');
+  _log[k].recs.unshift(rec);
+  _log[k].sel = rec.id;
+  raidSaveLocal(k);
+  raidRenderAll(k);
+  _le(k, 'Input').value = '';
+  _raidSetSync(k, 'syncing');
+  raidPush(k, rec);
+  _le(k, 'Hint').textContent = '已记录 ' + names.length + ' 人' + (names.length === 30 ? '' : '（非 30 人）');
 }
-function raidDelete(id) {
-  var r = _raidRecords.filter(function(x) { return x.id === id; })[0];
+function raidDelete(k, id) {
+  var S = _log[k];
+  var r = S.recs.filter(function(x) { return x.id === id; })[0];
   if (!r) return;
   if (!confirm('删除 ' + fmtDateTime(r.ts) + ' 的记录（' + r.names.length + ' 人）？')) return;
-  _raidRecords = _raidRecords.filter(function(x) { return x.id !== id; });
-  if (_raidTomb.indexOf(id) === -1) _raidTomb.push(id);
-  if (_raidSel === id) _raidSel = _raidRecords.length ? _raidRecords[0].id : null;
-  raidSaveLocal();
-  raidRenderAll();
-  raidPushDelete(id);
+  S.recs = S.recs.filter(function(x) { return x.id !== id; });
+  if (S.tomb.indexOf(id) === -1) S.tomb.push(id);
+  if (S.sel === id) S.sel = S.recs.length ? S.recs[0].id : null;
+  raidSaveLocal(k);
+  raidRenderAll(k);
+  raidPushDelete(k, id);
 }
-function raidEdit(id) {
-  var r = _raidRecords.filter(function(x) { return x.id === id; })[0];
+function raidEdit(k, id) {
+  var r = _log[k].recs.filter(function(x) { return x.id === id; })[0];
   if (!r) return;
   var note = prompt('备注 / 名称：', r.note || '');
   if (note === null) return;
@@ -2462,25 +2517,25 @@ function raidEdit(id) {
   r.note = note.slice(0, 200);
   r.ts = t;
   r.updatedAt = Date.now();
-  raidSaveLocal();
-  raidRenderAll();
-  _raidSetSync('syncing');
-  raidPush(r);
+  raidSaveLocal(k);
+  raidRenderAll(k);
+  _raidSetSync(k, 'syncing');
+  raidPush(k, r);
 }
 
 // ---------- 导入 / 导出 ----------
-function raidExport() {
+function raidExport(k) {
   // 备份里带上同步码：换设备/清缓存后，只导入记录是取不回服务器数据的，
   // 有码才能把「钥匙」一起恢复回来。
-  var payload = { v: 1, code: raidCode(), records: _raidRecords };
+  var payload = { v: 1, kind: k, code: raidCode(k), records: _log[k].recs };
   var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'raid-records-' + fmtDateKey(Date.now()) + '.json';
+  a.download = k + '-records-' + fmtDateKey(Date.now()) + '.json';
   a.click();
   setTimeout(function() { URL.revokeObjectURL(a.href); }, 2000);
 }
-function raidImport(input) {
+function raidImport(k, input) {
   var f = input.files && input.files[0];
   if (!f) return;
   var fr = new FileReader();
@@ -2490,21 +2545,21 @@ function raidImport(input) {
       var d = JSON.parse(fr.result);
       var list = Array.isArray(d) ? d : (d.records || []);
       var byId = {};
-      _raidRecords.forEach(function(r) { byId[r.id] = r; });
+      _log[k].recs.forEach(function(r) { byId[r.id] = r; });
       list.forEach(function(r) {
         if (!r || !r.id || !Array.isArray(r.names)) return;
         var local = byId[r.id];
         if (!local || (r.updatedAt || 0) > (local.updatedAt || 0)) { byId[r.id] = r; n++; }
       });
-      _raidRecords = Object.keys(byId).map(function(k) { return byId[k]; });
-      raidSaveLocal();
-      raidRenderAll();
+      _log[k].recs = Object.keys(byId).map(function(id) { return byId[id]; });
+      raidSaveLocal(k);
+      raidRenderAll(k);
       // 备份里带了同步码就一并恢复，否则只恢复本地记录、取不回服务器数据
       var code = (!Array.isArray(d) && d.code) ? String(d.code) : '';
-      if (code && code !== raidCode()) {
+      if (code && code !== raidCode(k)) {
         if (confirm('这份备份里包含同步码。\n\n用它覆盖当前同步码吗？\n（这样才能取回备份时的服务器记录）')) {
-          localStorage.setItem(RAID_LS_CODE, code);
-          raidPull();
+          localStorage.setItem(LOG_KEYS[k].code, code);
+          raidPull(k);
         }
       }
     } catch (e) { alert('导入失败：文件不是有效的 JSON'); }
@@ -2513,36 +2568,41 @@ function raidImport(input) {
   };
   fr.readAsText(f);
 }
-function raidShowSync() {
-  var c = raidCode();
-  var inp = prompt('同步码（在另一台设备填入同一个码即可取回记录）：', c);
+function raidShowSync(k) {
+  var c = raidCode(k);
+  var inp = prompt(LOG_LABEL[k] + ' 同步码（在另一台设备填入同一个码即可取回记录）：', c);
   if (inp && inp.trim() && inp.trim() !== c) {
-    localStorage.setItem(RAID_LS_CODE, inp.trim());
-    raidPull();
+    localStorage.setItem(LOG_KEYS[k].code, inp.trim());
+    raidPull(k);
   }
 }
 
 // ---------- 视图 ----------
-function raidInit() {
-  if (!_raidReady) { raidLoad(); _raidReady = true; raidRenderAll(); raidPull(); }
+function raidInit(k) {
+  if (_log[k].ready) return;
+  raidLoad(k);
+  _log[k].ready = true;
+  raidRenderAll(k);
+  raidPull(k);
 }
-function raidRenderAll() { raidRenderList(); raidRenderDetail(); raidRenderStats(); }
-function raidRenderList() {
-  var el = document.getElementById('raidList');
+function raidRenderAll(k) { raidRenderList(k); raidRenderDetail(k); raidRenderStats(k); }
+function raidRenderList(k) {
+  var el = _le(k, 'List');
   if (!el) return;
-  document.getElementById('raidCount').textContent = _raidRecords.length;
-  if (!_raidRecords.length) {
+  var S = _log[k];
+  _le(k, 'Count').textContent = S.recs.length;
+  if (!S.recs.length) {
     el.innerHTML = '<div class="empty" style="padding:16px 12px">还没有记录<br>在右边粘贴角色名后点「解析并记录」</div>';
     return;
   }
-  var list = _raidRecords.slice().sort(function(a, b) { return b.ts - a.ts; });
+  var list = S.recs.slice().sort(function(a, b) { return b.ts - a.ts; });
   el.innerHTML = list.map(function(r) {
     var n = r.names.length;
-    // 已算过玩家数就显示玩家数（「30人本」说的是人数），否则先显示角色数
+    // 已算过玩家数就显示玩家数（说的都是「人」），否则先显示角色数
     var pc = r.pc || 0;
     var shown = pc || n;
     var cls = (shown === 30) ? '' : ' odd';
-    return '<div class="raid-item' + (r.id === _raidSel ? ' on' : '') + '" data-raid-select="' + esc(r.id) + '">'
+    return '<div class="raid-item' + (r.id === S.sel ? ' on' : '') + '" data-raid-select="' + esc(r.id) + '">'
       + '<div class="when"><b>' + fmtDateTime(r.ts) + '</b>'
       + '<span>' + (r.note ? esc(r.note) + ' · ' : '') + '#' + esc(r.id.slice(-4)) + '</span></div>'
       + '<div class="cnt' + cls + '" title="' + (pc ? pc + ' 个玩家' : '尚未查询玩家数，显示角色数') + ' / ' + n + ' 个角色">'
@@ -2553,14 +2613,16 @@ function raidRenderList() {
       + '</div></div>';
   }).join('');
 }
-function raidSelect(id) { _raidSel = id; raidRenderList(); raidRenderDetail(); }
-function raidSwitchView(v) {
-  _raidView = v;
-  document.querySelectorAll('.raid-tab').forEach(function(b) {
+function raidSelect(k, id) { _log[k].sel = id; raidRenderList(k); raidRenderDetail(k); }
+function raidSwitchView(k, v) {
+  _log[k].view = v;
+  _le(k, 'Detail').classList.toggle('hidden', v !== 'detail');
+  _le(k, 'Stats').classList.toggle('hidden', v !== 'stats');
+  var page = document.getElementById('pg-' + k);
+  if (!page) return;
+  page.querySelectorAll('.raid-tab').forEach(function(b) {
     b.classList.toggle('on', b.dataset.view === v);
   });
-  document.getElementById('raidDetail').classList.toggle('hidden', v !== 'detail');
-  document.getElementById('raidStats').classList.toggle('hidden', v !== 'stats');
 }
 // 批量查角色 -> 军团/联盟（复用 _esiCache 与 esi.php，重复查询走缓存）
 function raidLookupNames(names, cb) {
@@ -2685,8 +2747,6 @@ function raidPersonGroupHtml(results, names) {
   return html;
 }
 
-var _raidDetailGen = 0;
-
 // 把某个容器截图并复制到剪贴板（失败则下载）。复用已有的剪贴板/下载 helper。
 function raidScreenshot(btn, targetId, fileBase) {
   var area = document.getElementById(targetId);
@@ -2706,15 +2766,16 @@ function raidScreenshot(btn, targetId, fileBase) {
   }).catch(function() { done('失败'); });
 }
 
-function raidRenderDetail() {
-  var el = document.getElementById('raidDetail');
+function raidRenderDetail(k) {
+  var el = _le(k, 'Detail');
   if (!el) return;
-  var r = _raidRecords.filter(function(x) { return x.id === _raidSel; })[0];
+  var S = _log[k];
+  var r = S.recs.filter(function(x) { return x.id === S.sel; })[0];
   if (!r) {
     el.innerHTML = '<div class="empty">左侧选一条记录，或在上面粘贴本场角色名</div>';
     return;
   }
-  var gen = ++_raidDetailGen;
+  var gen = ++S.dGen;
   var chips = '<div class="pgrid">' + r.names.map(function(n) {
     return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
   }).join('') + '</div>';
@@ -2724,16 +2785,16 @@ function raidRenderDetail() {
     + '<h3>' + fmtDateTime(r.ts)
     + ' <span style="color:var(--muted);font-weight:normal;font-size:13px">'
     + r.names.length + ' 人' + (r.note ? ' · ' + esc(r.note) : '') + '</span></h3>'
-    + '<button class="btn-clr raid-shot" onclick="raidScreenshot(this,\'raidDetailBody\',\'eve-raid-detail\')">截图复制</button>'
+    + '<button class="btn-clr raid-shot" onclick="raidScreenshot(this,\'' + k + 'DetailBody\',\'eve-' + k + '-detail\')">截图复制</button>'
     + '</div>'
-    + '<div id="raidDetailBody" class="raid-shot-body">'
-    + '<div class="summary-box" id="raidGrouped" style="margin-bottom:12px">按头衔（玩家）分组查询中…</div>'
+    + '<div id="' + k + 'DetailBody" class="raid-shot-body">'
+    + '<div class="summary-box" id="' + k + 'Grouped" style="margin-bottom:12px">按头衔（玩家）分组查询中…</div>'
     + '<details class="raid-all"><summary>全部名单（' + r.names.length + '）</summary>' + chips + '</details>'
     + '<p style="color:var(--dim);font-size:12px">点任意角色名查看其个人出战统计</p>'
     + '</div></div>';
 
   raidLookupNames(r.names, function(results) {
-    if (gen !== _raidDetailGen) return;               // 已切到别的记录，丢弃
+    if (gen !== _log[k].dGen) return;                 // 已切到别的记录，丢弃
     // 顺手把这条记录的「玩家数」算出来缓存到本地，供左侧列表显示
     var ps = {}, any = false;
     results.forEach(function(e) {
@@ -2742,10 +2803,10 @@ function raidRenderDetail() {
     });
     if (any && r.pc !== Object.keys(ps).length) {
       r.pc = Object.keys(ps).length;
-      raidSaveLocal();
-      raidRenderList();
+      raidSaveLocal(k);
+      raidRenderList(k);
     }
-    var box = document.getElementById('raidGrouped');
+    var box = _le(k, 'Grouped');
     if (!box) return;
     var got = results.filter(function(e) { return e.data; }).length;
     if (!got) {
@@ -2757,21 +2818,21 @@ function raidRenderDetail() {
 }
 
 // ---------- 分析 ----------
-function _raidAgg() {
+function _raidAgg(k) {
   var perPerson = {};   // 小写名 -> { name, runs: [], hours: {}, }
   var hours = new Array(24).fill(0);
   var dates = {};
-  _raidRecords.forEach(function(r) {
+  _log[k].recs.forEach(function(r) {
     var h = new Date(r.ts).getHours();
     hours[h]++;
     var dk = fmtDateKey(r.ts);
     dates[dk] = (dates[dk] || 0) + 1;
     r.names.forEach(function(n) {
-      var k = n.toLowerCase();
-      if (!perPerson[k]) perPerson[k] = { name: n, runs: [], hours: new Array(24).fill(0), dates: {} };
-      perPerson[k].runs.push(r);
-      perPerson[k].hours[h]++;
-      perPerson[k].dates[dk] = (perPerson[k].dates[dk] || 0) + 1;
+      var nk = n.toLowerCase();
+      if (!perPerson[nk]) perPerson[nk] = { name: n, runs: [], hours: new Array(24).fill(0), dates: {} };
+      perPerson[nk].runs.push(r);
+      perPerson[nk].hours[h]++;
+      perPerson[nk].dates[dk] = (perPerson[nk].dates[dk] || 0) + 1;
     });
   });
   return { perPerson: perPerson, hours: hours, dates: dates };
@@ -2784,12 +2845,9 @@ function _barRow(label, val, max, cls) {
     + '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>'
     + '<span class="bar-val">' + val + '</span></div>';
 }
-var _raidStatsGen = 0;
-var _raidStatsAgg = null;
-
-
 // 出场排行：军团 → 玩家（头衔）→ 角色；表格列出全部角色（完整显示）+ 头衔列
-function raidRankGroupedHtml(results, agg) {
+// 这些渲染函数里有大量 forEach(function(k)) 局部变量，所以 kind 参数叫 K 以免被遮蔽
+function raidRankGroupedHtml(K, results, agg) {
   var info = {};
   results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
 
@@ -2897,7 +2955,7 @@ function raidRankGroupedHtml(results, agg) {
 
 // 人物 / 角色分布：本方军团自动识别（玩家数最多的前两个），其余算客方。
 // 输出：本方 vs 客方概览 + 每人小号数分布 + 玩家-角色对照总表
-function raidDistributionHtml(results, agg) {
+function raidDistributionHtml(K, results, agg) {
   var info = {};
   results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
 
@@ -2918,7 +2976,7 @@ function raidDistributionHtml(results, agg) {
   // 每个玩家出场几场（同一场只算一次）
   var byPk = {};
   Object.keys(persons).forEach(function(pk) { byPk[pk] = persons[pk]; });
-  _raidRecords.forEach(function(r) {
+  _log[K].recs.forEach(function(r) {
     var seen = {};
     r.names.forEach(function(n) {
       var d = info[n.toLowerCase()] || null;
@@ -3023,23 +3081,23 @@ function raidDistributionHtml(results, agg) {
   return html;
 }
 
-function raidRenderStats() {
-  var el = document.getElementById('raidStats');
+function raidRenderStats(K) {
+  var el = _le(K, 'Stats');
   if (!el) return;
 
-  var agg = _raidAgg();
+  var agg = _raidAgg(K);
   var people = Object.keys(agg.perPerson).map(function(k) { return agg.perPerson[k]; });
   people.sort(function(a, b) { return b.runs.length - a.runs.length || (a.name < b.name ? -1 : 1); });
   var anyPeople = people.length > 0;
-  _raidStatsAgg = agg;
+  _log[K].agg = agg;
 
-  var totalRuns = _raidRecords.length;
-  var totalSlots = _raidRecords.reduce(function(s, r) { return s + r.names.length; }, 0);
+  var totalRuns = _log[K].recs.length;
+  var totalSlots = _log[K].recs.reduce(function(s, r) { return s + r.names.length; }, 0);
 
   var html = '<div class="raid-view-head">'
     + '<h3>分析</h3>'
-    + '<button class="btn-clr raid-shot" onclick="raidScreenshot(this,\'raidStatsBody\',\'eve-raid-stats\')">截图复制</button>'
-    + '</div><div id="raidStatsBody" class="raid-shot-body">';
+    + '<button class="btn-clr raid-shot" onclick="raidScreenshot(this,\'' + K + 'StatsBody\',\'eve-' + K + '-stats\')">截图复制</button>'
+    + '</div><div id="' + K + 'StatsBody" class="raid-shot-body">';
 
   if (!totalRuns) { el.innerHTML = html + '<div class="empty">还没有记录，无法分析</div></div>'; return; }
 
@@ -3052,11 +3110,11 @@ function raidRenderStats() {
 
   // 人物/角色分布（异步填充）
   html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:0 0 10px">人物与角色分布</h3>';
-  html += '<div id="raidDist">' + (anyPeople ? '查询中…' : '<p style="color:var(--dim);font-size:12px;margin:0">—</p>') + '</div>';
+  html += '<div id="' + K + 'Dist">' + (anyPeople ? '查询中…' : '<p style="color:var(--dim);font-size:12px;margin:0">—</p>') + '</div>';
 
   // 出场次数排行（按军团分组，异步填充）
   html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:0 0 10px">出场次数排行（按军团 · 角色）</h3>';
-  html += '<div id="raidRankGrouped">' + (anyPeople ? '按军团分组查询中…' : '<p style="color:var(--dim);font-size:12px;margin:0">—</p>') + '</div>';
+  html += '<div id="' + K + 'RankGrouped">' + (anyPeople ? '按军团分组查询中…' : '<p style="color:var(--dim);font-size:12px;margin:0">—</p>') + '</div>';
 
   // 日内时段分布
   html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:24px 0 10px">日内时段分布（本机时区）</h3>';
@@ -3073,22 +3131,22 @@ function raidRenderStats() {
   el.innerHTML = html;
 
   if (!anyPeople) return;
-  var gen = ++_raidStatsGen;
+  var gen = ++_log[K].sGen;
   raidLookupNames(people.map(function(p) { return p.name; }), function(results) {
-    if (gen !== _raidStatsGen) return;          // 已有更新的渲染，丢弃
-    var agg2 = _raidStatsAgg;
+    if (gen !== _log[K].sGen) return;           // 已有更新的渲染，丢弃
+    var agg2 = _log[K].agg;
     if (!agg2) return;
-    var dist = document.getElementById('raidDist');
-    if (dist) dist.innerHTML = raidDistributionHtml(results, agg2);
-    var box = document.getElementById('raidRankGrouped');
+    var dist = _le(K, 'Dist');
+    if (dist) dist.innerHTML = raidDistributionHtml(K, results, agg2);
+    var box = _le(K, 'RankGrouped');
     if (!box) return;
-    box.innerHTML = raidRankGroupedHtml(results, agg2);
+    box.innerHTML = raidRankGroupedHtml(K, results, agg2);
   });
 }
 
 // ---------- 角色个人面板 ----------
-function raidShowPerson(name) {
-  var agg = _raidAgg();
+function raidShowPerson(K, name) {
+  var agg = _raidAgg(K);
   var p = agg.perPerson[name.toLowerCase()];
   var m = document.getElementById('personModal');
   document.getElementById('personTitle').textContent = name;
@@ -3174,11 +3232,11 @@ function raidShowPerson(name) {
   });
 }
 function closePersonModal() { document.getElementById('personModal').classList.remove('show'); }
-function raidGoto(id) {
-  _raidSel = id;
-  raidSwitchView('detail');
-  raidRenderList();
-  raidRenderDetail();
+function raidGoto(K, id) {
+  _log[K].sel = id;
+  raidSwitchView(K, 'detail');
+  raidRenderList(K);
+  raidRenderDetail(K);
 }
 
 // 事件委托：角色名/记录一律走 data 属性，绝不把用户文本拼进内联 JS
@@ -3186,15 +3244,18 @@ function raidGoto(id) {
 document.addEventListener('click', function(e) {
   var t = e.target && e.target.closest ? e.target.closest('[data-pname],[data-raid-select],[data-raid-op],[data-raid-goto]') : null;
   if (!t) return;
-  if (t.dataset.pname !== undefined) { raidShowPerson(t.dataset.pname); return; }
+  // 页面容器上带 data-kind，用来区分 30人本 / 战斗
+  var page = t.closest('[data-kind]');
+  var k = page ? page.getAttribute('data-kind') : 'raid';
+  if (t.dataset.pname !== undefined) { raidShowPerson(k, t.dataset.pname); return; }
   if (t.dataset.raidOp) {
     e.stopPropagation();
-    if (t.dataset.raidOp === 'edit') raidEdit(t.dataset.raidId);
-    else raidDelete(t.dataset.raidId);
+    if (t.dataset.raidOp === 'edit') raidEdit(k, t.dataset.raidId);
+    else raidDelete(k, t.dataset.raidId);
     return;
   }
-  if (t.dataset.raidSelect !== undefined) { raidSelect(t.dataset.raidSelect); return; }
-  if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(t.dataset.raidGoto); }
+  if (t.dataset.raidSelect !== undefined) { raidSelect(k, t.dataset.raidSelect); return; }
+  if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
 </body>
