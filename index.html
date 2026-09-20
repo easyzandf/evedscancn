@@ -3493,8 +3493,9 @@ function raidShowTitle(K, title) {
               return a < b ? -1 : 1;
             });
             var cell = order.map(function(c) {
+              // 军团后面标这一场该团上了几个号，不用数胶囊
               return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(c) ? ' home' : '') + '">'
-                + esc(c) + '</span><span class="pgrid">'
+                + esc(c) + '</span><span class="corp-cnt">×' + byCorp[c].length + '</span><span class="pgrid">'
                 + byCorp[c].slice().sort(function(x, y) { return x < y ? -1 : 1; }).map(function(n) {
                     return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
                   }).join('')
