@@ -1576,9 +1576,51 @@ function copyLink() {
   if (btn) { btn.textContent = ok ? '已复制!' : '复制失败'; setTimeout(function() { btn.textContent = '复制分享链接'; }, 1500); }
 }
 
+// Hand the PNG to the clipboard. The blob is given to ClipboardItem as a
+// *promise* so clipboard.write() runs synchronously inside the click gesture --
+// awaiting canvas.toBlob() first can drop the user activation and the browser
+// then rejects the write (which silently degraded to a file download).
+function _copyCanvasToClipboard(canvas) {
+  return new Promise(function(resolve) {
+    if (!canvas || !navigator.clipboard || !navigator.clipboard.write ||
+        typeof ClipboardItem === 'undefined') { resolve(false); return; }
+    try {
+      var item = new ClipboardItem({
+        'image/png': new Promise(function(res) {
+          canvas.toBlob(function(b) { res(b || new Blob()); }, 'image/png');
+        })
+      });
+      navigator.clipboard.write([item]).then(
+        function() { resolve(true); },
+        function() { resolve(false); }
+      );
+    } catch (e) {
+      // Older engines only accept an already-materialised Blob
+      canvas.toBlob(function(b) {
+        if (!b) { resolve(false); return; }
+        try {
+          navigator.clipboard.write([new ClipboardItem({ 'image/png': b })])
+            .then(function() { resolve(true); }, function() { resolve(false); });
+        } catch (e2) { resolve(false); }
+      }, 'image/png');
+    }
+  });
+}
+
+function _downloadCanvas(canvas, filename) {
+  var a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = filename;
+  a.click();
+}
+
 function screenshotResult() {
   var area = document.getElementById('resultArea');
   var btn = document.querySelector('#resultSum button:last-child');
+  var label = btn ? btn.textContent : '';
+  function done(msg) {
+    if (btn) { btn.textContent = msg; setTimeout(function() { btn.textContent = label; btn.disabled = false; }, 1500); }
+  }
   if (btn) { btn.textContent = '生成中...'; btn.disabled = true; }
 
   var bg = document.body.classList.contains('light') ? '#f0f0f0' : '#1a1a2e';
@@ -1588,29 +1630,13 @@ function screenshotResult() {
     height: area.scrollHeight,
     windowHeight: area.scrollHeight
   }).then(function(canvas) {
-    // try clipboard first (only works on https)
-    if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
-      canvas.toBlob(function(blob) {
-        navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': blob })
-        ]).then(function() {
-          if (btn) { btn.textContent = '已复制!'; setTimeout(function() { btn.textContent = '截图复制'; btn.disabled = false; }, 1500); }
-        }).catch(function() { doDownload(); });
-      }, 'image/png');
-    } else {
-      doDownload();
-    }
-
-    function doDownload() {
-      var a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = 'eve-dscan-' + new Date().toISOString().slice(0,10) + '.png';
-      a.click();
-      if (btn) { btn.textContent = '已下载'; setTimeout(function() { btn.textContent = '截图复制'; btn.disabled = false; }, 1500); }
-    }
-  }).catch(function() {
-    if (btn) { btn.textContent = '失败'; setTimeout(function() { btn.textContent = '截图复制'; btn.disabled = false; }, 1500); }
-  });
+    _copyCanvasToClipboard(canvas).then(function(ok) {
+      if (ok) { done('已复制!'); return; }
+      // Clipboard unavailable or denied -> fall back to a download
+      _downloadCanvas(canvas, 'eve-dscan-' + new Date().toISOString().slice(0,10) + '.png');
+      done('已下载');
+    });
+  }).catch(function() { done('失败'); });
 }
 
 // -- simple ajax helper --
@@ -2020,6 +2046,9 @@ function screenshotBuy(btn) {
   var area = document.getElementById('buyResult');
   if (!area || area.classList.contains('hidden')) return;
   var label = btn ? btn.textContent : '';
+  function done(msg) {
+    if (btn) { btn.textContent = msg; setTimeout(function() { btn.textContent = label; btn.disabled = false; }, 1500); }
+  }
   if (btn) { btn.textContent = '生成中...'; btn.disabled = true; }
   var bg = document.body.classList.contains('light') ? '#f0f0f0' : '#1a1a2e';
   html2canvas(area, {
@@ -2028,30 +2057,12 @@ function screenshotBuy(btn) {
     height: area.scrollHeight,
     windowHeight: area.scrollHeight
   }).then(function(canvas) {
-    function finish(msg) {
-      if (btn) { btn.textContent = msg; setTimeout(function() { btn.textContent = label; btn.disabled = false; }, 1500); }
-    }
-    function download() {
-      var a = document.createElement('a');
-      a.href = canvas.toDataURL('image/png');
-      a.download = 'eve-buylist-' + new Date().toISOString().slice(0, 10) + '.png';
-      a.click();
-      finish('已下载');
-    }
-    if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
-      canvas.toBlob(function(blob) {
-        if (blob) {
-          navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
-            .then(function() { finish('已复制!'); })
-            .catch(function() { download(); });
-        } else { download(); }
-      }, 'image/png');
-    } else {
-      download();
-    }
-  }).catch(function() {
-    if (btn) { btn.textContent = '失败'; setTimeout(function() { btn.textContent = label; btn.disabled = false; }, 1500); }
-  });
+    _copyCanvasToClipboard(canvas).then(function(ok) {
+      if (ok) { done('已复制!'); return; }
+      _downloadCanvas(canvas, 'eve-buylist-' + new Date().toISOString().slice(0, 10) + '.png');
+      done('已下载');
+    });
+  }).catch(function() { done('失败'); });
 }
 
 function clearBuy() {
