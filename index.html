@@ -2738,6 +2738,15 @@ function raidPersonGroupHtml(results, names) {
     Object.keys(c.players).forEach(function(pk) { n += c.players[pk].chars.length; });
     return n;
   }
+  // 同一个人在本场（跨军团）的总角色数：跨军团的人会被拆到多个军团块里，
+  // 标注总数才能和分析页的「总号数」对上。
+  var personTotal = {};
+  ckeys.forEach(function(ck) {
+    var c = g.corps[ck];
+    Object.keys(c.players).forEach(function(pk) {
+      personTotal[pk] = (personTotal[pk] || 0) + c.players[pk].chars.length;
+    });
+  });
   // 本方 = 固定军团；其余（含查不到军团的）一律算敌对
   var homeKeys = ckeys.filter(function(ck) { return _isHomeCorp(ck); });
   var foeKeys = ckeys.filter(function(ck) { return !_isHomeCorp(ck); });
@@ -2760,8 +2769,10 @@ function raidPersonGroupHtml(results, names) {
     multi.sort(function(a, b) { return c.players[b].chars.length - c.players[a].chars.length; });
     multi.forEach(function(pk) {
       var p = c.players[pk];
+      var tot = personTotal[pk] || p.chars.length;
       html += '<div class="grp-line"><b class="pttl">' + esc(p.title || '（无头衔）') + '</b>'
-        + '<em>' + p.chars.length + ' 个角色</em>'
+        + '<em>' + p.chars.length + ' 个角色'
+        + (tot > p.chars.length ? '（本场共 ' + tot + '）' : '') + '</em>'
         + '<div class="pgrid">' + p.chars.map(function(n) {
             return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
           }).join('') + '</div></div>';
@@ -3165,7 +3176,8 @@ function raidRenderStats(K) {
   var totalRuns = _log[K].recs.length;
 
   var html = '<div class="raid-view-head">'
-    + '<h3>分析</h3>'
+    + '<h3>分析 <span style="font-size:12px;font-weight:normal;color:var(--muted)">'
+    + '（统计全部 ' + totalRuns + ' 条记录，非当前选中那条）</span></h3>'
     + '<button class="btn-clr raid-shot" onclick="raidScreenshot(this,\'' + K + 'StatsBody\',\'eve-' + K + '-stats\')">截图复制</button>'
     + '</div><div id="' + K + 'StatsBody" class="raid-shot-body">';
 
