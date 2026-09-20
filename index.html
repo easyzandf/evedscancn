@@ -285,6 +285,12 @@
     line-height: 1; padding: 4px 8px;
   }
   .modal-close:hover { color: #f0ad4e; }
+  .modal-acts { display: flex; align-items: center; gap: 8px; }
+  .modal-shot {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    font-size: 12px; padding: 4px 12px; border-radius: 5px; cursor: pointer;
+  }
+  .modal-shot:hover { color: var(--text); border-color: var(--brand); }
   .modal-body { padding: 14px 16px; }
   .attr-grid {
     display: grid;
@@ -1254,7 +1260,10 @@
   <div class="modal">
     <div class="modal-head">
       <div class="title" id="personTitle">角色</div>
-      <button class="modal-close" onclick="closePersonModal()">✕</button>
+      <div class="modal-acts">
+        <button class="modal-shot" onclick="raidScreenshot(this,'personBody','eve-person')">截图复制</button>
+        <button class="modal-close" onclick="closePersonModal()">✕</button>
+      </div>
     </div>
     <div class="modal-body" id="personBody"></div>
   </div>
@@ -2793,18 +2802,35 @@ function raidScreenshot(btn, targetId, fileBase) {
   var area = document.getElementById(targetId);
   if (!area) return;
   var label = btn ? btn.textContent : '';
+
+  // 弹窗内容常常超出可视高度（内部滚动）——先临时展开再截，否则截出来是被裁掉的
+  var prevMax = area.style.maxHeight, prevOv = area.style.overflowY;
+  var expanded = area.scrollHeight > area.clientHeight + 2;
+  if (expanded) { area.style.maxHeight = 'none'; area.style.overflowY = 'visible'; }
+
+  var restored = false;
+  function restore() {
+    if (!expanded || restored) return;
+    restored = true;
+    area.style.maxHeight = prevMax;
+    area.style.overflowY = prevOv;
+  }
   function done(msg) {
+    restore();
     if (btn) { btn.textContent = msg; setTimeout(function() { btn.textContent = label; btn.disabled = false; }, 1500); }
   }
+
   if (btn) { btn.textContent = '生成中...'; btn.disabled = true; }
   var bg = getComputedStyle(document.body).backgroundColor || '#0c0f18';
-  html2canvas(area, { backgroundColor: bg, scale: 2 }).then(function(canvas) {
-    _copyCanvasToClipboard(canvas).then(function(ok) {
-      if (ok) { done('已复制!'); return; }
-      _downloadCanvas(canvas, fileBase + '-' + fmtDateKey(Date.now()) + '.png');
-      done('已下载');
-    });
-  }).catch(function() { done('失败'); });
+  html2canvas(area, { backgroundColor: bg, scale: 2,
+                      height: area.scrollHeight, windowHeight: area.scrollHeight })
+    .then(function(canvas) {
+      _copyCanvasToClipboard(canvas).then(function(ok) {
+        if (ok) { done('已复制!'); return; }
+        _downloadCanvas(canvas, fileBase + '-' + fmtDateKey(Date.now()) + '.png');
+        done('已下载');
+      });
+    }).catch(function() { done('失败'); });
 }
 
 function raidRenderDetail(k) {
