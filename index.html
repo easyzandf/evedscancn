@@ -741,6 +741,11 @@
   .modal-close { color: var(--dim); border-radius: 6px; }
   .modal-close:hover { color: var(--brand-2); background: var(--surface-2); }
   .modal-body { padding: 16px 18px; }
+  /* 玩家（头衔）面板内容多，用更宽的弹窗，别挤在一起 */
+  .modal.wide { max-width: min(960px, 94vw); }
+  .modal.wide .modal-body { max-height: 78vh; overflow-y: auto; }
+  .ttl-sec { border-top: 1px solid var(--border-soft); padding-top: 12px; margin-top: 16px; }
+  .ttl-sec:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
   .attr-item {
     background: var(--surface-2);
     border: 1px solid var(--border-soft);
@@ -3209,6 +3214,7 @@ function raidRenderStats(K) {
 
 // ---------- 角色个人面板 ----------
 function raidShowPerson(K, name) {
+  document.getElementById('personModal').querySelector('.modal').classList.remove('wide');
   var agg = _raidAgg(K);
   var p = agg.perPerson[name.toLowerCase()];
   var m = document.getElementById('personModal');
@@ -3300,6 +3306,7 @@ function raidShowTitle(K, title) {
   var body = document.getElementById('personBody');
   document.getElementById('personTitle').textContent = title;
   body.innerHTML = '<div class="empty">查询名下角色中…</div>';
+  m.querySelector('.modal').classList.add('wide');
   m.classList.add('show');
 
   LOG_KINDS.forEach(function(k) { if (!_log[k].ready) { raidLoad(k); _log[k].ready = true; } });
@@ -3355,29 +3362,54 @@ function raidShowTitle(K, title) {
       var runs = _log[k].recs.filter(function(r) {
         return r.names.some(function(n) { return chars[n]; });
       });
-      html += '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:20px 0 8px">'
+      html += '<div class="ttl-sec"><h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:0 0 10px">'
         + esc(LOG_LABEL[k]) + '</h3>';
       if (!runs.length) {
-        html += '<p style="color:var(--dim);font-size:12px;margin:0">未参加</p>';
+        html += '<p style="color:var(--dim);font-size:12px;margin:0">未参加</p></div>';
         return;
       }
       runs.sort(function(a, b) { return b.ts - a.ts; });
       var hours = new Array(24).fill(0);
       runs.forEach(function(r) { hours[new Date(r.ts).getHours()]++; });
       var maxH = Math.max.apply(null, hours);
-      html += '<p class="raid-note" style="margin:0 0 8px">出场 <b>' + runs.length + '</b> 场 · 首次 '
+      html += '<p class="raid-note" style="margin:0 0 10px">出场 <b>' + runs.length + '</b> 场 · 首次 '
         + fmtDateKey(runs[runs.length - 1].ts) + ' · 最近 ' + fmtDateKey(runs[0].ts) + '</p>';
+
+      // 按军团拆开：各军团参与了几个角色、多少场
+      var cs = {}, csOrder = [];
+      runs.forEach(function(r) {
+        var seen = {};
+        r.names.forEach(function(n) {
+          if (!chars[n]) return;
+          var c = chars[n].corp;
+          if (!cs[c]) { cs[c] = { chars: {}, runs: 0 }; csOrder.push(c); }
+          cs[c].chars[n] = 1;
+          if (!seen[c]) { seen[c] = 1; cs[c].runs++; }
+        });
+      });
+      csOrder.sort(function(a, b) {
+        var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
+        if (ha !== hb) return ha - hb;
+        return cs[b].runs - cs[a].runs;
+      });
+      html += '<div style="margin:0 0 10px">' + csOrder.map(function(c) {
+        return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(c) ? ' home' : '') + '">'
+          + esc(c) + '</span><span class="corp-cnt">×' + Object.keys(cs[c].chars).length + ' 角色</span>'
+          + '<span class="corp-cnt">' + cs[c].runs + ' 场</span></div>';
+      }).join('') + '</div>';
+
       html += hours.map(function(v, i) { return v ? _barRow(_pad2(i) + ':00', v, maxH, false) : ''; }).join('');
       html += '<div class="tbl-wrap"><table class="ship-tbl"><thead><tr>'
-        + '<th>时间</th><th>出场的角色</th><th class="num">本场人数</th></tr></thead><tbody>'
+        + '<th>时间</th><th>出场的角色（含军团）</th><th class="num">本场人数</th></tr></thead><tbody>'
         + runs.map(function(r) {
             var mine = r.names.filter(function(n) { return chars[n]; });
-            return '<tr><td>' + fmtDateTime(r.ts) + '</td><td>'
+            return '<tr><td>' + fmtDateTime(r.ts) + '</td><td><div class="pgrid">'
               + mine.map(function(n) {
-                  return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
-                }).join('') + '</td><td class="num">' + r.names.length + '</td></tr>';
+                  return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n)
+                    + ' <span class="chip-sub">' + esc(chars[n].corp) + '</span></span>';
+                }).join('') + '</div></td><td class="num">' + r.names.length + '</td></tr>';
           }).join('')
-        + '</tbody></table></div>';
+        + '</tbody></table></div></div>';
     });
 
     body.innerHTML = html;
