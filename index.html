@@ -898,6 +898,14 @@
   .grp-block.foe .grp-corp > b { color: var(--red); }
   .grp-block.foe .pchip { border-color: rgba(255,113,113,.35); }
   .grp-line > .pttl { color: var(--text); font-size: 12px; }
+  /* 分析页筛选框（长表格找人用） */
+  .raid-filter { margin: 0 0 14px; }
+  .raid-filter input {
+    width: 100%; max-width: 340px; background: var(--surface-2);
+    border: 1px solid var(--border); color: var(--text);
+    padding: 7px 11px; border-radius: 6px; font-size: 13px;
+  }
+  .raid-filter input:focus { outline: none; border-color: var(--brand); }
   /* 玩家-角色对照：同一个玩家的角色按军团分行 */
   .corp-line { display: flex; align-items: baseline; gap: 8px; margin: 3px 0; }
   .corp-tag {
@@ -2633,20 +2641,48 @@ function raidSwitchView(k, v) {
     b.classList.toggle('on', b.dataset.view === v);
   });
 }
-// 批量查角色 -> 军团/联盟（复用 _esiCache 与 esi.php，重复查询走缓存）
+// 批量查角色 -> 军团/联盟（复用 _esiCache；未命中的走 esi.php 批量接口）
+//
+// 逐个请求会在 PHP-FPM 进程池上排队（30 人本 70+ 个名字要等一两分钟），
+// 所以先一次性 POST 一整批；批量接口不可用时再退回逐个查询。
 function raidLookupNames(names, cb) {
-  var out = [], pending = names.length;
-  if (!pending) { cb(out); return; }
+  var need = [], hit = {};
   names.forEach(function(n) {
-    if (Object.prototype.hasOwnProperty.call(_esiCache, n)) {
-      out.push({ name: n, data: _esiCache[n] });
-      if (--pending === 0) cb(out);
-      return;
-    }
-    _fetch('GET', 'esi.php?name=' + encodeURIComponent(n), null, function(res) {
-      _esiCache[n] = (res && res.name) ? res : null;
-      out.push({ name: n, data: _esiCache[n] });
-      if (--pending === 0) cb(out);
+    if (Object.prototype.hasOwnProperty.call(_esiCache, n)) hit[n] = _esiCache[n];
+    else need.push(n);
+  });
+
+  function finish() {
+    cb(names.map(function(n) {
+      return { name: n, data: hit.hasOwnProperty(n) ? hit[n] : (_esiCache[n] || null) };
+    }));
+  }
+  if (!need.length) { finish(); return; }
+
+  var batches = [], B = 150;
+  for (var i = 0; i < need.length; i += B) batches.push(need.slice(i, i + B));
+  var pending = batches.length;
+
+  function oneDone() { if (--pending === 0) finish(); }
+
+  batches.forEach(function(batch) {
+    _fetch('POST', 'esi.php', JSON.stringify({ names: batch }), function(res) {
+      var r = res && res.results;
+      if (!r) {                                   // 批量接口不可用 -> 退回逐个
+        var p = batch.length;
+        batch.forEach(function(n) {
+          _fetch('GET', 'esi.php?name=' + encodeURIComponent(n), null, function(res2) {
+            _esiCache[n] = (res2 && res2.name) ? res2 : null;
+            if (--p === 0) oneDone();
+          });
+        });
+        return;
+      }
+      batch.forEach(function(n) {
+        var d = r.hasOwnProperty(n) ? r[n] : null;
+        _esiCache[n] = (d && d.name) ? d : null;
+      });
+      oneDone();
     });
   });
 }
@@ -3099,6 +3135,24 @@ function raidDistributionHtml(K, results, agg) {
   return html;
 }
 
+// 分析页的表格筛选：按文本过滤表格行，整块都不匹配的军团块也一起隐藏
+function raidFilterStats(K, q) {
+  var body = _le(K, 'StatsBody');
+  if (!body) return;
+  q = (q || '').trim().toLowerCase();
+  body.querySelectorAll('table.rank-tbl tbody tr').forEach(function(tr) {
+    var t = tr.innerText.toLowerCase();
+    tr.style.display = (!q || t.indexOf(q) !== -1) ? '' : 'none';
+  });
+  body.querySelectorAll('.grp-block').forEach(function(b) {
+    var rows = b.querySelectorAll('table.rank-tbl tbody tr');
+    if (!rows.length) return;
+    var any = false;
+    rows.forEach(function(tr) { if (tr.style.display !== 'none') any = true; });
+    b.style.display = any ? '' : 'none';
+  });
+}
+
 function raidRenderStats(K) {
   var el = _le(K, 'Stats');
   if (!el) return;
@@ -3119,6 +3173,9 @@ function raidRenderStats(K) {
 
   html += '<div class="stat-grid" id="' + K + 'Cards"></div>';
   html += '<p class="raid-note" id="' + K + 'Note"></p>';
+
+  html += '<div class="raid-filter"><input type="text" placeholder="筛选角色名 / 军团 / 头衔（只影响下方表格）"'
+    + ' oninput="raidFilterStats(\'' + K + '\', this.value)"></div>';
 
   html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:0 0 10px">人物与角色分布</h3>';
   html += '<div id="' + K + 'Dist">查询中…</div>';
