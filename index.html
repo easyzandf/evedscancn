@@ -2735,7 +2735,14 @@ function raidPersonGroupHtml(results, names) {
   function personBlock(pk) {
     var p = persons[pk];
     var label = p.title || (p.chars === 1 ? p.first : '（无头衔）');
-    var head = '<div class="grp-line"><b class="pttl">' + esc(label) + '</b>'
+    // 有头衔 -> 点开「玩家面板」（含 30人本 + 战斗 两边数据）
+    // 无头衔的单号 -> 直接点开该角色；多号无头衔没法区分，做成纯文本
+    var lbl = p.title
+      ? '<b class="pttl pname" data-ptitle="' + esc(p.title) + '">' + esc(label) + '</b>'
+      : (p.chars === 1
+          ? '<b class="pttl pname" data-pname="' + esc(p.first) + '">' + esc(label) + '</b>'
+          : '<b class="pttl">' + esc(label) + '</b>');
+    var head = '<div class="grp-line">' + lbl
       + '<em>共 ' + p.chars + ' 个角色</em></div>';
     // 军团：本方在前，其次按角色数
     p.corpOrder.sort(function(a, b) {
@@ -3060,7 +3067,9 @@ function raidDistributionHtml(K, results, agg) {
     + sorted.map(function(pk) {
         var p = persons[pk];
         var label = p.title || (p.chars.length === 1 ? p.chars[0].name : '（无头衔）');
-        return '<tr><td>' + esc(label) + '</td>'
+        return '<tr><td>' + (p.title
+            ? '<span class="pname" data-ptitle="' + esc(p.title) + '">' + esc(label) + '</span>'
+            : esc(label)) + '</td>'
           + '<td class="num">' + p.chars.length + '</td>'
           + '<td>' + (function() {
               // 角色按军团分行：跨军团的小号会分成两行显示
@@ -3285,6 +3294,96 @@ function raidShowPerson(K, name) {
     }
   });
 }
+// 点头衔 -> 该玩家的面板：名下所有账号 + 「30人本」和「战斗」两边的参与数据
+function raidShowTitle(K, title) {
+  var m = document.getElementById('personModal');
+  var body = document.getElementById('personBody');
+  document.getElementById('personTitle').textContent = title;
+  body.innerHTML = '<div class="empty">查询名下角色中…</div>';
+  m.classList.add('show');
+
+  LOG_KINDS.forEach(function(k) { if (!_log[k].ready) { raidLoad(k); _log[k].ready = true; } });
+
+  // 两个日志里出现过的名字都要有军团/头衔数据才能判断归属
+  var candidates = [];
+  LOG_KINDS.forEach(function(k) {
+    _log[k].recs.forEach(function(r) {
+      r.names.forEach(function(n) { if (candidates.indexOf(n) === -1) candidates.push(n); });
+    });
+  });
+  if (!candidates.length) { body.innerHTML = '<div class="empty">还没有任何记录</div>'; return; }
+
+  raidLookupNames(candidates, function() {
+    // 归属该头衔的角色
+    var chars = {};
+    candidates.forEach(function(n) {
+      var d = _esiCache[n];
+      if (d && _cleanTitle(d.title) === title) {
+        chars[n] = { name: n, corp: d.corp_ticker || d.corp_name || '?' };
+      }
+    });
+    if (!Object.keys(chars).length) {
+      body.innerHTML = '<div class="empty">没有找到属于该头衔的角色</div>';
+      return;
+    }
+
+    // 名下角色：按军团分行
+    var byCorp = {}, corpOrder = [];
+    Object.keys(chars).sort().forEach(function(n) {
+      var c = chars[n].corp;
+      if (!byCorp[c]) { byCorp[c] = []; corpOrder.push(c); }
+      byCorp[c].push(n);
+    });
+    corpOrder.sort(function(a, b) {
+      var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
+      if (ha !== hb) return ha - hb;
+      return byCorp[b].length - byCorp[a].length;
+    });
+
+    var html = '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:0 0 8px">'
+      + '名下角色（' + Object.keys(chars).length + ' 个）</h3>';
+    html += corpOrder.map(function(corp) {
+      return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(corp) ? ' home' : '') + '">'
+        + esc(corp) + '</span><span class="corp-cnt">×' + byCorp[corp].length + '</span>'
+        + '<span class="pgrid">' + byCorp[corp].map(function(n) {
+            return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+          }).join('') + '</span></div>';
+    }).join('');
+
+    // 两边日志各自的参与数据
+    LOG_KINDS.forEach(function(k) {
+      var runs = _log[k].recs.filter(function(r) {
+        return r.names.some(function(n) { return chars[n]; });
+      });
+      html += '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:20px 0 8px">'
+        + esc(LOG_LABEL[k]) + '</h3>';
+      if (!runs.length) {
+        html += '<p style="color:var(--dim);font-size:12px;margin:0">未参加</p>';
+        return;
+      }
+      runs.sort(function(a, b) { return b.ts - a.ts; });
+      var hours = new Array(24).fill(0);
+      runs.forEach(function(r) { hours[new Date(r.ts).getHours()]++; });
+      var maxH = Math.max.apply(null, hours);
+      html += '<p class="raid-note" style="margin:0 0 8px">出场 <b>' + runs.length + '</b> 场 · 首次 '
+        + fmtDateKey(runs[runs.length - 1].ts) + ' · 最近 ' + fmtDateKey(runs[0].ts) + '</p>';
+      html += hours.map(function(v, i) { return v ? _barRow(_pad2(i) + ':00', v, maxH, false) : ''; }).join('');
+      html += '<div class="tbl-wrap"><table class="ship-tbl"><thead><tr>'
+        + '<th>时间</th><th>出场的角色</th><th class="num">本场人数</th></tr></thead><tbody>'
+        + runs.map(function(r) {
+            var mine = r.names.filter(function(n) { return chars[n]; });
+            return '<tr><td>' + fmtDateTime(r.ts) + '</td><td>'
+              + mine.map(function(n) {
+                  return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+                }).join('') + '</td><td class="num">' + r.names.length + '</td></tr>';
+          }).join('')
+        + '</tbody></table></div>';
+    });
+
+    body.innerHTML = html;
+  });
+}
+
 function closePersonModal() { document.getElementById('personModal').classList.remove('show'); }
 function raidGoto(K, id) {
   _log[K].sel = id;
@@ -3296,11 +3395,12 @@ function raidGoto(K, id) {
 // 事件委托：角色名/记录一律走 data 属性，绝不把用户文本拼进内联 JS
 // （esc() 只做 HTML 转义，拼进 onclick 里的字符串仍会被实体解码后逃逸）
 document.addEventListener('click', function(e) {
-  var t = e.target && e.target.closest ? e.target.closest('[data-pname],[data-raid-select],[data-raid-op],[data-raid-goto]') : null;
+  var t = e.target && e.target.closest ? e.target.closest('[data-pname],[data-ptitle],[data-raid-select],[data-raid-op],[data-raid-goto]') : null;
   if (!t) return;
   // 页面容器上带 data-kind，用来区分 30人本 / 战斗
   var page = t.closest('[data-kind]');
   var k = page ? page.getAttribute('data-kind') : 'raid';
+  if (t.dataset.ptitle !== undefined) { raidShowTitle(k, t.dataset.ptitle); return; }
   if (t.dataset.pname !== undefined) { raidShowPerson(k, t.dataset.pname); return; }
   if (t.dataset.raidOp) {
     e.stopPropagation();
