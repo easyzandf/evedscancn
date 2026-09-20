@@ -1174,7 +1174,9 @@ function doScan(silent) {
 
   // If no ships but have character names, show ESI-only results
   if (!total && charNames.length > 0) {
-    document.getElementById('resultSum').innerHTML = '（共 ' + charNames.length + ' 个角色名）';
+    document.getElementById('resultSum').innerHTML = '（共 ' + charNames.length + ' 个角色名）'
+      + ' <button class="btn-clr" onclick="copyLink()" style="font-size:12px;padding:2px 10px;margin-left:10px;">复制分享链接</button>'
+      + ' <button class="btn-clr" onclick="screenshotResult()" style="font-size:12px;padding:2px 10px;margin-left:4px;">截图复制</button>';
     document.getElementById('resultBody').innerHTML = '<div id="esi-summary" class="summary-box"><b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
     document.getElementById('resultArea').classList.remove('hidden');
     doEsiLookups(charNames, gen);
