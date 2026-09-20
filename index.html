@@ -882,6 +882,15 @@
   .rank-chars { margin: -2px 0 10px 0; }
   .chip-sub { color: var(--dim); font-size: 10px; margin-left: 3px; }
 
+  /* 分析：角色排行表（角色名完整显示，不省略） */
+  .rank-tbl { table-layout: auto; }
+  .rank-tbl th, .rank-tbl td { font-size: 12px; }
+  .rank-tbl .num { text-align: right; white-space: nowrap; }
+  .rank-tbl .ttl { color: var(--muted); }
+  .rank-tbl .dimt { color: var(--dim); }
+  .rank-tbl .barcell { width: 28%; min-width: 90px; }
+  .rank-tbl .bar-track { display: block; width: 100%; }
+
   /* 按军团分组 */
   .grp-block { border-bottom: 1px solid var(--border-soft); padding: 10px 0; }
   .grp-block:last-child { border-bottom: none; padding-bottom: 2px; }
@@ -2725,96 +2734,77 @@ var _raidStatsAgg = null;
 
 
 // 出场排行按「联盟 → 军团 → 成员」分组；军团按总人次排序
-// 出场排行：军团 → 玩家（头衔）；同一场同一玩家只计一次
+// 出场排行：军团 → 角色表格（角色名完整显示 + 头衔列）；角色按场次降序
 function raidRankGroupedHtml(results, agg) {
   var info = {};
   results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
 
   var corps = {}, unknown = null;
+  function bucket(meta) {
+    var ck = meta.ticker || meta.name || '?';
+    if (!corps[ck]) corps[ck] = {
+      ticker: meta.ticker || '', name: meta.name || '',
+      allianceTicker: meta.allianceTicker || '', rows: [], persons: {}
+    };
+    return corps[ck];
+  }
 
-  _raidRecords.forEach(function(r) {
-    var seen = {};
-    r.names.forEach(function(n) {
-      var d = info[n.toLowerCase()] || null;
-      var pk = _raidPersonKey(n, d);
-      var ck = d ? (d.corp_ticker || d.corp_name || '?') : '__unknown__';
-      var gk = ck + '|' + pk;
-      if (seen[gk]) return;                       // 同一场同一玩家只算一次
-      seen[gk] = 1;
-
-      var box;
-      if (d) {
-        if (!corps[ck]) corps[ck] = {
-          ticker: d.corp_ticker || '', name: d.corp_name || '', allianceTicker: d.alliance_ticker || '', players: {}
-        };
-        box = corps[ck];
-      } else {
-        if (!unknown) unknown = { players: {} };
-        box = unknown;
-      }
-      if (!box.players[pk]) box.players[pk] = { title: (d && d.title || '').trim(), runs: 0, chars: {} };
-      box.players[pk].chars[n] = 1;
-      box.players[pk].runs++;
-    });
+  Object.keys(agg.perPerson).forEach(function(k) {
+    var p = agg.perPerson[k];
+    var d = info[k] || null;
+    var row = { name: p.name, title: (d && d.title || '').trim(), runs: p.runs.length };
+    if (!d) {
+      if (!unknown) unknown = { ticker: '', name: '', label: '未查到军团', rows: [], persons: {} };
+      unknown.rows.push(row);
+      unknown.persons[_raidPersonKey(p.name, null)] = 1;
+      return;
+    }
+    var box = bucket({ ticker: d.corp_ticker, name: d.corp_name, allianceTicker: d.alliance_ticker });
+    box.rows.push(row);
+    box.persons[_raidPersonKey(p.name, d)] = 1;
   });
 
-  var ckeys = Object.keys(corps);
-  if (!ckeys.length && !unknown) {
+  var keys = Object.keys(corps);
+  if (!keys.length && !unknown) {
     return '<p style="color:var(--dim);font-size:12px;margin:0">没有可分组的数据</p>';
   }
+  function runsOf(c) { return c.rows.reduce(function(n, r) { return n + r.runs; }, 0); }
+  keys.sort(function(a, b) { return runsOf(corps[b]) - runsOf(corps[a]); });
 
-  function runsOf(c) {
-    var n = 0;
-    Object.keys(c.players).forEach(function(k) { n += c.players[k].runs; });
-    return n;
-  }
-  ckeys.sort(function(a, b) { return runsOf(corps[b]) - runsOf(corps[a]); });
+  var allRows = [];
+  keys.forEach(function(k) { allRows = allRows.concat(corps[k].rows); });
+  if (unknown) allRows = allRows.concat(unknown.rows);
+  var maxRuns = allRows.reduce(function(m, r) { return Math.max(m, r.runs); }, 1);
 
-  var maxRuns = 0;
-  ckeys.forEach(function(k) {
-    Object.keys(corps[k].players).forEach(function(p) { maxRuns = Math.max(maxRuns, corps[k].players[p].runs); });
-  });
-  if (unknown) Object.keys(unknown.players).forEach(function(p) { maxRuns = Math.max(maxRuns, unknown.players[p].runs); });
-  maxRuns = maxRuns || 1;
-
-  function tail(v) {
-    var pct = Math.max(3, Math.round(v / maxRuns * 100));
-    return '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>'
-      + '<span class="bar-val">' + v + '</span>';
-  }
-  function playerRow(p) {
-    var chars = Object.keys(p.chars);
-    if (chars.length === 1) {
-      return '<div class="bar-row"><span class="pname bar-lbl" data-pname="' + esc(chars[0]) + '"'
-        + (p.title ? ' title="' + esc(p.title) + '"' : '') + '>' + esc(chars[0]) + '</span>' + tail(p.runs) + '</div>';
-    }
-    return '<div class="rank-person"><div class="bar-row">'
-      + '<span class="bar-lbl">' + esc(p.title || '（无头衔）') + '</span>' + tail(p.runs) + '</div>'
-      + '<div class="pgrid rank-chars">' + chars.map(function(n) {
-          return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
-        }).join('') + '</div></div>';
-  }
-
+  var totalChars = allRows.length;
   var totalPlayers = 0;
-  ckeys.forEach(function(k) { totalPlayers += Object.keys(corps[k].players).length; });
-  var html = '<p class="raid-note">共 <b>' + totalPlayers + '</b> 个玩家 / '
-    + Object.keys(agg.perPerson).length + ' 个角色 · ' + ckeys.length + ' 个军团（同场同人只计一次）</p>';
+  keys.forEach(function(k) { totalPlayers += Object.keys(corps[k].persons).length; });
+  if (unknown) totalPlayers += Object.keys(unknown.persons).length;
 
-  ckeys.forEach(function(ck) {
-    var c = corps[ck];
-    var pkeys = Object.keys(c.players);
-    html += '<div class="grp-block"><div class="grp-head"><b>' + esc(c.ticker || c.name || '?') + '</b>'
-      + ' <span>' + esc(c.name || '') + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
-      + '<em>' + pkeys.length + ' 玩家 / ' + runsOf(c) + ' 人次</em></div>'
-      + '<div class="grp-corp">' + pkeys.map(function(k) { return playerRow(c.players[k]); }).join('') + '</div></div>';
-  });
+  var html = '<p class="raid-note">共 <b>' + totalChars + '</b> 个角色 · '
+    + totalPlayers + ' 个玩家 · ' + keys.length + ' 个军团</p>';
 
-  if (unknown) {
-    var ukeys = Object.keys(unknown.players);
-    html += '<div class="grp-block"><div class="grp-head"><b>未查到军团</b>'
-      + '<em>' + ukeys.length + ' 玩家</em></div><div class="grp-corp">'
-      + ukeys.map(function(k) { return playerRow(unknown.players[k]); }).join('') + '</div></div>';
+  function table(c) {
+    c.rows.sort(function(a, b) { return b.runs - a.runs || (a.name < b.name ? -1 : 1); });
+    var pn = Object.keys(c.persons).length;
+    return '<div class="grp-block"><div class="grp-head"><b>' + esc(c.label || c.ticker || c.name || '?') + '</b>'
+      + ' <span>' + esc(c.label ? '' : (c.name || '')) + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
+      + '<em>' + c.rows.length + ' 角色 / ' + pn + ' 玩家 / ' + runsOf(c) + ' 人次</em></div>'
+      + '<div class="tbl-wrap"><table class="ship-tbl rank-tbl"><thead><tr>'
+      + '<th>角色名</th><th>头衔</th><th class="num">场次</th><th class="barcell"></th>'
+      + '</tr></thead><tbody>'
+      + c.rows.map(function(r) {
+          var pct = Math.max(3, Math.round(r.runs / maxRuns * 100));
+          return '<tr><td><span class="pname" data-pname="' + esc(r.name) + '">' + esc(r.name) + '</span></td>'
+            + '<td class="ttl">' + (r.title ? esc(r.title) : '<span class="dimt">—</span>') + '</td>'
+            + '<td class="num">' + r.runs + '</td>'
+            + '<td class="barcell"><span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span></td></tr>';
+        }).join('')
+      + '</tbody></table></div></div>';
   }
+
+  keys.forEach(function(k) { html += table(corps[k]); });
+  if (unknown) html += table(unknown);
   return html;
 }
 
@@ -2846,7 +2836,7 @@ function raidRenderStats() {
     + '</div>';
 
   // 出场次数排行（按军团分组，异步填充）
-  html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:0 0 10px">出场次数排行（按军团）</h3>';
+  html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:0 0 10px">出场次数排行（按军团 · 角色）</h3>';
   html += '<div id="raidRankGrouped">' + (anyPeople ? '按军团分组查询中…' : '<p style="color:var(--dim);font-size:12px;margin:0">—</p>') + '</div>';
 
   // 日内时段分布
