@@ -2469,7 +2469,10 @@ function raidEdit(id) {
 
 // ---------- 导入 / 导出 ----------
 function raidExport() {
-  var blob = new Blob([JSON.stringify({ v: 1, records: _raidRecords }, null, 2)], { type: 'application/json' });
+  // 备份里带上同步码：换设备/清缓存后，只导入记录是取不回服务器数据的，
+  // 有码才能把「钥匙」一起恢复回来。
+  var payload = { v: 1, code: raidCode(), records: _raidRecords };
+  var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'raid-records-' + fmtDateKey(Date.now()) + '.json';
@@ -2495,6 +2498,14 @@ function raidImport(input) {
       _raidRecords = Object.keys(byId).map(function(k) { return byId[k]; });
       raidSaveLocal();
       raidRenderAll();
+      // 备份里带了同步码就一并恢复，否则只恢复本地记录、取不回服务器数据
+      var code = (!Array.isArray(d) && d.code) ? String(d.code) : '';
+      if (code && code !== raidCode()) {
+        if (confirm('这份备份里包含同步码。\n\n用它覆盖当前同步码吗？\n（这样才能取回备份时的服务器记录）')) {
+          localStorage.setItem(RAID_LS_CODE, code);
+          raidPull();
+        }
+      }
     } catch (e) { alert('导入失败：文件不是有效的 JSON'); }
     input.value = '';
     if (n) alert('已合并 ' + n + ' 条记录到本地（下次同步会上传）');
