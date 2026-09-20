@@ -900,6 +900,7 @@
     font-variant-numeric: tabular-nums;
   }
   .corp-tag.home { color: var(--brand-2); font-weight: 600; }
+  .corp-cnt { flex: 0 0 auto; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
   #raidDist .stat-card b { font-size: 20px; }
   #raidDist .ship-tbl td { vertical-align: top; }
   .rank-tbl tr.pp-first td { border-top: 1px solid var(--border); }
@@ -2985,7 +2986,7 @@ function raidDistributionHtml(results, agg) {
   });
   html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:24px 0 10px">玩家-角色对照</h3>';
   html += '<div class="tbl-wrap"><table class="ship-tbl rank-tbl"><thead><tr>'
-    + '<th>玩家（头衔）</th><th class="num">号数</th><th>角色（含军团）</th><th class="num">场次</th>'
+    + '<th>玩家（头衔）</th><th class="num">总号数</th><th>角色（按军团分行，含各军团小计）</th><th class="num">场次</th>'
     + '</tr></thead><tbody>'
     + sorted.map(function(pk) {
         var p = persons[pk];
@@ -3008,7 +3009,7 @@ function raidDistributionHtml(results, agg) {
               return order.map(function(corp) {
                 var list = byCorp[corp].slice().sort(function(x, y) { return x.name < y.name ? -1 : 1; });
                 return '<div class="corp-line"><span class="corp-tag' + (isHome(corp) ? ' home' : '') + '">'
-                  + esc(corp) + '</span><span class="pgrid">'
+                  + esc(corp) + '</span><span class="corp-cnt">×' + list.length + '</span><span class="pgrid">'
                   + list.map(function(c) {
                       return '<span class="pchip" data-pname="' + esc(c.name) + '">' + esc(c.name) + '</span>';
                     }).join('')
