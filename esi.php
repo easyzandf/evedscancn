@@ -62,7 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['name'])) {
     $charId = $search['characters'][0]['id'];
 
     // Step 2: character details
-    $char = esiGet("$esiBase/characters/$charId/", "c_$charId", 3600);
+    // cache key bumped to c2_ so entries cached before `title` was passed through get refreshed
+    $char = esiGet("$esiBase/characters/$charId/", "c2_$charId", 3600);
     if (!$char) { echo '{}'; exit; }
 
     $corpId = $char['corporation_id'] ?? 0;
@@ -74,6 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['name'])) {
 
     echo json_encode([
         'name'            => $char['name'] ?? $name,
+        // 军团头衔：公开端点 /characters/{id}/ 就带这个字段，无需 SSO 授权
+        'title'           => $char['title'] ?? '',
         'corp_id'         => $corpId,
         'corp_name'       => $corp['name'] ?? '',
         'corp_ticker'     => $corp['ticker'] ?? '',

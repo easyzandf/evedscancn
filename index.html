@@ -2537,6 +2537,8 @@ function raidLookupNames(names, cb) {
 // 按「联盟 → 军团 → 成员」分组渲染；成员名可点开个人面板
 function raidGroupHtml(results) {
   var alliances = {}, noAlliance = {}, unknown = [];
+  var info = {};
+  results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
   results.forEach(function(e) {
     var d = e.data;
     if (!d) { unknown.push(e.name); return; }
@@ -2555,7 +2557,9 @@ function raidGroupHtml(results) {
 
   function chips(members) {
     return '<div class="pgrid">' + members.map(function(n) {
-      return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+      var t = (info[n.toLowerCase()] && info[n.toLowerCase()].title) || '';
+      return '<span class="pchip" data-pname="' + esc(n) + '"'
+        + (t ? ' title="' + esc(t) + '"' : '') + '>' + esc(n) + '</span>';
     }).join('') + '</div>';
   }
   function corpBlock(c) {
@@ -2898,7 +2902,12 @@ function raidShowPerson(name) {
       var parts = [];
       if (res.alliance_name) parts.push('<b>' + esc(res.alliance_ticker || '') + '</b> ' + esc(res.alliance_name));
       if (res.corp_name) parts.push('<b>' + esc(res.corp_ticker || '') + '</b> ' + esc(res.corp_name));
-      box.innerHTML = '<b>军团/联盟：</b>' + (parts.length ? parts.join(' · ') : '无');
+      var inner = '<b>军团/联盟：</b>' + (parts.length ? parts.join(' · ') : '无');
+      if (res.title) {
+        inner += '<div style="margin-top:7px"><span class="pchip" style="cursor:default">'
+          + esc(res.title) + '</span></div>';
+      }
+      box.innerHTML = inner;
     } else {
       box.style.display = 'none';
     }
