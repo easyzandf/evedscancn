@@ -3402,12 +3402,30 @@ function raidShowTitle(K, title) {
       html += '<div class="tbl-wrap"><table class="ship-tbl"><thead><tr>'
         + '<th>时间</th><th>出场的角色（含军团）</th><th class="num">本场人数</th></tr></thead><tbody>'
         + runs.map(function(r) {
-            var mine = r.names.filter(function(n) { return chars[n]; });
-            return '<tr><td>' + fmtDateTime(r.ts) + '</td><td><div class="pgrid">'
-              + mine.map(function(n) {
-                  return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n)
-                    + ' <span class="chip-sub">' + esc(chars[n].corp) + '</span></span>';
-                }).join('') + '</div></td><td class="num">' + r.names.length + '</td></tr>';
+            // 出场的角色按军团分行，跨军团时一眼能看出这场用了哪些团的号
+            var byCorp = {}, order = [];
+            r.names.forEach(function(n) {
+              if (!chars[n]) return;
+              var c = chars[n].corp;
+              if (!byCorp[c]) { byCorp[c] = []; order.push(c); }
+              byCorp[c].push(n);
+            });
+            order.sort(function(a, b) {
+              var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
+              if (ha !== hb) return ha - hb;                     // 本方军团在前
+              if (byCorp[b].length !== byCorp[a].length) return byCorp[b].length - byCorp[a].length;
+              return a < b ? -1 : 1;
+            });
+            var cell = order.map(function(c) {
+              return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(c) ? ' home' : '') + '">'
+                + esc(c) + '</span><span class="pgrid">'
+                + byCorp[c].slice().sort(function(x, y) { return x < y ? -1 : 1; }).map(function(n) {
+                    return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+                  }).join('')
+                + '</span></div>';
+            }).join('');
+            return '<tr><td>' + fmtDateTime(r.ts) + '</td><td>' + cell
+              + '</td><td class="num">' + r.names.length + '</td></tr>';
           }).join('')
         + '</tbody></table></div></div>';
     });
