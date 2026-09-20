@@ -893,6 +893,11 @@
   /* 同一玩家（同头衔）的多个角色：淡色底 + 组首分隔线 */
   .rank-tbl tr.pp td { background: var(--brand-dim); }
   .pchip.home { border-color: var(--brand); }
+  /* 敌对块：整体偏红，和本方一眼分开 */
+  .grp-block.foe .grp-head b { color: var(--red); }
+  .grp-block.foe .grp-corp > b { color: var(--red); }
+  .grp-block.foe .pchip { border-color: rgba(255,113,113,.35); }
+  .grp-line > .pttl { color: var(--text); font-size: 12px; }
   /* 玩家-角色对照：同一个玩家的角色按军团分行 */
   .corp-line { display: flex; align-items: baseline; gap: 8px; margin: 3px 0; }
   .corp-tag {
@@ -2355,6 +2360,10 @@ LOG_KINDS.forEach(function(k) {
 // 页面元素统一用 kind 前缀：raidInput / battleInput ...
 function _le(k, n) { return document.getElementById(k + n); }
 
+// 本方军团（固定）：只有这两个军团的角色进统计，其余一律算敌对
+var LOG_HOME_CORPS = ['PLA-F', 'P.L.A'];
+function _isHomeCorp(c) { return LOG_HOME_CORPS.indexOf(c) !== -1; }
+
 // 内联处理器直接带上 kind（如 raidAddRecord('raid')），不做同名包装——
 // 那会把原函数覆盖掉，包装里再调用它就变成自己调自己。
 
@@ -2690,62 +2699,89 @@ function raidPersonGroupHtml(results, names) {
 
   function charCount(c) {
     var n = 0;
-    Object.keys(c.players).forEach(function(k) { n += c.players[k].chars.length; });
+    Object.keys(c.players).forEach(function(pk) { n += c.players[pk].chars.length; });
     return n;
   }
-  ckeys.sort(function(a, b) { return charCount(g.corps[b]) - charCount(g.corps[a]); });
+  // 本方 = 固定军团；其余（含查不到军团的）一律算敌对
+  var homeKeys = ckeys.filter(function(ck) { return _isHomeCorp(ck); });
+  var foeKeys = ckeys.filter(function(ck) { return !_isHomeCorp(ck); });
 
-  // 玩家数按头衔全局去重：同一个人跨军团也只算一次
-  var allPersons = {}, perCorpSum = 0;
-  ckeys.forEach(function(k) {
-    var pks = Object.keys(g.corps[k].players);
-    perCorpSum += pks.length;
-    pks.forEach(function(pk) { allPersons[pk] = 1; });
-  });
-  var players = Object.keys(allPersons).length;
-
-  var html = '<p class="raid-note">本场 <b>' + names.length + '</b> 个角色 · '
-    + ckeys.length + ' 个军团 · 归并为 <b>' + players + '</b> 个玩家'
-    + (perCorpSum > players ? '（其中 <b>' + (perCorpSum - players) + '</b> 人跨军团，会在多个军团里重复出现）' : '')
-    + '</p>';
-
-  ckeys.forEach(function(ck) {
-    var c = g.corps[ck];
+  function corpBlock(c, withPlayers) {
+    var html = '<div class="grp-corp"><b>' + esc(c.ticker || c.name || '?') + '</b>'
+      + '<span class="grp-org">' + esc(c.name || '') + '</span>'
+      + '<em>' + charCount(c) + ' 角色</em>';
+    if (!withPlayers) {
+      var all = [];
+      Object.keys(c.players).forEach(function(pk) { all = all.concat(c.players[pk].chars); });
+      all.sort(function(x, y) { return x < y ? -1 : 1; });
+      return html + '<div class="pgrid">' + all.map(function(n) {
+        return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+      }).join('') + '</div></div>';
+    }
     var pkeys = Object.keys(c.players);
-    html += '<div class="grp-block"><div class="grp-head"><b>' + esc(c.ticker || c.name || '?') + '</b>'
-      + ' <span>' + esc(c.name || '') + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
-      + '<em>' + charCount(c) + ' 角色</em></div>';
-
     var multi = pkeys.filter(function(k) { return c.players[k].chars.length > 1; });
     var single = pkeys.filter(function(k) { return c.players[k].chars.length === 1; });
     multi.sort(function(a, b) { return c.players[b].chars.length - c.players[a].chars.length; });
-
     multi.forEach(function(pk) {
       var p = c.players[pk];
-      html += '<div class="grp-corp"><b>' + esc(p.title || '（无头衔）') + '</b>'
+      html += '<div class="grp-line"><b class="pttl">' + esc(p.title || '（无头衔）') + '</b>'
         + '<em>' + p.chars.length + ' 个角色</em>'
         + '<div class="pgrid">' + p.chars.map(function(n) {
             return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
           }).join('') + '</div></div>';
     });
     if (single.length) {
-      html += '<div class="grp-corp"><div class="pgrid">' + single.map(function(pk) {
+      html += '<div class="pgrid" style="margin:4px 0 6px 10px">' + single.map(function(pk) {
         var p = c.players[pk], n = p.chars[0];
         return '<span class="pchip" data-pname="' + esc(n) + '"'
           + (p.title ? ' title="' + esc(p.title) + '"' : '') + '>' + esc(n) + '</span>';
-      }).join('') + '</div></div>';
+      }).join('') + '</div>';
+    }
+    return html + '</div>';
+  }
+
+  // 本方：玩家数按头衔全局去重（同一人跨军团只算一次）
+  var homePersons = {}, homeChars = 0;
+  homeKeys.forEach(function(ck) {
+    var c = g.corps[ck];
+    homeChars += charCount(c);
+    Object.keys(c.players).forEach(function(pk) {
+      homePersons[c.players[pk].title || ('n:' + c.players[pk].chars[0].toLowerCase())] = 1;
+    });
+  });
+  var foeChars = 0;
+  foeKeys.forEach(function(ck) { foeChars += charCount(g.corps[ck]); });
+  foeChars += g.unknown.length;
+
+  var html = '<p class="raid-note">本方（' + esc(LOG_HOME_CORPS.join(' / ')) + '）<b>' + homeChars
+    + '</b> 角色 · <b>' + Object.keys(homePersons).length + '</b> 个玩家'
+    + (foeChars ? '　·　敌对方 <b>' + foeChars + '</b> 角色' : '')
+    + '</p>';
+
+  homeKeys.sort(function(a, b) { return charCount(g.corps[b]) - charCount(g.corps[a]); });
+  html += '<div class="grp-block"><div class="grp-head"><b>本方</b>'
+    + ' <span>' + esc(LOG_HOME_CORPS.join(' / ')) + '</span>'
+    + '<em>' + homeChars + ' 角色 / ' + Object.keys(homePersons).length + ' 玩家</em></div>'
+    + (homeKeys.length ? homeKeys.map(function(ck) { return corpBlock(g.corps[ck], true); }).join('')
+                       : '<div class="grp-corp" style="color:var(--dim);font-size:12px">本场没有本方军团的人</div>')
+    + '</div>';
+
+  if (foeKeys.length || g.unknown.length) {
+    foeKeys.sort(function(a, b) { return charCount(g.corps[b]) - charCount(g.corps[a]); });
+    html += '<div class="grp-block foe"><div class="grp-head"><b>敌对</b>'
+      + ' <span>其他军团（不计入统计）</span><em>' + foeChars + ' 角色</em></div>'
+      + foeKeys.map(function(ck) { return corpBlock(g.corps[ck], false); }).join('');
+    if (g.unknown.length) {
+      html += '<div class="grp-corp"><b>未查到军团</b><em>' + g.unknown.length + ' 角色</em>'
+        + '<div class="pgrid">' + g.unknown.map(function(n) {
+            return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+          }).join('') + '</div></div>';
     }
     html += '</div>';
-  });
-
-  if (g.unknown.length) {
-    html += '<div class="grp-block"><div class="grp-head"><b>未查到军团</b><em>' + g.unknown.length + ' 角色</em></div>'
-      + '<div class="grp-corp"><div class="pgrid">' + g.unknown.map(function(n) {
-          return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
-        }).join('') + '</div></div></div>';
   }
   return html;
 }
+
 
 // 把某个容器截图并复制到剪贴板（失败则下载）。复用已有的剪贴板/下载 helper。
 function raidScreenshot(btn, targetId, fileBase) {
@@ -2872,6 +2908,7 @@ function raidRankGroupedHtml(K, results, agg) {
       unknown.persons[pkey] = 1;
       return;
     }
+    if (!_isHomeCorp(d.corp_ticker || d.corp_name || '?')) return;   // 敌对不进统计
     var box = bucket({ ticker: d.corp_ticker, name: d.corp_name, allianceTicker: d.alliance_ticker });
     box.rows.push(row);
     box.persons[pkey] = 1;
@@ -2953,8 +2990,8 @@ function raidRankGroupedHtml(K, results, agg) {
   return html;
 }
 
-// 人物 / 角色分布：本方军团自动识别（玩家数最多的前两个），其余算客方。
-// 输出：本方 vs 客方概览 + 每人小号数分布 + 玩家-角色对照总表
+// 人物 / 角色分布：只统计本方（固定军团 LOG_HOME_CORPS），敌对已在调用前过滤掉。
+// 输出：本方概览 + 每人小号数分布 + 玩家-角色对照总表
 function raidDistributionHtml(K, results, agg) {
   var info = {};
   results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
@@ -2964,6 +3001,8 @@ function raidDistributionHtml(K, results, agg) {
   Object.keys(agg.perPerson).forEach(function(k) {
     var p = agg.perPerson[k];
     var d = info[k] || null;
+    // 敌对（非本方军团）不参与统计
+    if (d && !_isHomeCorp(d.corp_ticker || d.corp_name || '?')) return;
     var pk = _raidPersonKey(p.name, d);
     if (!persons[pk]) persons[pk] = { key: pk, title: _cleanTitle(d && d.title), chars: [], runs: 0 };
     persons[pk].chars.push({
@@ -2990,36 +3029,15 @@ function raidDistributionHtml(K, results, agg) {
   var pkeys = Object.keys(persons);
   if (!pkeys.length) return '<p style="color:var(--dim);font-size:12px;margin:0">没有可统计的数据</p>';
 
-  // 本方军团 = 玩家数最多的前两个军团
-  var corpPlayers = {};
-  pkeys.forEach(function(pk) {
-    var seen = {};
-    persons[pk].chars.forEach(function(c) {
-      if (seen[c.corp]) return;
-      seen[c.corp] = 1;
-      corpPlayers[c.corp] = (corpPlayers[c.corp] || 0) + 1;
-    });
-  });
-  var homeCorps = Object.keys(corpPlayers).sort(function(a, b) {
-    if (corpPlayers[b] !== corpPlayers[a]) return corpPlayers[b] - corpPlayers[a];
-    return a < b ? -1 : 1;
-  }).slice(0, 2);
-  function isHome(corp) { return homeCorps.indexOf(corp) !== -1; }
-
-  // 本方 / 客方（只要有一个号在本方军团就算本方）
-  var homeP = 0, homeC = 0, guestP = 0, guestC = 0;
-  pkeys.forEach(function(pk) {
-    var p = persons[pk];
-    var h = p.chars.some(function(c) { return isHome(c.corp); });
-    if (h) { homeP++; homeC += p.chars.length; } else { guestP++; guestC += p.chars.length; }
-  });
+  // 本方 = 固定军团（敌对已在上游过滤掉，这里只剩本方的人）
+  function isHome(corp) { return _isHomeCorp(corp); }
+  var homeP = pkeys.length, homeC = 0;
+  pkeys.forEach(function(pk) { homeC += persons[pk].chars.length; });
 
   var html = '<div class="stat-grid">'
     + '<div class="stat-card"><b>' + homeP + '</b><span>本方玩家（'
-      + esc(homeCorps.join(' / ')) + '）</span></div>'
+      + esc(LOG_HOME_CORPS.join(' / ')) + '）</span></div>'
     + '<div class="stat-card"><b>' + homeC + '</b><span>本方角色</span></div>'
-    + '<div class="stat-card"><b>' + guestP + '</b><span>客方玩家</span></div>'
-    + '<div class="stat-card"><b>' + guestC + '</b><span>客方角色</span></div>'
     + '</div>';
 
   // 每人小号数分布
@@ -3086,13 +3104,11 @@ function raidRenderStats(K) {
   if (!el) return;
 
   var agg = _raidAgg(K);
-  var people = Object.keys(agg.perPerson).map(function(k) { return agg.perPerson[k]; });
-  people.sort(function(a, b) { return b.runs.length - a.runs.length || (a.name < b.name ? -1 : 1); });
-  var anyPeople = people.length > 0;
   _log[K].agg = agg;
 
+  // 本方/敌对要靠军团判定，所以先把所有名字都查一遍，再填统计
+  var allNames = Object.keys(agg.perPerson).map(function(nk) { return agg.perPerson[nk].name; });
   var totalRuns = _log[K].recs.length;
-  var totalSlots = _log[K].recs.reduce(function(s, r) { return s + r.names.length; }, 0);
 
   var html = '<div class="raid-view-head">'
     + '<h3>分析</h3>'
@@ -3101,20 +3117,14 @@ function raidRenderStats(K) {
 
   if (!totalRuns) { el.innerHTML = html + '<div class="empty">还没有记录，无法分析</div></div>'; return; }
 
-  html += '<div class="stat-grid">'
-    + '<div class="stat-card"><b>' + totalRuns + '</b><span>总场次</span></div>'
-    + '<div class="stat-card"><b>' + totalSlots + '</b><span>总人次</span></div>'
-    + '<div class="stat-card"><b>' + people.length + '</b><span>不同角色</span></div>'
-    + '<div class="stat-card"><b>' + (totalRuns ? (totalSlots / totalRuns).toFixed(1) : '0') + '</b><span>平均每场人数</span></div>'
-    + '</div>';
+  html += '<div class="stat-grid" id="' + K + 'Cards"></div>';
+  html += '<p class="raid-note" id="' + K + 'Note"></p>';
 
-  // 人物/角色分布（异步填充）
   html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:0 0 10px">人物与角色分布</h3>';
-  html += '<div id="' + K + 'Dist">' + (anyPeople ? '查询中…' : '<p style="color:var(--dim);font-size:12px;margin:0">—</p>') + '</div>';
+  html += '<div id="' + K + 'Dist">查询中…</div>';
 
-  // 出场次数排行（按军团分组，异步填充）
   html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:0 0 10px">出场次数排行（按军团 · 角色）</h3>';
-  html += '<div id="' + K + 'RankGrouped">' + (anyPeople ? '按军团分组查询中…' : '<p style="color:var(--dim);font-size:12px;margin:0">—</p>') + '</div>';
+  html += '<div id="' + K + 'RankGrouped">查询中…</div>';
 
   // 日内时段分布
   html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:24px 0 10px">日内时段分布（本机时区）</h3>';
@@ -3130,17 +3140,46 @@ function raidRenderStats(K) {
   html += '</div>';
   el.innerHTML = html;
 
-  if (!anyPeople) return;
   var gen = ++_log[K].sGen;
-  raidLookupNames(people.map(function(p) { return p.name; }), function(results) {
+  raidLookupNames(allNames, function(results) {
     if (gen !== _log[K].sGen) return;           // 已有更新的渲染，丢弃
+    var info = {};
+    results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
+
+    // 判定本方：军团在 LOG_HOME_CORPS 里；其余（含查不到军团的）算敌对
+    var homeSet = {}, homeChars = 0, foeChars = 0;
+    allNames.forEach(function(n) {
+      var d = info[n.toLowerCase()];
+      if (d && !_isHomeCorp(d.corp_ticker || d.corp_name || '?')) { foeChars++; return; }
+      homeSet[n.toLowerCase()] = 1;
+      homeChars++;
+    });
+    var slots = 0;
+    _log[K].recs.forEach(function(r) {
+      r.names.forEach(function(n) { if (homeSet[n.toLowerCase()]) slots++; });
+    });
+    var avg = (slots / totalRuns).toFixed(1);
+
+    var cardsEl = _le(K, 'Cards');
+    if (cardsEl) {
+      cardsEl.innerHTML =
+        '<div class="stat-card"><b>' + totalRuns + '</b><span>总场次</span></div>'
+        + '<div class="stat-card"><b>' + slots + '</b><span>本方人次</span></div>'
+        + '<div class="stat-card"><b>' + homeChars + '</b><span>本方角色</span></div>'
+        + '<div class="stat-card"><b>' + avg + '</b><span>平均每场本方人数</span></div>';
+    }
+    var noteEl = _le(K, 'Note');
+    if (noteEl) {
+      noteEl.innerHTML = '本方 = ' + esc(LOG_HOME_CORPS.join(' / '))
+        + '；敌对方 ' + foeChars + ' 个角色仅标注，不参与下方任何统计。';
+    }
+
     var agg2 = _log[K].agg;
     if (!agg2) return;
     var dist = _le(K, 'Dist');
     if (dist) dist.innerHTML = raidDistributionHtml(K, results, agg2);
     var box = _le(K, 'RankGrouped');
-    if (!box) return;
-    box.innerHTML = raidRankGroupedHtml(K, results, agg2);
+    if (box) box.innerHTML = raidRankGroupedHtml(K, results, agg2);
   });
 }
 
