@@ -2516,10 +2516,15 @@ function raidRenderList() {
   var list = _raidRecords.slice().sort(function(a, b) { return b.ts - a.ts; });
   el.innerHTML = list.map(function(r) {
     var n = r.names.length;
+    // 已算过玩家数就显示玩家数（「30人本」说的是人数），否则先显示角色数
+    var pc = r.pc || 0;
+    var shown = pc || n;
+    var cls = (shown === 30) ? '' : ' odd';
     return '<div class="raid-item' + (r.id === _raidSel ? ' on' : '') + '" data-raid-select="' + esc(r.id) + '">'
       + '<div class="when"><b>' + fmtDateTime(r.ts) + '</b>'
       + '<span>' + (r.note ? esc(r.note) + ' · ' : '') + '#' + esc(r.id.slice(-4)) + '</span></div>'
-      + '<div class="cnt' + (n === 30 ? '' : ' odd') + '">' + n + ' 人</div>'
+      + '<div class="cnt' + cls + '" title="' + (pc ? pc + ' 个玩家' : '尚未查询玩家数，显示角色数') + ' / ' + n + ' 个角色">'
+      + shown + (pc ? ' 人' : ' 角色') + '</div>'
       + '<div class="ops">'
       + '<button title="编辑" data-raid-op="edit" data-raid-id="' + esc(r.id) + '">✎</button>'
       + '<button title="删除" data-raid-op="delete" data-raid-id="' + esc(r.id) + '">✕</button>'
@@ -2553,10 +2558,16 @@ function raidLookupNames(names, cb) {
   });
 }
 
-// 一个「人」= 一个头衔：同一头衔的多个角色属于同一玩家的不同号。
+// 军团头衔里可能带 EVE 的颜色标记（如 <color=#ff0000><b>CEO</b>），
+// 显示前要剥掉；归并键也要用它，否则同一头衔带不带标记会被当成两个人。
+function _cleanTitle(t) {
+  return String(t == null ? '' : t).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// 一个「人」= 一个头衔，跨军团也认作同一人（小号常分散在不同军团）。
 // 没头衔的角色各自算一个人，不会被错误合并。
 function _raidPersonKey(name, data) {
-  var t = (data && data.title ? String(data.title) : '').trim();
+  var t = _cleanTitle(data && data.title);
   return t ? 't:' + t : 'n:' + String(name).toLowerCase();
 }
 
@@ -2577,7 +2588,7 @@ function _raidByCorp(names, results) {
     };
     var pk = _raidPersonKey(n, d);
     if (!corps[ck].players[pk]) {
-      corps[ck].players[pk] = { title: (d.title || '').trim(), chars: [] };
+      corps[ck].players[pk] = { title: _cleanTitle(d.title), chars: [] };
       corps[ck].order.push(pk);
     }
     corps[ck].players[pk].chars.push(n);
@@ -2600,18 +2611,26 @@ function raidPersonGroupHtml(results, names) {
   }
   ckeys.sort(function(a, b) { return charCount(g.corps[b]) - charCount(g.corps[a]); });
 
-  var players = 0;
-  ckeys.forEach(function(k) { players += Object.keys(g.corps[k].players).length; });
+  // 玩家数按头衔全局去重：同一个人跨军团也只算一次
+  var allPersons = {}, perCorpSum = 0;
+  ckeys.forEach(function(k) {
+    var pks = Object.keys(g.corps[k].players);
+    perCorpSum += pks.length;
+    pks.forEach(function(pk) { allPersons[pk] = 1; });
+  });
+  var players = Object.keys(allPersons).length;
 
   var html = '<p class="raid-note">本场 <b>' + names.length + '</b> 个角色 · '
-    + ckeys.length + ' 个军团 · 归并为 <b>' + players + '</b> 个玩家</p>';
+    + ckeys.length + ' 个军团 · 归并为 <b>' + players + '</b> 个玩家'
+    + (perCorpSum > players ? '（其中 <b>' + (perCorpSum - players) + '</b> 人跨军团，会在多个军团里重复出现）' : '')
+    + '</p>';
 
   ckeys.forEach(function(ck) {
     var c = g.corps[ck];
     var pkeys = Object.keys(c.players);
     html += '<div class="grp-block"><div class="grp-head"><b>' + esc(c.ticker || c.name || '?') + '</b>'
       + ' <span>' + esc(c.name || '') + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
-      + '<em>' + charCount(c) + ' 角色 / ' + pkeys.length + ' 玩家</em></div>';
+      + '<em>' + charCount(c) + ' 角色</em></div>';
 
     var multi = pkeys.filter(function(k) { return c.players[k].chars.length > 1; });
     var single = pkeys.filter(function(k) { return c.players[k].chars.length === 1; });
@@ -2693,6 +2712,17 @@ function raidRenderDetail() {
 
   raidLookupNames(r.names, function(results) {
     if (gen !== _raidDetailGen) return;               // 已切到别的记录，丢弃
+    // 顺手把这条记录的「玩家数」算出来缓存到本地，供左侧列表显示
+    var ps = {}, any = false;
+    results.forEach(function(e) {
+      if (e.data) any = true;
+      ps[_raidPersonKey(e.name, e.data)] = 1;
+    });
+    if (any && r.pc !== Object.keys(ps).length) {
+      r.pc = Object.keys(ps).length;
+      raidSaveLocal();
+      raidRenderList();
+    }
     var box = document.getElementById('raidGrouped');
     if (!box) return;
     var got = results.filter(function(e) { return e.data; }).length;
@@ -2755,7 +2785,7 @@ function raidRankGroupedHtml(results, agg) {
     var p = agg.perPerson[k];
     var d = info[k] || null;
     var pkey = _raidPersonKey(p.name, d);
-    var row = { name: p.name, title: (d && d.title || '').trim(), runs: p.runs.length, pkey: pkey };
+    var row = { name: p.name, title: _cleanTitle(d && d.title), runs: p.runs.length, pkey: pkey };
     if (!d) {
       if (!unknown) unknown = { ticker: '', name: '', label: '未查到军团', rows: [], persons: {} };
       unknown.rows.push(row);
@@ -2780,12 +2810,23 @@ function raidRankGroupedHtml(results, agg) {
   var maxRuns = allRows.reduce(function(m, r) { return Math.max(m, r.runs); }, 1);
 
   var totalChars = allRows.length;
-  var totalPlayers = 0;
-  keys.forEach(function(k) { totalPlayers += Object.keys(corps[k].persons).length; });
-  if (unknown) totalPlayers += Object.keys(unknown.persons).length;
+  var personSet = {}, perCorpSum = 0;
+  keys.forEach(function(k) {
+    var pks = Object.keys(corps[k].persons);
+    perCorpSum += pks.length;
+    pks.forEach(function(pk) { personSet[pk] = 1; });
+  });
+  if (unknown) {
+    var upks = Object.keys(unknown.persons);
+    perCorpSum += upks.length;
+    upks.forEach(function(pk) { personSet[pk] = 1; });
+  }
+  var totalPlayers = Object.keys(personSet).length;
 
   var html = '<p class="raid-note">共 <b>' + totalChars + '</b> 个角色 · '
-    + totalPlayers + ' 个玩家 · ' + keys.length + ' 个军团</p>';
+    + totalPlayers + ' 个玩家 · ' + keys.length + ' 个军团'
+    + (perCorpSum > totalPlayers ? '（其中 <b>' + (perCorpSum - totalPlayers) + '</b> 人跨军团，会在多个军团里重复出现）' : '')
+    + '</p>';
 
   // 军团内部：先按「人」（头衔）分组，组按总场次降序；组内角色按场次降序
   function orderRows(c) {
@@ -2810,10 +2851,9 @@ function raidRankGroupedHtml(results, agg) {
 
   function table(c) {
     var rows = orderRows(c);
-    var pn = Object.keys(c.persons).length;
     return '<div class="grp-block"><div class="grp-head"><b>' + esc(c.label || c.ticker || c.name || '?') + '</b>'
       + ' <span>' + esc(c.label ? '' : (c.name || '')) + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
-      + '<em>' + c.rows.length + ' 角色 / ' + pn + ' 玩家 / ' + runsOf(c) + ' 人次</em></div>'
+      + '<em>' + c.rows.length + ' 角色 / ' + runsOf(c) + ' 人次</em></div>'
       + '<div class="tbl-wrap"><table class="ship-tbl rank-tbl"><thead><tr>'
       + '<th>角色名</th><th>头衔</th><th class="num">场次</th><th class="barcell"></th>'
       + '</tr></thead><tbody>'
@@ -2969,7 +3009,7 @@ function raidShowPerson(name) {
       var inner = '<b>军团/联盟：</b>' + (parts.length ? parts.join(' · ') : '无');
       if (res.title) {
         inner += '<div style="margin-top:7px"><span class="pchip" style="cursor:default">'
-          + esc(res.title) + '</span></div>';
+          + esc(_cleanTitle(res.title)) + '</span></div>';
       }
       box.innerHTML = inner;
     } else {
