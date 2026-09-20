@@ -890,6 +890,9 @@
   .rank-tbl .dimt { color: var(--dim); }
   .rank-tbl .barcell { width: 28%; min-width: 90px; }
   .rank-tbl .bar-track { display: block; width: 100%; }
+  /* 同一玩家（同头衔）的多个角色：淡色底 + 组首分隔线 */
+  .rank-tbl tr.pp td { background: var(--brand-dim); }
+  .rank-tbl tr.pp-first td { border-top: 1px solid var(--border); }
 
   /* 按军团分组 */
   .grp-block { border-bottom: 1px solid var(--border-soft); padding: 10px 0; }
@@ -2733,8 +2736,7 @@ var _raidStatsGen = 0;
 var _raidStatsAgg = null;
 
 
-// 出场排行按「联盟 → 军团 → 成员」分组；军团按总人次排序
-// 出场排行：军团 → 角色表格（角色名完整显示 + 头衔列）；角色按场次降序
+// 出场排行：军团 → 玩家（头衔）→ 角色；表格列出全部角色（完整显示）+ 头衔列
 function raidRankGroupedHtml(results, agg) {
   var info = {};
   results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
@@ -2752,16 +2754,17 @@ function raidRankGroupedHtml(results, agg) {
   Object.keys(agg.perPerson).forEach(function(k) {
     var p = agg.perPerson[k];
     var d = info[k] || null;
-    var row = { name: p.name, title: (d && d.title || '').trim(), runs: p.runs.length };
+    var pkey = _raidPersonKey(p.name, d);
+    var row = { name: p.name, title: (d && d.title || '').trim(), runs: p.runs.length, pkey: pkey };
     if (!d) {
       if (!unknown) unknown = { ticker: '', name: '', label: '未查到军团', rows: [], persons: {} };
       unknown.rows.push(row);
-      unknown.persons[_raidPersonKey(p.name, null)] = 1;
+      unknown.persons[pkey] = 1;
       return;
     }
     var box = bucket({ ticker: d.corp_ticker, name: d.corp_name, allianceTicker: d.alliance_ticker });
     box.rows.push(row);
-    box.persons[_raidPersonKey(p.name, d)] = 1;
+    box.persons[pkey] = 1;
   });
 
   var keys = Object.keys(corps);
@@ -2784,8 +2787,29 @@ function raidRankGroupedHtml(results, agg) {
   var html = '<p class="raid-note">共 <b>' + totalChars + '</b> 个角色 · '
     + totalPlayers + ' 个玩家 · ' + keys.length + ' 个军团</p>';
 
+  // 军团内部：先按「人」（头衔）分组，组按总场次降序；组内角色按场次降序
+  function orderRows(c) {
+    var groups = {}, gkeys = [];
+    c.rows.forEach(function(r) {
+      if (!groups[r.pkey]) { groups[r.pkey] = { rows: [], total: 0 }; gkeys.push(r.pkey); }
+      groups[r.pkey].rows.push(r);
+      groups[r.pkey].total += r.runs;
+    });
+    gkeys.sort(function(a, b) {
+      if (groups[a].total !== groups[b].total) return groups[b].total - groups[a].total;
+      return a < b ? -1 : 1;
+    });
+    var out = [];
+    gkeys.forEach(function(k) {
+      var g = groups[k];
+      g.rows.sort(function(a, b) { return b.runs - a.runs || (a.name < b.name ? -1 : 1); });
+      g.rows.forEach(function(r, i) { r._inGroup = g.rows.length > 1; r._first = (i === 0); out.push(r); });
+    });
+    return out;
+  }
+
   function table(c) {
-    c.rows.sort(function(a, b) { return b.runs - a.runs || (a.name < b.name ? -1 : 1); });
+    var rows = orderRows(c);
     var pn = Object.keys(c.persons).length;
     return '<div class="grp-block"><div class="grp-head"><b>' + esc(c.label || c.ticker || c.name || '?') + '</b>'
       + ' <span>' + esc(c.label ? '' : (c.name || '')) + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
@@ -2793,9 +2817,10 @@ function raidRankGroupedHtml(results, agg) {
       + '<div class="tbl-wrap"><table class="ship-tbl rank-tbl"><thead><tr>'
       + '<th>角色名</th><th>头衔</th><th class="num">场次</th><th class="barcell"></th>'
       + '</tr></thead><tbody>'
-      + c.rows.map(function(r) {
+      + rows.map(function(r) {
           var pct = Math.max(3, Math.round(r.runs / maxRuns * 100));
-          return '<tr><td><span class="pname" data-pname="' + esc(r.name) + '">' + esc(r.name) + '</span></td>'
+          var cls = r._inGroup ? (' class="pp' + (r._first ? ' pp-first' : '') + '"') : '';
+          return '<tr' + cls + '><td><span class="pname" data-pname="' + esc(r.name) + '">' + esc(r.name) + '</span></td>'
             + '<td class="ttl">' + (r.title ? esc(r.title) : '<span class="dimt">—</span>') + '</td>'
             + '<td class="num">' + r.runs + '</td>'
             + '<td class="barcell"><span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span></td></tr>';
