@@ -862,6 +862,22 @@
   .stat-card b { display: block; font-size: 22px; color: var(--brand-2); font-weight: 700; }
   .stat-card span { font-size: 12px; color: var(--muted); }
 
+  /* 按军团分组 */
+  .grp-block { border-bottom: 1px solid var(--border-soft); padding: 10px 0; }
+  .grp-block:last-child { border-bottom: none; padding-bottom: 2px; }
+  .grp-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .grp-head b { color: var(--brand-2); font-size: 13px; }
+  .grp-head span { color: var(--muted); font-size: 12px; }
+  .grp-head em { margin-left: auto; color: var(--dim); font-style: normal; font-size: 12px; }
+  .grp-corp { margin: 7px 0 7px 10px; }
+  .grp-corp > b { color: var(--text); font-size: 12px; }
+  .grp-corp .grp-org { color: var(--dim); font-size: 11px; margin-left: 6px; }
+  .grp-corp em { color: var(--dim); font-style: normal; font-size: 11px; margin-left: 6px; }
+  .grp-corp .pgrid { margin-top: 5px; }
+  .raid-all { margin-bottom: 10px; }
+  .raid-all > summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 4px 0; }
+  .raid-all .pgrid { margin-top: 8px; }
+
   /* CSS 条形图 */
   .bar-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 13px; }
   .bar-row .bar-lbl {
@@ -2485,6 +2501,93 @@ function raidSwitchView(v) {
   document.getElementById('raidDetail').classList.toggle('hidden', v !== 'detail');
   document.getElementById('raidStats').classList.toggle('hidden', v !== 'stats');
 }
+// 批量查角色 -> 军团/联盟（复用 _esiCache 与 esi.php，重复查询走缓存）
+function raidLookupNames(names, cb) {
+  var out = [], pending = names.length;
+  if (!pending) { cb(out); return; }
+  names.forEach(function(n) {
+    if (Object.prototype.hasOwnProperty.call(_esiCache, n)) {
+      out.push({ name: n, data: _esiCache[n] });
+      if (--pending === 0) cb(out);
+      return;
+    }
+    _fetch('GET', 'esi.php?name=' + encodeURIComponent(n), null, function(res) {
+      _esiCache[n] = (res && res.name) ? res : null;
+      out.push({ name: n, data: _esiCache[n] });
+      if (--pending === 0) cb(out);
+    });
+  });
+}
+
+// 按「联盟 → 军团 → 成员」分组渲染；成员名可点开个人面板
+function raidGroupHtml(results) {
+  var alliances = {}, noAlliance = {}, unknown = [];
+  results.forEach(function(e) {
+    var d = e.data;
+    if (!d) { unknown.push(e.name); return; }
+    if (d.alliance_ticker) {
+      var ak = d.alliance_ticker;
+      if (!alliances[ak]) alliances[ak] = { name: d.alliance_name, ticker: ak, corps: {} };
+      var ck = d.corp_ticker || d.corp_name || '?';
+      if (!alliances[ak].corps[ck]) alliances[ak].corps[ck] = { name: d.corp_name, ticker: d.corp_ticker, members: [] };
+      alliances[ak].corps[ck].members.push(e.name);
+    } else {
+      var ck2 = d.corp_ticker || d.corp_name || '?';
+      if (!noAlliance[ck2]) noAlliance[ck2] = { name: d.corp_name, ticker: d.corp_ticker, members: [] };
+      noAlliance[ck2].members.push(e.name);
+    }
+  });
+
+  function chips(members) {
+    return '<div class="pgrid">' + members.map(function(n) {
+      return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+    }).join('') + '</div>';
+  }
+  function corpBlock(c) {
+    return '<div class="grp-corp"><b>' + esc(c.ticker || c.name || '?') + '</b>'
+      + '<span class="grp-org">' + esc(c.name || '') + '</span>'
+      + '<em>×' + c.members.length + '</em>' + chips(c.members) + '</div>';
+  }
+  function corpsOf(obj) {
+    var keys = Object.keys(obj.corps);
+    keys.sort(function(x, y) { return obj.corps[y].members.length - obj.corps[x].members.length; });
+    return keys.map(function(k) { return corpBlock(obj.corps[k]); }).join('');
+  }
+
+  var html = '';
+  var aKeys = Object.keys(alliances);
+  aKeys.sort(function(a, b) {
+    var ta = 0, tb = 0;
+    Object.keys(alliances[a].corps).forEach(function(k) { ta += alliances[a].corps[k].members.length; });
+    Object.keys(alliances[b].corps).forEach(function(k) { tb += alliances[b].corps[k].members.length; });
+    return tb - ta;
+  });
+  aKeys.forEach(function(k) {
+    var a = alliances[k];
+    var n = 0;
+    Object.keys(a.corps).forEach(function(c) { n += a.corps[c].members.length; });
+    html += '<div class="grp-block"><div class="grp-head">'
+      + '<b>' + esc(a.ticker || '') + '</b> <span>' + esc(a.name || '') + '</span>'
+      + '<em>×' + n + '</em></div>' + corpsOf(a) + '</div>';
+  });
+
+  var naKeys = Object.keys(noAlliance);
+  naKeys.sort(function(a, b) { return noAlliance[b].members.length - noAlliance[a].members.length; });
+  if (naKeys.length) {
+    html += '<div class="grp-block"><div class="grp-head"><b>无联盟</b><em>×'
+      + naKeys.reduce(function(s, k) { return s + noAlliance[k].members.length; }, 0) + '</em></div>'
+      + naKeys.map(function(k) { return corpBlock(noAlliance[k]); }).join('') + '</div>';
+  }
+
+  if (unknown.length) {
+    html += '<div class="grp-block"><div class="grp-head"><b>未查到</b><em>×' + unknown.length + '</em></div>'
+      + chips(unknown) + '</div>';
+  }
+  return html || '<p style="color:var(--dim);font-size:12px;margin:0">没有可分组的数据</p>';
+}
+
+var _raidDetailGen = 0;
+
 function raidRenderDetail() {
   var el = document.getElementById('raidDetail');
   if (!el) return;
@@ -2493,14 +2596,29 @@ function raidRenderDetail() {
     el.innerHTML = '<div class="empty">左侧选一条记录，或在上面粘贴本场角色名</div>';
     return;
   }
+  var gen = ++_raidDetailGen;
   var chips = '<div class="pgrid">' + r.names.map(function(n) {
     return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
   }).join('') + '</div>';
+
   el.innerHTML = '<div class="result-wrap" style="margin-top:0"><h3>' + fmtDateTime(r.ts)
     + ' <span style="color:var(--muted);font-weight:normal;font-size:13px">'
     + r.names.length + ' 人' + (r.note ? ' · ' + esc(r.note) : '') + '</span></h3>'
-    + '<div class="summary-box" style="margin-bottom:12px">' + chips + '</div>'
+    + '<div class="summary-box" id="raidGrouped" style="margin-bottom:12px">按军团分组查询中…</div>'
+    + '<details class="raid-all"><summary>全部名单（' + r.names.length + '）</summary>' + chips + '</details>'
     + '<p style="color:var(--dim);font-size:12px">点任意角色名查看其个人出战统计</p></div>';
+
+  raidLookupNames(r.names, function(results) {
+    if (gen !== _raidDetailGen) return;               // 已切到别的记录，丢弃
+    var box = document.getElementById('raidGrouped');
+    if (!box) return;
+    var got = results.filter(function(e) { return e.data; }).length;
+    if (!got) {
+      box.innerHTML = '无法查询军团/联盟（后端不可用或 ESI 查询失败），可展开下方「全部名单」查看。';
+      return;
+    }
+    box.innerHTML = raidGroupHtml(results);
+  });
 }
 
 // ---------- 分析 ----------
