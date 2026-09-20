@@ -2548,58 +2548,88 @@ function _raidPersonKey(name, data) {
   return t ? 't:' + t : 'n:' + String(name).toLowerCase();
 }
 
-// 把角色名按「人」归并；results 来自 raidLookupNames
-function raidPersons(names, results) {
+// 先按军团分开，军团内再按头衔归并（同头衔 = 同一玩家的多个号）。
+// 无头衔的角色各自算一个人，绝不互相合并。
+function _raidByCorp(names, results) {
   var info = {};
   results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
-  var map = {};
+  var corps = {}, unknown = [];
   names.forEach(function(n) {
     var d = info[n.toLowerCase()] || null;
-    var k = _raidPersonKey(n, d);
-    if (!map[k]) map[k] = { key: k, title: (d && d.title) || '', known: !!d, chars: [] };
-    map[k].chars.push({ name: n, data: d });
+    if (!d) { unknown.push(n); return; }
+    var ck = d.corp_ticker || d.corp_name || '?';
+    if (!corps[ck]) corps[ck] = {
+      ticker: d.corp_ticker || '', name: d.corp_name || '',
+      allianceTicker: d.alliance_ticker || '',
+      players: {}, order: []
+    };
+    var pk = _raidPersonKey(n, d);
+    if (!corps[ck].players[pk]) {
+      corps[ck].players[pk] = { title: (d.title || '').trim(), chars: [] };
+      corps[ck].order.push(pk);
+    }
+    corps[ck].players[pk].chars.push(n);
   });
-  return map;
+  return { corps: corps, unknown: unknown };
 }
 
-// 本场名单按「人」分组：一个组 = 一个玩家（含其全部角色），角色名可点开个人面板
+// 本场名单：军团 → 玩家（头衔）→ 角色；角色名可点开个人面板
 function raidPersonGroupHtml(results, names) {
-  var map = raidPersons(names, results);
-  var keys = Object.keys(map);
-  keys.sort(function(a, b) {
-    var ca = map[a].chars.length, cb = map[b].chars.length;
-    if (ca !== cb) return cb - ca;
-    return map[a].title < map[b].title ? -1 : 1;
-  });
-
-  var html = '';
-  var multiChars = 0;
-  keys.forEach(function(k) { if (map[k].chars.length > 1) multiChars += map[k].chars.length; });
-  if (multiChars > 0) {
-    html += '<p class="raid-note">本场 ' + names.length + ' 个角色，按头衔归并为 <b>'
-      + keys.length + '</b> 个玩家（其中 ' + multiChars + ' 个角色属于多头衔玩家）</p>';
+  var g = _raidByCorp(names, results);
+  var ckeys = Object.keys(g.corps);
+  if (!ckeys.length && !g.unknown.length) {
+    return '<p style="color:var(--dim);font-size:12px;margin:0">没有可分组的数据</p>';
   }
 
-  keys.forEach(function(k) {
-    var p = map[k];
-    var label = p.title || '（无头衔）';
-    var multi = p.chars.length > 1;
-    var corps = {};
-    if (multi) p.chars.forEach(function(c) { if (c.data && c.data.corp_ticker) corps[c.data.corp_ticker] = 1; });
-    html += '<div class="grp-block"><div class="grp-head">'
-      + '<b>' + esc(label) + '</b>'
-      + (multi && Object.keys(corps).length ? ' <span>' + esc(Object.keys(corps).join(' / ')) + '</span>' : '')
-      + '<em>' + (multi ? p.chars.length + ' 个角色' : '1 个角色') + '</em></div>'
-      + '<div class="pgrid">' + p.chars.map(function(c) {
-          var corp = (c.data && c.data.corp_ticker) || '';
-          return '<span class="pchip" data-pname="' + esc(c.name) + '"'
-            + (multi && corp ? ' title="' + esc(corp) + '"' : '') + '>'
-            + esc(c.name)
-            + (multi && corp ? ' <span class="chip-sub">' + esc(corp) + '</span>' : '')
-            + '</span>';
-        }).join('') + '</div></div>';
+  function charCount(c) {
+    var n = 0;
+    Object.keys(c.players).forEach(function(k) { n += c.players[k].chars.length; });
+    return n;
+  }
+  ckeys.sort(function(a, b) { return charCount(g.corps[b]) - charCount(g.corps[a]); });
+
+  var players = 0;
+  ckeys.forEach(function(k) { players += Object.keys(g.corps[k].players).length; });
+
+  var html = '<p class="raid-note">本场 <b>' + names.length + '</b> 个角色 · '
+    + ckeys.length + ' 个军团 · 归并为 <b>' + players + '</b> 个玩家</p>';
+
+  ckeys.forEach(function(ck) {
+    var c = g.corps[ck];
+    var pkeys = Object.keys(c.players);
+    html += '<div class="grp-block"><div class="grp-head"><b>' + esc(c.ticker || c.name || '?') + '</b>'
+      + ' <span>' + esc(c.name || '') + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
+      + '<em>' + charCount(c) + ' 角色 / ' + pkeys.length + ' 玩家</em></div>';
+
+    var multi = pkeys.filter(function(k) { return c.players[k].chars.length > 1; });
+    var single = pkeys.filter(function(k) { return c.players[k].chars.length === 1; });
+    multi.sort(function(a, b) { return c.players[b].chars.length - c.players[a].chars.length; });
+
+    multi.forEach(function(pk) {
+      var p = c.players[pk];
+      html += '<div class="grp-corp"><b>' + esc(p.title || '（无头衔）') + '</b>'
+        + '<em>' + p.chars.length + ' 个角色</em>'
+        + '<div class="pgrid">' + p.chars.map(function(n) {
+            return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+          }).join('') + '</div></div>';
+    });
+    if (single.length) {
+      html += '<div class="grp-corp"><div class="pgrid">' + single.map(function(pk) {
+        var p = c.players[pk], n = p.chars[0];
+        return '<span class="pchip" data-pname="' + esc(n) + '"'
+          + (p.title ? ' title="' + esc(p.title) + '"' : '') + '>' + esc(n) + '</span>';
+      }).join('') + '</div></div>';
+    }
+    html += '</div>';
   });
-  return html || '<p style="color:var(--dim);font-size:12px;margin:0">没有可分组的数据</p>';
+
+  if (g.unknown.length) {
+    html += '<div class="grp-block"><div class="grp-head"><b>未查到军团</b><em>' + g.unknown.length + ' 角色</em></div>'
+      + '<div class="grp-corp"><div class="pgrid">' + g.unknown.map(function(n) {
+          return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+        }).join('') + '</div></div></div>';
+  }
+  return html;
 }
 
 var _raidDetailGen = 0;
@@ -2695,47 +2725,96 @@ var _raidStatsAgg = null;
 
 
 // 出场排行按「联盟 → 军团 → 成员」分组；军团按总人次排序
-// 出场排行按「人」（头衔）统计：同一玩家的多个角色合并，且同一场只计一次
+// 出场排行：军团 → 玩家（头衔）；同一场同一玩家只计一次
 function raidRankGroupedHtml(results, agg) {
   var info = {};
   results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
 
-  var persons = {};
+  var corps = {}, unknown = null;
+
   _raidRecords.forEach(function(r) {
     var seen = {};
     r.names.forEach(function(n) {
       var d = info[n.toLowerCase()] || null;
-      var k = _raidPersonKey(n, d);
-      if (seen[k]) return;                       // 同一场同一人只算一次
-      seen[k] = 1;
-      if (!persons[k]) persons[k] = { title: (d && d.title) || '', chars: {}, runs: 0 };
-      persons[k].chars[n] = 1;
-      persons[k].runs++;
+      var pk = _raidPersonKey(n, d);
+      var ck = d ? (d.corp_ticker || d.corp_name || '?') : '__unknown__';
+      var gk = ck + '|' + pk;
+      if (seen[gk]) return;                       // 同一场同一玩家只算一次
+      seen[gk] = 1;
+
+      var box;
+      if (d) {
+        if (!corps[ck]) corps[ck] = {
+          ticker: d.corp_ticker || '', name: d.corp_name || '', allianceTicker: d.alliance_ticker || '', players: {}
+        };
+        box = corps[ck];
+      } else {
+        if (!unknown) unknown = { players: {} };
+        box = unknown;
+      }
+      if (!box.players[pk]) box.players[pk] = { title: (d && d.title || '').trim(), runs: 0, chars: {} };
+      box.players[pk].chars[n] = 1;
+      box.players[pk].runs++;
     });
   });
 
-  var list = Object.keys(persons).map(function(k) { return persons[k]; });
-  list.sort(function(a, b) { return b.runs - a.runs || (a.title < b.title ? -1 : 1); });
-  if (!list.length) return '<p style="color:var(--dim);font-size:12px;margin:0">没有可分组的数据</p>';
-
-  var max = list[0].runs;
-  var charTotal = Object.keys(agg.perPerson).length;
-  var multi = list.filter(function(p) { return Object.keys(p.chars).length > 1; }).length;
-  var html = '';
-  if (list.length !== charTotal || multi) {
-    html += '<p class="raid-note">共 <b>' + list.length + '</b> 个玩家 / ' + charTotal + ' 个角色'
-      + (multi ? '（' + multi + ' 个玩家有多个角色，已合并计数）' : '') + '</p>';
+  var ckeys = Object.keys(corps);
+  if (!ckeys.length && !unknown) {
+    return '<p style="color:var(--dim);font-size:12px;margin:0">没有可分组的数据</p>';
   }
 
-  html += list.map(function(p) {
+  function runsOf(c) {
+    var n = 0;
+    Object.keys(c.players).forEach(function(k) { n += c.players[k].runs; });
+    return n;
+  }
+  ckeys.sort(function(a, b) { return runsOf(corps[b]) - runsOf(corps[a]); });
+
+  var maxRuns = 0;
+  ckeys.forEach(function(k) {
+    Object.keys(corps[k].players).forEach(function(p) { maxRuns = Math.max(maxRuns, corps[k].players[p].runs); });
+  });
+  if (unknown) Object.keys(unknown.players).forEach(function(p) { maxRuns = Math.max(maxRuns, unknown.players[p].runs); });
+  maxRuns = maxRuns || 1;
+
+  function tail(v) {
+    var pct = Math.max(3, Math.round(v / maxRuns * 100));
+    return '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>'
+      + '<span class="bar-val">' + v + '</span>';
+  }
+  function playerRow(p) {
     var chars = Object.keys(p.chars);
-    if (chars.length === 1) return _barRow(chars[0], p.runs, max, true);
-    return '<div class="rank-person">'
-      + _barRow(p.title || '（无头衔）', p.runs, max, false)
+    if (chars.length === 1) {
+      return '<div class="bar-row"><span class="pname bar-lbl" data-pname="' + esc(chars[0]) + '"'
+        + (p.title ? ' title="' + esc(p.title) + '"' : '') + '>' + esc(chars[0]) + '</span>' + tail(p.runs) + '</div>';
+    }
+    return '<div class="rank-person"><div class="bar-row">'
+      + '<span class="bar-lbl">' + esc(p.title || '（无头衔）') + '</span>' + tail(p.runs) + '</div>'
       + '<div class="pgrid rank-chars">' + chars.map(function(n) {
           return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
         }).join('') + '</div></div>';
-  }).join('');
+  }
+
+  var totalPlayers = 0;
+  ckeys.forEach(function(k) { totalPlayers += Object.keys(corps[k].players).length; });
+  var html = '<p class="raid-note">共 <b>' + totalPlayers + '</b> 个玩家 / '
+    + Object.keys(agg.perPerson).length + ' 个角色 · ' + ckeys.length + ' 个军团（同场同人只计一次）</p>';
+
+  ckeys.forEach(function(ck) {
+    var c = corps[ck];
+    var pkeys = Object.keys(c.players);
+    html += '<div class="grp-block"><div class="grp-head"><b>' + esc(c.ticker || c.name || '?') + '</b>'
+      + ' <span>' + esc(c.name || '') + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
+      + '<em>' + pkeys.length + ' 玩家 / ' + runsOf(c) + ' 人次</em></div>'
+      + '<div class="grp-corp">' + pkeys.map(function(k) { return playerRow(c.players[k]); }).join('') + '</div></div>';
+  });
+
+  if (unknown) {
+    var ukeys = Object.keys(unknown.players);
+    html += '<div class="grp-block"><div class="grp-head"><b>未查到军团</b>'
+      + '<em>' + ukeys.length + ' 玩家</em></div><div class="grp-corp">'
+      + ukeys.map(function(k) { return playerRow(unknown.players[k]); }).join('') + '</div></div>';
+  }
   return html;
 }
 
