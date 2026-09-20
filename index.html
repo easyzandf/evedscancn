@@ -7,7 +7,15 @@
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="icon" type="image/png" sizes="256x256" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link href="https://fonts.googleapis.com/css?family=Montserrat:400,700" rel="stylesheet">
+<!-- Montserrat, loaded without blocking.
+     media="print" + onload: a render-blocking stylesheet would stall first paint
+     until the request times out wherever fonts.googleapis.com is unreachable
+     (e.g. mainland China).
+     data-html2canvas-ignore: html2canvas clones the document into an iframe, and
+     the clone would otherwise wait on that same unreachable request - screenshots
+     went from ~150ms to ~18s because of it. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat:400,700" media="print" onload="this.media='all'" data-html2canvas-ignore="true">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat:400,700"></noscript>
 <style>
   body {
     background: #1a1a2e;
