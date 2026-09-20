@@ -893,6 +893,13 @@
   /* 同一玩家（同头衔）的多个角色：淡色底 + 组首分隔线 */
   .rank-tbl tr.pp td { background: var(--brand-dim); }
   .pchip.home { border-color: var(--brand); }
+  /* 玩家-角色对照：同一个玩家的角色按军团分行 */
+  .corp-line { display: flex; align-items: baseline; gap: 8px; margin: 3px 0; }
+  .corp-tag {
+    flex: 0 0 auto; min-width: 52px; font-size: 11px; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .corp-tag.home { color: var(--brand-2); font-weight: 600; }
   #raidDist .stat-card b { font-size: 20px; }
   #raidDist .ship-tbl td { vertical-align: top; }
   .rank-tbl tr.pp-first td { border-top: 1px solid var(--border); }
@@ -2974,10 +2981,29 @@ function raidDistributionHtml(results, agg) {
         var label = p.title || (p.chars.length === 1 ? p.chars[0].name : '（无头衔）');
         return '<tr><td>' + esc(label) + '</td>'
           + '<td class="num">' + p.chars.length + '</td>'
-          + '<td><div class="pgrid">' + p.chars.map(function(c) {
-              return '<span class="pchip' + (isHome(c.corp) ? ' home' : '') + '" data-pname="' + esc(c.name) + '">'
-                + esc(c.name) + ' <span class="chip-sub">' + esc(c.corp) + '</span></span>';
-            }).join('') + '</div></td>'
+          + '<td>' + (function() {
+              // 角色按军团分行：跨军团的小号会分成两行显示
+              var byCorp = {}, order = [];
+              p.chars.forEach(function(c) {
+                if (!byCorp[c.corp]) { byCorp[c.corp] = []; order.push(c.corp); }
+                byCorp[c.corp].push(c);
+              });
+              order.sort(function(a, b) {
+                var ha = isHome(a) ? 0 : 1, hb = isHome(b) ? 0 : 1;
+                if (ha !== hb) return ha - hb;                    // 本方军团排前面
+                if (byCorp[b].length !== byCorp[a].length) return byCorp[b].length - byCorp[a].length;
+                return a < b ? -1 : 1;
+              });
+              return order.map(function(corp) {
+                var list = byCorp[corp].slice().sort(function(x, y) { return x.name < y.name ? -1 : 1; });
+                return '<div class="corp-line"><span class="corp-tag' + (isHome(corp) ? ' home' : '') + '">'
+                  + esc(corp) + '</span><span class="pgrid">'
+                  + list.map(function(c) {
+                      return '<span class="pchip" data-pname="' + esc(c.name) + '">' + esc(c.name) + '</span>';
+                    }).join('')
+                  + '</span></div>';
+              }).join('');
+            })() + '</td>'
           + '<td class="num">' + p.runs + '</td></tr>';
       }).join('')
     + '</tbody></table></div>';
