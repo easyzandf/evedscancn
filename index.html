@@ -928,7 +928,12 @@
     font-variant-numeric: tabular-nums;
   }
   .corp-tag.home { color: var(--brand-2); font-weight: 600; }
-  .corp-cnt { flex: 0 0 auto; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  /* 军团后面的「×N 角色 / N 场」：做成小胶囊，跟角色胶囊同一套语言，一眼能扫到 */
+  .corp-cnt {
+    flex: 0 0 auto; font-size: 11px; color: var(--muted);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 1px 8px; font-variant-numeric: tabular-nums;
+  }
   #raidDist .stat-card b { font-size: 20px; }
   #raidDist .ship-tbl td { vertical-align: top; }
   .rank-tbl tr.pp-first td { border-top: 1px solid var(--border); }
@@ -3422,7 +3427,7 @@ function raidShowTitle(K, title) {
       + '名下角色（' + Object.keys(chars).length + ' 个）</h3>';
     html += corpOrder.map(function(corp) {
       return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(corp) ? ' home' : '') + '">'
-        + esc(corp) + '</span><span class="corp-cnt">×' + byCorp[corp].length + '</span>'
+        + esc(corp) + '</span><span class="corp-cnt">×' + byCorp[corp].length + ' 角色</span>'
         + '<span class="pgrid">' + byCorp[corp].map(function(n) {
             return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
           }).join('') + '</span></div>';
