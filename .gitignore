@@ -12,3 +12,7 @@ eve-ships-data.json
 missing_new.json
 traits-data.json
 __pycache__/
+
+# 30人本记录数据库（服务器本地数据）
+raid_data/
+raid.db

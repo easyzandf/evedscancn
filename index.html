@@ -783,6 +783,95 @@
   /* misc */
   .empty { color: var(--dim); }
 
+  /* ---------- 30人本记录 ---------- */
+  .raid-cols { display: flex; gap: 16px; align-items: flex-start; }
+  .raid-side {
+    flex: 0 0 264px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .raid-side-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-bottom: 1px solid var(--border-soft);
+  }
+  .raid-side-head .lbl { margin: 0; color: var(--muted); font-size: 12px; }
+  .raid-side-head .sync { font-size: 11px; color: var(--dim); }
+  .raid-side-head .sync.warn { color: var(--brand); }
+  .raid-list { max-height: 470px; overflow-y: auto; }
+  .raid-item {
+    display: flex; gap: 8px; align-items: center;
+    padding: 9px 12px; cursor: pointer;
+    border-bottom: 1px solid var(--border-soft);
+    border-left: 3px solid transparent;
+  }
+  .raid-item:hover { background: var(--surface-2); }
+  .raid-item.on { background: var(--brand-dim); border-left-color: var(--brand); }
+  .raid-item .when { flex: 1; min-width: 0; }
+  .raid-item .when b { display: block; font-size: 13px; color: var(--text); font-weight: 600; }
+  .raid-item .when span { font-size: 11px; color: var(--dim); }
+  .raid-item .cnt { font-size: 12px; color: var(--green); font-weight: 600; white-space: nowrap; }
+  .raid-item .cnt.odd { color: var(--brand); }
+  .raid-item .ops { display: none; gap: 1px; }
+  .raid-item:hover .ops { display: flex; }
+  .raid-item .ops button {
+    background: none; border: none; color: var(--dim); cursor: pointer;
+    font-size: 13px; padding: 2px 4px; line-height: 1;
+  }
+  .raid-item .ops button:hover { color: var(--brand); }
+  .raid-side-foot {
+    display: flex; gap: 6px; padding: 9px 12px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .raid-mini {
+    flex: 1; font-size: 12px; padding: 5px 0; border-radius: 5px; cursor: pointer;
+    background: none; border: 1px solid var(--border); color: var(--muted);
+  }
+  .raid-mini:hover { color: var(--text); border-color: var(--brand); }
+
+  .raid-main { flex: 1; min-width: 0; }
+  .raid-input { height: 165px; }
+  .raid-tabs { display: flex; gap: 6px; margin: 20px 0 12px; }
+  .raid-tab {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 6px 18px; border-radius: 20px; cursor: pointer; font-size: 13px;
+  }
+  .raid-tab.on { background: var(--brand-dim); border-color: var(--brand); color: var(--brand-2); font-weight: 600; }
+
+  /* 可点击的角色名 */
+  .pname { color: var(--cyan); cursor: pointer; border-bottom: 1px dashed transparent; }
+  .pname:hover { border-bottom-color: var(--cyan); }
+
+  /* 参与者胶囊 */
+  .pgrid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pchip {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 20px; padding: 3px 12px; font-size: 12px;
+    color: var(--text); cursor: pointer;
+  }
+  .pchip:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* 统计卡片 */
+  .stat-grid { display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 18px; }
+  .stat-card {
+    flex: 1; min-width: 118px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px;
+  }
+  .stat-card b { display: block; font-size: 22px; color: var(--brand-2); font-weight: 700; }
+  .stat-card span { font-size: 12px; color: var(--muted); }
+
+  /* CSS 条形图 */
+  .bar-row { display: flex; align-items: center; gap: 10px; padding: 3px 0; font-size: 13px; }
+  .bar-row .bar-lbl {
+    flex: 0 0 156px; color: var(--text); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bar-row .bar-track { flex: 1; background: var(--surface-2); border-radius: 4px; height: 16px; overflow: hidden; }
+  .bar-row .bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+  .bar-row .bar-val { flex: 0 0 54px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+
   /* responsive */
   @media (max-width: 760px) {
     .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
@@ -794,6 +883,10 @@
     .btnbar .hint, .buy-bar .hint2 { width: 100%; margin-left: 0; }
     .buy-cols { flex-direction: column; }
     .buy-cols .col { width: 100%; }
+    .raid-cols { flex-direction: column; }
+    .raid-side { flex: 1 1 auto; width: 100%; }
+    .raid-list { max-height: 240px; }
+    .bar-row .bar-lbl { flex: 0 0 92px; }
   }
 </style>
 </head>
@@ -805,6 +898,7 @@
     <a href="#" class="on" data-pg="scan"><i data-lucide="radar"></i>D-Scan 解析</a>
     <a href="#" data-pg="browse"><i data-lucide="ship"></i>舰船浏览器</a>
     <a href="#" data-pg="buy"><i data-lucide="shopping-cart"></i>装备购买</a>
+    <a href="#" data-pg="raid"><i data-lucide="users"></i>30人本</a>
     <a href="#" data-pg="about"><i data-lucide="info"></i>帮助</a>
   </div>
   <button class="tog" onclick="toggleTheme()" aria-label="切换主题">
@@ -893,6 +987,49 @@
     </div>
 
     <div class="result-wrap hidden" id="buyResult"></div>
+  </div>
+
+  <!-- 30人本记录 page -->
+  <div id="pg-raid" class="hidden">
+    <div class="page-head">
+      <span class="eyebrow"><i data-lucide="users"></i>EVE Online</span>
+      <h1>30人本记录</h1>
+      <p>粘贴本场角色名，按当前时间存档；点记录复现参与者，点角色名看个人出战统计</p>
+    </div>
+
+    <div class="raid-cols">
+      <aside class="raid-side">
+        <div class="raid-side-head">
+          <span class="lbl">记录 <b id="raidCount">0</b></span>
+          <span class="sync" id="raidSync">…</span>
+        </div>
+        <div id="raidList" class="raid-list"></div>
+        <div class="raid-side-foot">
+          <button class="btn-clr raid-mini" onclick="raidExport()">导出</button>
+          <button class="btn-clr raid-mini" onclick="document.getElementById('raidImportFile').click()">导入</button>
+          <button class="btn-clr raid-mini" onclick="raidShowSync()">同步码</button>
+          <input type="file" id="raidImportFile" accept=".json,application/json" style="display:none" onchange="raidImport(this)">
+        </div>
+      </aside>
+
+      <section class="raid-main">
+        <div class="lbl">① 粘贴本场角色名（每行一个，也可直接粘贴扫描原文自动提取）</div>
+        <textarea class="scanbox raid-input" id="raidInput"
+          placeholder="每行一个角色名，例如：&#10;autofei&#10;zhong jh&#10;Xinxinxinnn"></textarea>
+        <div class="btnbar">
+          <button class="btn btn-go" onclick="raidAddRecord()"><i data-lucide="plus"></i>解析并记录</button>
+          <button class="btn btn-clr" onclick="document.getElementById('raidInput').value=''">清空</button>
+          <span class="hint" id="raidHint">解析后自动按当前时间生成一条记录</span>
+        </div>
+
+        <div class="raid-tabs">
+          <button class="raid-tab on" data-view="detail" onclick="raidSwitchView('detail')">本场详情</button>
+          <button class="raid-tab" data-view="stats" onclick="raidSwitchView('stats')">分析</button>
+        </div>
+        <div id="raidDetail" class="raid-view"></div>
+        <div id="raidStats" class="raid-view hidden"></div>
+      </section>
+    </div>
   </div>
 
   <!-- About / README page -->
@@ -986,6 +1123,17 @@
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- 角色参战详情（30人本） -->
+<div class="modal-overlay" id="personModal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="title" id="personTitle">角色</div>
+      <button class="modal-close" onclick="closePersonModal()">✕</button>
+    </div>
+    <div class="modal-body" id="personBody"></div>
   </div>
 </div>
 
@@ -1558,10 +1706,11 @@ function closeModal() {
 // close on overlay click
 document.addEventListener('click', function(e) {
   if (e.target && e.target.id === 'shipModal') closeModal();
+  if (e.target && e.target.id === 'personModal') closePersonModal();
 });
 // close on ESC
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Escape') { closeModal(); closePersonModal(); }
 });
 
 function copyLink() {
@@ -1792,7 +1941,9 @@ function switchPg(pg) {
   document.getElementById('pg-scan').classList.toggle('hidden', pg !== 'scan');
   document.getElementById('pg-browse').classList.toggle('hidden', pg !== 'browse');
   document.getElementById('pg-buy').classList.toggle('hidden', pg !== 'buy');
+  document.getElementById('pg-raid').classList.toggle('hidden', pg !== 'raid');
   document.getElementById('pg-about').classList.toggle('hidden', pg !== 'about');
+  if (pg === 'raid' && typeof raidInit === 'function') raidInit();
 }
 
 // -- theme --
@@ -2081,6 +2232,449 @@ function clearBuy() {
   el.classList.add('hidden');
   el.innerHTML = '';
 }
+
+/* ===================== 30人本记录 ===================== */
+
+var RAID_LS_RECORDS = 'eve-raid-records';
+var RAID_LS_CODE    = 'eve-raid-sync-code';
+var RAID_LS_TOMB    = 'eve-raid-tombstones';
+
+var _raidRecords = [];      // 工作副本（localStorage 为准，服务器做持久化）
+var _raidTomb = [];         // 已删除的 id，防止从服务器合并时"复活"
+var _raidSel = null;        // 当前选中的记录 id
+var _raidView = 'detail';
+var _raidSync = 'idle';     // idle | syncing | synced | pending | offline
+var _raidReady = false;
+
+// ---------- 时间格式化（本地时区）----------
+function _pad2(n) { return (n < 10 ? '0' : '') + n; }
+function fmtDateTime(ms) {
+  var d = new Date(ms);
+  return d.getFullYear() + '-' + _pad2(d.getMonth() + 1) + '-' + _pad2(d.getDate())
+       + ' ' + _pad2(d.getHours()) + ':' + _pad2(d.getMinutes());
+}
+function fmtDateKey(ms) {
+  var d = new Date(ms);
+  return d.getFullYear() + '-' + _pad2(d.getMonth() + 1) + '-' + _pad2(d.getDate());
+}
+function toLocalInput(ms) {   // <input type="datetime-local"> 用
+  var d = new Date(ms);
+  return fmtDateKey(ms) + 'T' + _pad2(d.getHours()) + ':' + _pad2(d.getMinutes());
+}
+
+// ---------- 本地存储 ----------
+function raidCode() {
+  var c = localStorage.getItem(RAID_LS_CODE);
+  if (!c) {
+    c = 'raid' + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem(RAID_LS_CODE, c);
+  }
+  return c;
+}
+function raidLoad() {
+  try { _raidRecords = JSON.parse(localStorage.getItem(RAID_LS_RECORDS) || '[]') || []; }
+  catch (e) { _raidRecords = []; }
+  try { _raidTomb = JSON.parse(localStorage.getItem(RAID_LS_TOMB) || '[]') || []; }
+  catch (e) { _raidTomb = []; }
+  if (!Array.isArray(_raidRecords)) _raidRecords = [];
+  if (!Array.isArray(_raidTomb)) _raidTomb = [];
+}
+function raidSaveLocal() {
+  try { localStorage.setItem(RAID_LS_RECORDS, JSON.stringify(_raidRecords)); } catch (e) {}
+  try { localStorage.setItem(RAID_LS_TOMB, JSON.stringify(_raidTomb.slice(-500))); } catch (e) {}
+}
+
+// ---------- 服务器同步（best-effort，失败不影响本地）----------
+function _raidSetSync(s) { _raidSync = s; raidRenderSync(); }
+function raidRenderSync() {
+  var el = document.getElementById('raidSync');
+  if (!el) return;
+  var txt = { idle: '…', syncing: '同步中…', synced: '已同步', pending: '待同步', offline: '离线' }[_raidSync] || '';
+  el.textContent = txt;
+  el.className = 'sync' + ((_raidSync === 'pending' || _raidSync === 'offline') ? ' warn' : '');
+}
+function raidPush(rec, cb) {
+  _fetch('POST', 'raid.php', JSON.stringify({ action: 'save', code: raidCode(), record: rec }), function(res) {
+    var ok = !!(res && res.ok);
+    if (ok) _raidSetSync('synced'); else _raidSetSync('offline');
+    if (cb) cb(ok);
+  });
+}
+function raidPushDelete(id, cb) {
+  _fetch('POST', 'raid.php', JSON.stringify({ action: 'delete', code: raidCode(), id: id }), function(res) {
+    var ok = !!(res && res.ok);
+    if (ok) _raidSetSync('synced'); else _raidSetSync('offline');
+    if (cb) cb(ok);
+  });
+}
+// 拉取服务器记录并与本地合并
+function raidPull() {
+  _raidSetSync('syncing');
+  _fetch('GET', 'raid.php?action=list&code=' + encodeURIComponent(raidCode()), null, function(res) {
+    if (!res || !Array.isArray(res.records)) { _raidSetSync('offline'); return; }
+    var byId = {};
+    _raidRecords.forEach(function(r) { byId[r.id] = r; });
+    res.records.forEach(function(remote) {
+      if (_raidTomb.indexOf(remote.id) !== -1) return;          // 本地已删，忽略
+      var local = byId[remote.id];
+      if (!local || (remote.updatedAt || 0) > (local.updatedAt || 0)) byId[remote.id] = remote;
+    });
+    _raidRecords = Object.keys(byId).map(function(k) { return byId[k]; });
+    raidSaveLocal();
+    _raidSetSync('synced');
+    raidRenderAll();
+  });
+}
+
+// ---------- 解析角色名 ----------
+// 与 doScan 的提取规则保持一致，但独立实现：D-Scan 是核心功能，不牵连改动。
+function parseNameList(raw) {
+  var out = [];
+  var seen = {};
+  (raw || '').split(/\r?\n/).forEach(function(line) {
+    var name = '';
+    var cols = line.split('\t');
+    if (cols.length >= 2) {
+      // tab 行：第 2 列可能是 "船名 - 角色名"
+      var desc = cols[1].trim();
+      var i = desc.lastIndexOf(' - ');
+      name = (i > 0) ? desc.substring(i + 3).trim() : '';
+      if (!name) return;
+      if (/^[A-Z]?\d/.test(name)) return;                       // 排除 T2 / V2 之类
+    } else {
+      name = line.trim();
+      if (!name) return;
+      if (/^\d{4,}$/.test(name)) return;                        // 排除 typeID
+    }
+    if (name.length < 3 || name.length >= 50) return;
+    if (name.indexOf('*') !== -1) return;
+    var key = name.toLowerCase();
+    if (seen[key]) return;                                      // 场内去重（大小写不敏感）
+    seen[key] = 1;
+    out.push(name);
+  });
+  return out;
+}
+
+// ---------- 记录增删改 ----------
+function raidAddRecord() {
+  var names = parseNameList(document.getElementById('raidInput').value);
+  if (!names.length) { alert('没有解析到角色名，请检查粘贴内容'); return; }
+  var now = Date.now();
+  var rec = {
+    id: 'r' + now + '-' + Math.random().toString(36).slice(2, 6),
+    ts: now,
+    note: '',
+    names: names,
+    updatedAt: now
+  };
+  _raidRecords.unshift(rec);
+  _raidSel = rec.id;
+  raidSaveLocal();
+  raidRenderAll();
+  document.getElementById('raidInput').value = '';
+  _raidSetSync('syncing');
+  raidPush(rec);
+  document.getElementById('raidHint').textContent =
+    '已记录 ' + names.length + ' 人' + (names.length === 30 ? '' : '（非 30 人）');
+}
+function raidDelete(id) {
+  var r = _raidRecords.filter(function(x) { return x.id === id; })[0];
+  if (!r) return;
+  if (!confirm('删除 ' + fmtDateTime(r.ts) + ' 的记录（' + r.names.length + ' 人）？')) return;
+  _raidRecords = _raidRecords.filter(function(x) { return x.id !== id; });
+  if (_raidTomb.indexOf(id) === -1) _raidTomb.push(id);
+  if (_raidSel === id) _raidSel = _raidRecords.length ? _raidRecords[0].id : null;
+  raidSaveLocal();
+  raidRenderAll();
+  raidPushDelete(id);
+}
+function raidEdit(id) {
+  var r = _raidRecords.filter(function(x) { return x.id === id; })[0];
+  if (!r) return;
+  var note = prompt('备注 / 名称：', r.note || '');
+  if (note === null) return;
+  var when = prompt('时间（YYYY-MM-DD HH:mm）：', fmtDateTime(r.ts));
+  if (when === null) return;
+  var t = Date.parse(when.replace(' ', 'T'));
+  if (isNaN(t)) { alert('时间格式无法识别，已保留原时间'); t = r.ts; }
+  r.note = note.slice(0, 200);
+  r.ts = t;
+  r.updatedAt = Date.now();
+  raidSaveLocal();
+  raidRenderAll();
+  _raidSetSync('syncing');
+  raidPush(r);
+}
+
+// ---------- 导入 / 导出 ----------
+function raidExport() {
+  var blob = new Blob([JSON.stringify({ v: 1, records: _raidRecords }, null, 2)], { type: 'application/json' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'raid-records-' + fmtDateKey(Date.now()) + '.json';
+  a.click();
+  setTimeout(function() { URL.revokeObjectURL(a.href); }, 2000);
+}
+function raidImport(input) {
+  var f = input.files && input.files[0];
+  if (!f) return;
+  var fr = new FileReader();
+  fr.onload = function() {
+    var n = 0;
+    try {
+      var d = JSON.parse(fr.result);
+      var list = Array.isArray(d) ? d : (d.records || []);
+      var byId = {};
+      _raidRecords.forEach(function(r) { byId[r.id] = r; });
+      list.forEach(function(r) {
+        if (!r || !r.id || !Array.isArray(r.names)) return;
+        var local = byId[r.id];
+        if (!local || (r.updatedAt || 0) > (local.updatedAt || 0)) { byId[r.id] = r; n++; }
+      });
+      _raidRecords = Object.keys(byId).map(function(k) { return byId[k]; });
+      raidSaveLocal();
+      raidRenderAll();
+    } catch (e) { alert('导入失败：文件不是有效的 JSON'); }
+    input.value = '';
+    if (n) alert('已合并 ' + n + ' 条记录到本地（下次同步会上传）');
+  };
+  fr.readAsText(f);
+}
+function raidShowSync() {
+  var c = raidCode();
+  var inp = prompt('同步码（在另一台设备填入同一个码即可取回记录）：', c);
+  if (inp && inp.trim() && inp.trim() !== c) {
+    localStorage.setItem(RAID_LS_CODE, inp.trim());
+    raidPull();
+  }
+}
+
+// ---------- 视图 ----------
+function raidInit() {
+  if (!_raidReady) { raidLoad(); _raidReady = true; raidRenderAll(); raidPull(); }
+}
+function raidRenderAll() { raidRenderList(); raidRenderDetail(); raidRenderStats(); }
+function raidRenderList() {
+  var el = document.getElementById('raidList');
+  if (!el) return;
+  document.getElementById('raidCount').textContent = _raidRecords.length;
+  if (!_raidRecords.length) {
+    el.innerHTML = '<div class="empty" style="padding:16px 12px">还没有记录<br>在右边粘贴角色名后点「解析并记录」</div>';
+    return;
+  }
+  var list = _raidRecords.slice().sort(function(a, b) { return b.ts - a.ts; });
+  el.innerHTML = list.map(function(r) {
+    var n = r.names.length;
+    return '<div class="raid-item' + (r.id === _raidSel ? ' on' : '') + '" data-raid-select="' + esc(r.id) + '">'
+      + '<div class="when"><b>' + fmtDateTime(r.ts) + '</b>'
+      + '<span>' + (r.note ? esc(r.note) + ' · ' : '') + '#' + esc(r.id.slice(-4)) + '</span></div>'
+      + '<div class="cnt' + (n === 30 ? '' : ' odd') + '">' + n + ' 人</div>'
+      + '<div class="ops">'
+      + '<button title="编辑" data-raid-op="edit" data-raid-id="' + esc(r.id) + '">✎</button>'
+      + '<button title="删除" data-raid-op="delete" data-raid-id="' + esc(r.id) + '">✕</button>'
+      + '</div></div>';
+  }).join('');
+}
+function raidSelect(id) { _raidSel = id; raidRenderList(); raidRenderDetail(); }
+function raidSwitchView(v) {
+  _raidView = v;
+  document.querySelectorAll('.raid-tab').forEach(function(b) {
+    b.classList.toggle('on', b.dataset.view === v);
+  });
+  document.getElementById('raidDetail').classList.toggle('hidden', v !== 'detail');
+  document.getElementById('raidStats').classList.toggle('hidden', v !== 'stats');
+}
+function raidRenderDetail() {
+  var el = document.getElementById('raidDetail');
+  if (!el) return;
+  var r = _raidRecords.filter(function(x) { return x.id === _raidSel; })[0];
+  if (!r) {
+    el.innerHTML = '<div class="empty">左侧选一条记录，或在上面粘贴本场角色名</div>';
+    return;
+  }
+  var chips = '<div class="pgrid">' + r.names.map(function(n) {
+    return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+  }).join('') + '</div>';
+  el.innerHTML = '<div class="result-wrap" style="margin-top:0"><h3>' + fmtDateTime(r.ts)
+    + ' <span style="color:var(--muted);font-weight:normal;font-size:13px">'
+    + r.names.length + ' 人' + (r.note ? ' · ' + esc(r.note) : '') + '</span></h3>'
+    + '<div class="summary-box" style="margin-bottom:12px">' + chips + '</div>'
+    + '<p style="color:var(--dim);font-size:12px">点任意角色名查看其个人出战统计</p></div>';
+}
+
+// ---------- 分析 ----------
+function _raidAgg() {
+  var perPerson = {};   // 小写名 -> { name, runs: [], hours: {}, }
+  var hours = new Array(24).fill(0);
+  var dates = {};
+  _raidRecords.forEach(function(r) {
+    var h = new Date(r.ts).getHours();
+    hours[h]++;
+    var dk = fmtDateKey(r.ts);
+    dates[dk] = (dates[dk] || 0) + 1;
+    r.names.forEach(function(n) {
+      var k = n.toLowerCase();
+      if (!perPerson[k]) perPerson[k] = { name: n, runs: [], hours: new Array(24).fill(0), dates: {} };
+      perPerson[k].runs.push(r);
+      perPerson[k].hours[h]++;
+      perPerson[k].dates[dk] = (perPerson[k].dates[dk] || 0) + 1;
+    });
+  });
+  return { perPerson: perPerson, hours: hours, dates: dates };
+}
+function _barRow(label, val, max, cls) {
+  var pct = max > 0 ? Math.round(val / max * 100) : 0;
+  var lbl = cls ? '<span class="pname bar-lbl" data-pname="' + esc(label) + '">' + esc(label) + '</span>'
+                : '<span class="bar-lbl">' + esc(label) + '</span>';
+  return '<div class="bar-row">' + lbl
+    + '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>'
+    + '<span class="bar-val">' + val + '</span></div>';
+}
+function raidRenderStats() {
+  var el = document.getElementById('raidStats');
+  if (!el) return;
+  if (!_raidRecords.length) { el.innerHTML = '<div class="empty">还没有记录，无法分析</div>'; return; }
+
+  var agg = _raidAgg();
+  var people = Object.keys(agg.perPerson).map(function(k) { return agg.perPerson[k]; });
+  people.sort(function(a, b) { return b.runs.length - a.runs.length || (a.name < b.name ? -1 : 1); });
+
+  var totalRuns = _raidRecords.length;
+  var totalSlots = _raidRecords.reduce(function(s, r) { return s + r.names.length; }, 0);
+
+  var html = '<div class="stat-grid">'
+    + '<div class="stat-card"><b>' + totalRuns + '</b><span>总场次</span></div>'
+    + '<div class="stat-card"><b>' + totalSlots + '</b><span>总人次</span></div>'
+    + '<div class="stat-card"><b>' + people.length + '</b><span>不同角色</span></div>'
+    + '<div class="stat-card"><b>' + (totalRuns ? (totalSlots / totalRuns).toFixed(1) : '0') + '</b><span>平均每场人数</span></div>'
+    + '</div>';
+
+  // 出场次数排行
+  html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:0 0 10px">出场次数排行</h3>';
+  var maxRuns = people.length ? people[0].runs.length : 0;
+  html += people.slice(0, 60).map(function(p) { return _barRow(p.name, p.runs.length, maxRuns, true); }).join('');
+  if (people.length > 60) html += '<p style="color:var(--dim);font-size:12px">仅显示前 60 名（共 ' + people.length + ' 人）</p>';
+
+  // 日内时段分布
+  html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:24px 0 10px">日内时段分布（本机时区）</h3>';
+  var maxH = Math.max.apply(null, agg.hours);
+  html += agg.hours.map(function(v, i) { return _barRow(_pad2(i) + ':00', v, maxH, false); }).join('');
+
+  // 日期分布
+  var dkeys = Object.keys(agg.dates).sort();
+  html += '<h3 style="color:var(--brand);font-size:15px;font-weight:normal;margin:24px 0 10px">日期分布</h3>';
+  var maxD = dkeys.reduce(function(m, k) { return Math.max(m, agg.dates[k]); }, 0);
+  html += dkeys.map(function(k) { return _barRow(k, agg.dates[k], maxD, false); }).join('');
+
+  el.innerHTML = html;
+}
+
+// ---------- 角色个人面板 ----------
+function raidShowPerson(name) {
+  var agg = _raidAgg();
+  var p = agg.perPerson[name.toLowerCase()];
+  var m = document.getElementById('personModal');
+  document.getElementById('personTitle').textContent = name;
+  var body = document.getElementById('personBody');
+
+  if (!p) {
+    body.innerHTML = '<div class="empty">没有该角色的记录</div>';
+    m.classList.add('show');
+    return;
+  }
+
+  var runs = p.runs.slice().sort(function(a, b) { return b.ts - a.ts; });
+  var first = runs[runs.length - 1].ts, last = runs[0].ts;
+  var days = Object.keys(p.dates).length;
+  var span = Math.max(1, Math.ceil((last - first) / 86400000) + 1);
+
+  var html = '<div class="stat-grid">'
+    + '<div class="stat-card"><b>' + runs.length + '</b><span>出场场次</span></div>'
+    + '<div class="stat-card"><b>' + days + '</b><span>出战天数</span></div>'
+    + '<div class="stat-card"><b>' + fmtDateKey(first) + '</b><span>首次</span></div>'
+    + '<div class="stat-card"><b>' + fmtDateKey(last) + '</b><span>最近</span></div>'
+    + '</div>';
+
+  // ESI 身份（复用已有接口）
+  html += '<div class="summary-box" id="personEsi" style="margin-bottom:14px">查询军团/联盟中…</div>';
+
+  // 时段习惯
+  html += '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:16px 0 8px">时段习惯</h3>';
+  var maxH = Math.max.apply(null, p.hours);
+  html += p.hours.map(function(v, i) {
+    return v ? _barRow(_pad2(i) + ':00', v, maxH, false) : '';
+  }).join('') || '<p style="color:var(--dim);font-size:12px">—</p>';
+
+  // 同队排行
+  var co = {};
+  runs.forEach(function(r) {
+    r.names.forEach(function(n) {
+      if (n.toLowerCase() === name.toLowerCase()) return;
+      var k = n.toLowerCase();
+      if (!co[k]) co[k] = { name: n, n: 0 };
+      co[k].n++;
+    });
+  });
+  var coList = Object.keys(co).map(function(k) { return co[k]; })
+    .sort(function(a, b) { return b.n - a.n || (a.name < b.name ? -1 : 1); }).slice(0, 10);
+  if (coList.length) {
+    html += '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:16px 0 8px">常一起出战</h3>';
+    var maxC = coList[0].n;
+    html += coList.map(function(c) { return _barRow(c.name, c.n, maxC, true); }).join('');
+  }
+
+  // 参战记录
+  html += '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:16px 0 8px">参战记录</h3>';
+  html += '<div class="tbl-wrap"><table class="ship-tbl"><thead><tr>'
+    + '<th style="width:60%">时间</th><th>本场人数</th><th>备注</th></tr></thead><tbody>'
+    + runs.map(function(r) {
+        return '<tr style="cursor:pointer" data-raid-goto="' + esc(r.id) + '">'
+          + '<td>' + fmtDateTime(r.ts) + '</td><td>' + r.names.length + '</td>'
+          + '<td>' + (r.note ? esc(r.note) : '<span style="color:var(--dim)">—</span>') + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  body.innerHTML = html;
+  m.classList.add('show');
+
+  // 顺带查 ESI（失败就静默隐藏）
+  _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
+    var box = document.getElementById('personEsi');
+    if (!box) return;
+    if (res && res.name) {
+      var parts = [];
+      if (res.alliance_name) parts.push('<b>' + esc(res.alliance_ticker || '') + '</b> ' + esc(res.alliance_name));
+      if (res.corp_name) parts.push('<b>' + esc(res.corp_ticker || '') + '</b> ' + esc(res.corp_name));
+      box.innerHTML = '<b>军团/联盟：</b>' + (parts.length ? parts.join(' · ') : '无');
+    } else {
+      box.style.display = 'none';
+    }
+  });
+}
+function closePersonModal() { document.getElementById('personModal').classList.remove('show'); }
+function raidGoto(id) {
+  _raidSel = id;
+  raidSwitchView('detail');
+  raidRenderList();
+  raidRenderDetail();
+}
+
+// 事件委托：角色名/记录一律走 data 属性，绝不把用户文本拼进内联 JS
+// （esc() 只做 HTML 转义，拼进 onclick 里的字符串仍会被实体解码后逃逸）
+document.addEventListener('click', function(e) {
+  var t = e.target && e.target.closest ? e.target.closest('[data-pname],[data-raid-select],[data-raid-op],[data-raid-goto]') : null;
+  if (!t) return;
+  if (t.dataset.pname !== undefined) { raidShowPerson(t.dataset.pname); return; }
+  if (t.dataset.raidOp) {
+    e.stopPropagation();
+    if (t.dataset.raidOp === 'edit') raidEdit(t.dataset.raidId);
+    else raidDelete(t.dataset.raidId);
+    return;
+  }
+  if (t.dataset.raidSelect !== undefined) { raidSelect(t.dataset.raidSelect); return; }
+  if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(t.dataset.raidGoto); }
+});
 </script>
 </body>
 </html>
