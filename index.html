@@ -2736,6 +2736,15 @@ function _cleanTitle(t) {
   return String(t == null ? '' : t).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 }
 
+// 头衔里 "#" 后面的数字是军团给玩家编的号，只用于区分，展示时隐藏。
+// 只影响显示——归并用的 key 仍是完整头衔，所以完整值放在悬停提示里备查。
+function _shortTitle(t) {
+  var full = _cleanTitle(t);
+  if (!full) return '';
+  var short = full.replace(/\s*#\s*\d+\s*$/, '').trim();
+  return short || full;          // 整个头衔就是编号时不处理
+}
+
 // 一个「人」= 一个头衔，跨军团也认作同一人（小号常分散在不同军团）。
 // 没头衔的角色各自算一个人，不会被错误合并。
 function _raidPersonKey(name, data) {
@@ -2777,11 +2786,12 @@ function raidPersonGroupHtml(results, names) {
 
   function personBlock(pk) {
     var p = persons[pk];
-    var label = p.title || (p.chars === 1 ? p.first : '（无头衔）');
+    var label = p.title ? _shortTitle(p.title) : (p.chars === 1 ? p.first : '（无头衔）');
     // 有头衔 -> 点开「玩家面板」（含 30人本 + 战斗 两边数据）
     // 无头衔的单号 -> 直接点开该角色；多号无头衔没法区分，做成纯文本
     var lbl = p.title
-      ? '<b class="pttl pname" data-ptitle="' + esc(p.title) + '">' + esc(label) + '</b>'
+      ? '<b class="pttl pname" data-ptitle="' + esc(p.title) + '" title="' + esc(p.title) + '">'
+        + esc(label) + '</b>'
       : (p.chars === 1
           ? '<b class="pttl pname" data-pname="' + esc(p.first) + '">' + esc(label) + '</b>'
           : '<b class="pttl">' + esc(label) + '</b>');
@@ -3126,9 +3136,10 @@ function raidDistributionHtml(K, results, agg) {
     + '</tr></thead><tbody>'
     + sorted.map(function(pk) {
         var p = persons[pk];
-        var label = p.title || (p.chars.length === 1 ? p.chars[0].name : '（无头衔）');
+        var label = p.title ? _shortTitle(p.title) : (p.chars.length === 1 ? p.chars[0].name : '（无头衔）');
         return '<tr><td>' + (p.title
-            ? '<span class="pname" data-ptitle="' + esc(p.title) + '">' + esc(label) + '</span>'
+            ? '<span class="pname" data-ptitle="' + esc(p.title) + '" title="' + esc(p.title) + '">'
+              + esc(label) + '</span>'
             : esc(label)) + '</td>'
           + '<td class="num">' + p.chars.length + '</td>'
           + '<td>' + (function() {
@@ -3347,7 +3358,7 @@ function raidShowPerson(K, name) {
       var inner = '<b>军团/联盟：</b>' + (parts.length ? parts.join(' · ') : '无');
       if (res.title) {
         inner += '<div style="margin-top:7px"><span class="pchip" style="cursor:default">'
-          + esc(_cleanTitle(res.title)) + '</span></div>';
+          + esc(_shortTitle(res.title)) + '</span></div>';
       }
       box.innerHTML = inner;
     } else {
@@ -3359,7 +3370,8 @@ function raidShowPerson(K, name) {
 function raidShowTitle(K, title) {
   var m = document.getElementById('personModal');
   var body = document.getElementById('personBody');
-  document.getElementById('personTitle').textContent = title;
+  document.getElementById('personTitle').textContent = _shortTitle(title);
+  document.getElementById('personTitle').setAttribute('title', title);
   body.innerHTML = '<div class="empty">查询名下角色中…</div>';
   m.querySelector('.modal').classList.add('wide');
   m.classList.add('show');
