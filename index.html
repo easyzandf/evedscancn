@@ -909,6 +909,10 @@
   .grp-block.foe .grp-corp > b { color: var(--red); }
   .grp-block.foe .pchip { border-color: rgba(255,113,113,.35); }
   .grp-line > .pttl { color: var(--text); font-size: 12px; }
+  /* 可点击的头衔/角色名显式还原 .pname 的青色：上面那条同权重更高，会把它压掉 */
+  .grp-line > .pttl.pname { color: var(--cyan); }
+  /* 后面的「共 N 个角色」是次要信息，压暗，避免和头衔同色分不出来 */
+  .grp-line > em { color: var(--dim); font-style: normal; font-size: 11px; margin-left: 6px; }
   /* 分析页筛选框（长表格找人用） */
   .raid-filter { margin: 0 0 14px; }
   .raid-filter input {
