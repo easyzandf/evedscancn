@@ -3783,7 +3783,21 @@ function _kbName(names, id) {
 // kb.php 的 battles 把 killmail 流水按时间间隔切成一场场会战并算好双方统计，
 // report 再取单场的完整明细。前端只负责渲染。
 var _br = { list: null, cur: null, names: {}, tgt: null, fsys: 0, fval: 0 };
-var BR_HOME_ALLIANCE = 99014027;   // People's Liberation Alliance（PLA）
+// 「本方」名单 —— 必须和 kb.php 里的 $KB_HOME_ALLIANCES / $KB_HOME_CORPS 保持一致，
+// 改一处要改两处。注意 P.L.A 是军团不是联盟，它挂在 Goonswarm Federation 下。
+var BR_HOME_ALLIANCES = [99014027, 1354830081];   // People's Liberation Alliance · Goonswarm Federation
+var BR_HOME_CORPS     = [98764551, 98190062];     // PLA-F（PLA Fleet）· P.L.A（Peoples Liberation Army）
+var BR_HOME_ALLIANCE  = BR_HOME_ALLIANCES[0];     // 默认查询用
+
+// 是不是本方。参战方带 alliance_id 可以直接判；受害者没有，只能拿 corp 反查联盟
+// （_kbCorpDict 在 brOpen 里已经批量拉过了）。
+function kbIsHome(corp, alli) {
+  if (alli && BR_HOME_ALLIANCES.indexOf(alli) >= 0) return true;
+  if (!corp) return false;
+  if (BR_HOME_CORPS.indexOf(corp) >= 0) return true;
+  var a = kbCorpAlliance(corp);
+  return a > 0 && BR_HOME_ALLIANCES.indexOf(a) >= 0;
+}
 
 function brInit() {
   loadItems();
@@ -3948,12 +3962,8 @@ function brRender(d, names) {
 
 // 服务端算的是「整场会战」。星系/价值筛选改了之后要重算，所以这里把
 // kbBattleSummary 的那套逻辑在前端实现一份，按筛选后的 killmail 走。
-function brComputeSummary(kms, home) {
-  var isHomeCorp = function (corp) {
-    if (!corp) return false;
-    for (var i = 0; i < home.corps.length; i++) if (home.corps[i] === corp) return true;
-    return false;
-  };
+// 本方/敌对按 BR_HOME_ALLIANCES / BR_HOME_CORPS 判断，与查询的是哪个实体无关
+function brComputeSummary(kms) {
   var zero = function () {
     return { roster: {}, lost: 0, killed: 0, iskLost: 0, iskDestroyed: 0, ships: {} };
   };
@@ -3974,8 +3984,12 @@ function brComputeSummary(kms, home) {
 
   kms.forEach(function (k) {
     var v = k.victim;
-    var winSide  = k.kind === 'kill' ? 'home' : 'foe';   // 谁拿到这个击杀
-    var loseSide = k.kind === 'kill' ? 'foe'  : 'home';  // 谁丢了船
+    // 按**受害者实际属于哪一方**分，而不是按 zKillboard 查询时的 kind ——
+    // 本方名单扩大后，「我方拿到的击杀」里也可能出现本方的人被打（误伤），
+    // 那要算本方损失而不是击杀。
+    var vHome = kbIsHome(v.corp, 0);
+    var loseSide = vHome ? 'home' : 'foe';   // 谁丢了船
+    var winSide  = vHome ? 'foe'  : 'home';  // 谁拿到了这个击杀
 
     S[loseSide].lost++;
     S[loseSide].iskLost += k.value;
@@ -3996,7 +4010,7 @@ function brComputeSummary(kms, home) {
 
     k.attackers.forEach(function (a) {
       if (!a.char) return;   // NPC 没有角色
-      var side = ((home.alliance && a.alli === home.alliance) || isHomeCorp(a.corp)) ? 'home' : 'foe';
+      var side = kbIsHome(a.corp, a.alli) ? 'home' : 'foe';
       var ra = who(side, a.char, a.corp, a.alli);
       ra.dmg += a.dmg;
       if (a.final) ra.kills++;
@@ -4063,7 +4077,7 @@ function brRefresh() {
   var c = _br.cur;
   if (!c) return;
   var list = brFiltered();
-  var b = brComputeSummary(list, c.home);
+  var b = brComputeSummary(list);
   var names = c.names;
   var all = c.kms.length;
 

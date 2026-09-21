@@ -45,6 +45,13 @@ $UA = 'EVE-DScan-CN/1.0 (+https://dscan.dpdns.org/)';
 // type 会被拼进上游 URL，必须白名单
 $KB_TYPES = ['corporationID', 'allianceID', 'characterID'];
 
+// 「本方」是谁 —— 会战报告的「本方 / 敌对」按这个判断，和 30人本 页面的 LOG_HOME_CORPS 对应。
+//   PLA Fleet (PLA-F)            -> People's Liberation Alliance
+//   Peoples Liberation Army (P.L.A) -> Goonswarm Federation
+// 要加友军就往这两个数组里加 ID。前端 index.html 里有一份同样的常量，两处要一起改。
+$KB_HOME_ALLIANCES = [99014027, 1354830081];
+$KB_HOME_CORPS     = [98764551, 98190062];
+
 function fail($msg, $http = 400) {
     http_response_code($http);
     echo json_encode(['error' => $msg], JSON_UNESCAPED_UNICODE);
@@ -323,24 +330,70 @@ if ($action === 'types') {
 // 把 killmail 流水按时间间隔切成一场场会战：相邻两条差得久就断开。
 // 这是会战报告的核心 —— 从流水还原出「一场仗」这个单位。
 
-// 本方是谁：查联盟就是那个联盟，查军团就是那个军团。参战方带 alliance_id，
-// 受害者不带（zKillboard 不给），所以受害者只能靠 corp 判断。
+// 本方 = 固定名单（KB_HOME_*）+ 这次查询的实体自己。
+// 参战方带 alliance_id 可以直接判；受害者不带（zKillboard 不给），只能拿 corp 反查。
 function kbHomeSide($pdo, $type, $id) {
-    global $ESI;
-    if ($type === 'corporationID') return ['alliance' => 0, 'corps' => [(int)$id]];
+    global $ESI, $KB_HOME_ALLIANCES, $KB_HOME_CORPS;
 
-    $key = 'ac:' . (int)$id;   // 联盟的军团列表，很少变，缓存 7 天
-    $cached = cacheGet($pdo, $key, KB_NAME_TTL);
-    if ($cached !== null && isset($cached['corps'])) {
-        return ['alliance' => (int)$id, 'corps' => $cached['corps']];
+    $alliances = $KB_HOME_ALLIANCES;
+    $corps     = $KB_HOME_CORPS;
+
+    if ($type === 'allianceID') {
+        $alliances[] = (int)$id;
+        $key = 'ac:' . (int)$id;   // 联盟的军团列表，很少变，缓存 7 天
+        $cached = cacheGet($pdo, $key, KB_NAME_TTL);
+        if ($cached !== null && isset($cached['corps'])) {
+            $corps = array_merge($corps, $cached['corps']);
+        } else {
+            $r = httpJson("$ESI/alliances/" . (int)$id . "/corporations/?datasource=tranquility");
+            if (is_array($r)) {
+                $got = [];
+                foreach ($r as $c) { $c = (int)$c; if ($c > 0) $got[] = $c; }
+                cachePut($pdo, $key, ['corps' => $got]);
+                $corps = array_merge($corps, $got);
+            }
+        }
+    } else {
+        $corps[] = (int)$id;
     }
-    $r = httpJson("$ESI/alliances/" . (int)$id . "/corporations/?datasource=tranquility");
-    $corps = [];
-    if (is_array($r)) {
-        foreach ($r as $c) { $c = (int)$c; if ($c > 0) $corps[] = $c; }
-        cachePut($pdo, $key, ['corps' => $corps]);
+
+    return [
+        'alliances' => array_values(array_unique(array_map('intval', $alliances))),
+        'corps'     => array_values(array_unique(array_map('intval', $corps))),
+    ];
+}
+
+// 批量取军团的所属联盟 —— 受害者没有 alliance_id，只能靠 corp 反查。
+// 命中 cp: 缓存的直接读，缺的并行打 ESI。返回 [corpId => allianceId]（无联盟为 0）。
+function kbCorpMap($pdo, $corps) {
+    global $ESI;
+    $out = [];
+    $miss = [];
+    foreach (array_unique($corps) as $c) {
+        $c = (int)$c;
+        if ($c <= 0) continue;
+        $rec = cacheGet($pdo, 'cp:' . $c, KB_NAME_TTL);
+        if ($rec !== null && isset($rec['name'])) {
+            $out[$c] = isset($rec['alliance']) ? (int)$rec['alliance'] : 0;
+            continue;
+        }
+        $miss[$c] = 1;
     }
-    return ['alliance' => (int)$id, 'corps' => $corps];
+    if ($miss) {
+        $urls = [];
+        foreach (array_keys($miss) as $c) $urls[(string)$c] = "$ESI/corporations/$c/?datasource=tranquility";
+        foreach (httpJsonMulti($urls) as $c => $d) {
+            if (!is_array($d) || empty($d['name'])) continue;
+            $rec = [
+                'name'     => (string)$d['name'],
+                'ticker'   => isset($d['ticker']) ? (string)$d['ticker'] : '',
+                'alliance' => isset($d['alliance_id']) ? (int)$d['alliance_id'] : 0,
+            ];
+            $out[(int)$c] = $rec['alliance'];
+            cachePut($pdo, 'cp:' . (int)$c, $rec);
+        }
+    }
+    return $out;
 }
 
 // 同一条 killmail 可能同时出现在 kills 和 losses 里（本方既打又被打），按 id 去重。
@@ -371,13 +424,16 @@ function kbCluster($kms, $gapSec, $minSize) {
 
 // 一场会战的双方统计。kind 已经说明是谁丢的船：
 // 'kill' = 我方拿到的击杀（对面丢船），'loss' = 我方丢船。
-function kbBattleSummary($kms, $home) {
-    $isHomeCorp = function ($corp) use ($home) {
-        return $corp && in_array((int)$corp, $home['corps'], true);
-    };
-    $isHomeAttacker = function ($a) use ($home, $isHomeCorp) {
-        if ($home['alliance'] && (int)$a['alli'] === (int)$home['alliance']) return true;
-        return $isHomeCorp($a['corp']);
+function kbBattleSummary($kms, $home, $corpMap) {
+    // 参战方带 alliance_id 直接判；受害者没有，先看 corp 在不在本方军团名单，
+    // 不在就拿 corp 反查联盟（$corpMap）。反查不到就当敌对。
+    $isHome = function ($corp, $alli) use ($home, $corpMap) {
+        if ($alli && in_array((int)$alli, $home['alliances'], true)) return true;
+        $corp = (int)$corp;
+        if (!$corp) return false;
+        if (in_array($corp, $home['corps'], true)) return true;
+        $a = isset($corpMap[$corp]) ? (int)$corpMap[$corp] : 0;
+        return $a > 0 && in_array($a, $home['alliances'], true);
     };
 
     $sides = [
@@ -390,9 +446,12 @@ function kbBattleSummary($kms, $home) {
 
     foreach ($kms as $k) {
         $v = $k['victim'];
-        $vHome = $isHomeCorp($v['corp']);
-        $winSide  = $k['kind'] === 'kill' ? 'home' : 'foe';   // 谁拿到了这个击杀
-        $loseSide = $k['kind'] === 'kill' ? 'foe'  : 'home';  // 谁丢了船
+        // 按**受害者实际属于哪一方**来分，而不是按 zKillboard 查询时的 kind ——
+        // 本方名单扩大后，「我方拿到的击杀」里也可能出现本方的人被打（误伤/友军摩擦），
+        // 那要算本方损失而不是击杀。
+        $vHome = $isHome($v['corp'], 0);
+        $loseSide = $vHome ? 'home' : 'foe';   // 谁丢了船
+        $winSide  = $vHome ? 'foe'  : 'home';   // 谁拿到了这个击杀
 
         $sides[$loseSide]['lost']++;
         $sides[$loseSide]['iskLost'] += $k['value'];
@@ -412,7 +471,7 @@ function kbBattleSummary($kms, $home) {
         // 参战方：本方/敌对 + 各自打出的伤害（伤害榜用）
         foreach ($k['attackers'] as $a) {
             if (!$a['char']) continue;                       // NPC 没有角色
-            $side = $isHomeAttacker($a) ? 'home' : 'foe';
+            $side = $isHome($a['corp'], $a['alli']) ? 'home' : 'foe';
             $sides[$side]['pilots'][$a['char']] = 1;
             if (!isset($sides[$side]['dmg'][$a['char']])) $sides[$side]['dmg'][$a['char']] = [0, 0];
             $sides[$side]['dmg'][$a['char']][0] += $a['dmg'];
@@ -514,11 +573,18 @@ if ($action === 'battles') {
         cachePrune($pdo);
     }
 
+    // 受害者没有 alliance_id，先把所有受害者军团一次性解析出来（带缓存），
+    // 再逐场算统计 —— 否则每场都要现查一遍同一批军团
+    $corps = [];
+    foreach ($data['battles'] as $b) {
+        foreach ($b['kms'] as $k) { if ($k['victim']['corp']) $corps[] = $k['victim']['corp']; }
+    }
+    $corpMap = kbCorpMap($pdo, $corps);
+
     // 列表只要摘要，把 killmail 明细留在缓存里，点开某场再取
     $out = [];
     foreach ($data['battles'] as $b) {
-        $s = kbBattleSummary($b['kms'], $data['home']);
-        $out[] = $s;
+        $out[] = kbBattleSummary($b['kms'], $data['home'], $corpMap);
     }
     usort($out, function ($a, $b) { return $b['t0'] - $a['t0']; });   // 新的在前
     echo json_encode([
@@ -548,8 +614,10 @@ if ($action === 'report') {
 
     foreach ($data['battles'] as $b) {
         if ((int)$b['id'] !== $bid) continue;
+        $corps = [];
+        foreach ($b['kms'] as $k) { if ($k['victim']['corp']) $corps[] = $k['victim']['corp']; }
         echo json_encode([
-            'battle' => kbBattleSummary($b['kms'], $data['home']),
+            'battle' => kbBattleSummary($b['kms'], $data['home'], kbCorpMap($pdo, $corps)),
             'home'   => $data['home'],
             'kms'    => $b['kms'],
         ], JSON_UNESCAPED_UNICODE);

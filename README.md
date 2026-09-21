@@ -181,7 +181,18 @@ GET ?action=systems&ids=30003850,30045352      # 批量星系 ID -> 官方中文
 
 拉「本方联盟近 7 天的 kills + losses」（约 800 条，分页并行），按 `killmail_time` 排序后**按时间间隔切段**：相邻两条差超过 20 分钟就断开成新的一场，少于 5 条的片段丢掉（避免把零星摩擦当会战）。7 天实测切出约 49 场。
 
-分边很直接，因为**这个联盟下只有一个军团**：`victim` 没有 `alliance_id`（zKillboard 不给），所以受害者看 `corporation_id`，参战方看 `alliance_id`。`kind` 字段已经说明是谁丢的船 —— `kill` = 我方拿到的击杀，`loss` = 我方丢船 —— 双方统计互为镜像。
+### 本方 / 敌对怎么定
+
+```php
+$KB_HOME_ALLIANCES = [99014027, 1354830081];  // People's Liberation Alliance · Goonswarm Federation
+$KB_HOME_CORPS     = [98764551, 98190062];    // PLA-F（PLA Fleet）· P.L.A（Peoples Liberation Army）
+```
+
+> ⚠️ `P.L.A` 是**军团**不是联盟缩写，它挂在 **Goonswarm Federation** 下。`index.html` 里有一份同样的常量（`BR_HOME_ALLIANCES` / `BR_HOME_CORPS`），**改一处必须改两处**。
+
+- 参战方自带 `alliance_id`，直接比 `$KB_HOME_ALLIANCES`
+- **受害者没有 `alliance_id`**（zKillboard 不给），先比 `$KB_HOME_CORPS`，不在名单里就拿 `corporation_id` 反查联盟（`kbCorpMap()`，批量并行 + `cp:` 缓存）
+- 分边按**受害者实际属于哪一方**判断，而不是按 zKillboard 查询时的 `kind` —— 本方名单扩大后，「我方拿到的击杀」里也可能出现本方的人被打（误伤），那要算本方损失而不是击杀
 
 `battles` 只返回摘要（不含 killmail 明细，约 40KB），明细留在服务端缓存里，点开某场再用 `report` 取。会战报告不需要装配数据，所以 `kbTrimKill` 直接不带 `items`，缓存体积少一半。
 
