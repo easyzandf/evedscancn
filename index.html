@@ -1033,7 +1033,10 @@
   .tl-head span { flex: 1; }
   .tl-head span:nth-child(2) { flex: 0 0 60px; }   /* 空档，和中间的轴对齐 */
   .tl-head span:last-child { text-align: right; }
-  .tl { display: flex; margin-bottom: 8px; }
+  .tl { display: flex; margin-bottom: 8px; position: relative; }
+  /* 每分钟一条贯穿横线，把不同分钟的区域隔开（时间标就落在这条线下面） */
+  .tl-sep { position: absolute; left: 0; right: 0; height: 0;
+            border-top: 1px solid var(--border-soft); }
   .tl-col { flex: 1; position: relative; min-width: 0; }
   .tl-axis { flex: 0 0 60px; position: relative;
              border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
@@ -4270,14 +4273,16 @@ function brTimeline(list, names) {
     .map(function (k, i) { return { k: k, ms: Date.parse(k.time), y: i * GAP }; });
   var H = pts.length * GAP;
 
-  // 中间：每条损失一个时刻。同一分钟连着的只在第一条显示，免得刷屏
-  var prev = '';
-  var times = pts.map(function (o) {
+  // 中间：每条损失一个时刻。同一分钟连着的只在第一条显示，免得刷屏；
+  // 并在每分钟的**开头画一条贯穿的横线**，把不同分钟的区域隔开。
+  var prev = '', seps = '', times = '';
+  pts.forEach(function (o) {
     var t = fmtDateTime(o.ms).slice(11);
-    var show = (t !== prev);
+    if (t === prev) return;
     prev = t;
-    return show ? '<span style="top:' + (o.y + 9) + 'px">' + t + '</span>' : '';
-  }).join('');
+    if (o.y > 0) seps += '<div class="tl-sep" style="top:' + (o.y - 5) + 'px"></div>';
+    times += '<span style="top:' + (o.y + 9) + 'px">' + t + '</span>';
+  });
 
   // 两侧：各自只画自己的损失，纵向对齐中间对应的那一条时间
   var rowHtml = function (o) {
@@ -4295,7 +4300,7 @@ function brTimeline(list, names) {
   return '<h4 class="kb-h">时间轴 <em>中间是双方共用的损失时刻，左侧只列本方损失、右侧只列敌对损失</em></h4>'
     + '<div class="tl-head"><span>本方损失 ' + homeRows.length + ' 舰</span>'
     + '<span></span><span>敌对损失 ' + foeRows.length + ' 舰</span></div>'
-    + '<div class="tl" style="height:' + H + 'px">'
+    + '<div class="tl" style="height:' + H + 'px">' + seps
     + '<div class="tl-col home">' + homeRows.map(rowHtml).join('') + '</div>'
     + '<div class="tl-axis">' + times + '</div>'
     + '<div class="tl-col foe">' + foeRows.map(rowHtml).join('') + '</div></div>';
