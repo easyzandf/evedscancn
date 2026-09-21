@@ -1,20 +1,23 @@
 <?php
-// KB 统计 —— zKillboard 聚合数据代理
+// 会战报告 —— zKillboard / ESI 数据代理
 //
-// 站点只有静态文件 + PHP-FPM，没有常驻进程也没有 cron。好在 zKillboard 的
-// 聚合端点 /api/stats/{type}/{id}/kills/ 一次调用就返回总览需要的全部数字，
-// 所以这里只做「代理 + 缓存」：不存原始 killmail，也不需要轮询。
+// 站点只有静态文件 + PHP-FPM，没有常驻进程也没有 cron。这里只做「代理 + 缓存」：
+// 拉 killmail 流水、按时间聚成会战、算好双方统计，不存原始 killmail，也不轮询。
 //
-//   GET ?action=resolve&q=<名称>      -> {results:[{type,id,name}]}
-//   GET ?action=stats&type=..&id=..   -> 裁剪后的聚合数据
+//   GET ?action=battles&type=..&id=..&days=7   -> 会战摘要列表（不含明细）
+//   GET ?action=report&type=..&id=..&bid=..    -> 单场会战的完整明细
+//   GET ?action=resolve&q=<名称>               -> {results:[{type,id,name}]}
+//   GET ?action=names&ids=..                   -> 批量 ID -> 名（角色/军团等）
+//   GET ?action=systems&ids=..                 -> 批量星系 ID -> 官方中文名
+//   GET ?action=types&ids=..                   -> 批量 typeID -> 中文名
 //
-// 上游自己就是 10 分钟缓存，这里对齐，既不浪费请求也没有额外延迟。
+// 上游自己就是 10 分钟量级的缓存，这里对齐，既不浪费请求也没有额外延迟。
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
 // 压缩在 PHP 里做：nginx 全局的 gzip_types 里没有 application/json（静态 js 是压的、
 // JSON 不是），而本站 server 块属于共享配置。放这儿还能跟代码一起走版本控制。
-// 击杀明细 360KB 压完约 40KB，对带宽紧张的用户差别很大。
+// 会战明细上千条 killmail，压完能小一个数量级，对带宽紧张的用户差别很大。
 // ob_gzhandler 会自己看 Accept-Encoding，客户端不支持就原样输出。
 if (!ini_get('zlib.output_compression') && function_exists('ob_gzhandler')) {
     ob_start('ob_gzhandler');
@@ -162,25 +165,11 @@ function httpJsonMulti($urls) {
     return $out;
 }
 
-// 受害者装配。用 [typeID, 数量] 的紧凑数组 —— 200 条 killmail 各二十来件，
-// 用对象存体积要大好几倍。
-function kbTrimItems($items) {
-    if (!is_array($items)) return [];
-    $out = [];
-    foreach (array_slice($items, 0, 40) as $it) {
-        if (!is_array($it) || empty($it['item_type_id'])) continue;
-        $q = (int)(isset($it['quantity_dropped']) ? $it['quantity_dropped'] : 0)
-           + (int)(isset($it['quantity_destroyed']) ? $it['quantity_destroyed'] : 0);
-        $out[] = [(int)$it['item_type_id'], $q > 0 ? $q : 1];
-    }
-    return $out;
-}
-
-// 单条 killmail：参战方（含各自打出的伤害）、受害者的承担伤害与装配、价值明细。
-// $withItems：会战报告要一次装几百条，装配能占掉一半体积，那边不需要就传 false。
+// 单条 killmail：参战方（含各自打出的伤害）、受害者的承担伤害、价值明细。
+// 不带装配 —— 一场会战要一次装几百条，装配能占掉一半体积而会战报告用不到。
 // 注意 victim 没有 alliance_id（zKillboard 不给），只有 corporation_id —— 分边时
 // 受害者要靠 corp 判断，参战方才有 alliance_id。
-function kbTrimKill($k, $kind, $withItems = true) {
+function kbTrimKill($k, $kind) {
     $v   = (isset($k['victim']) && is_array($k['victim'])) ? $k['victim'] : [];
     $zkb = (isset($k['zkb']) && is_array($k['zkb'])) ? $k['zkb'] : [];
 
@@ -219,84 +208,7 @@ function kbTrimKill($k, $kind, $withItems = true) {
         ],
         'attackers' => $atk,
     ];
-    if ($withItems) $out['victim']['items'] = kbTrimItems(isset($v['items']) ? $v['items'] : []);
     return $out;
-}
-
-// 只留总览卡片要用的字段。原始 payload 71KB，裁完约 1KB —— 公开站点被查几百个
-// 实体后，DB 也不会涨到几十 MB。以后要加字段就加在这里，缓存过期后自动重新拉。
-function kbTrim($raw, $type, $id) {
-    $i = function ($k) use ($raw) { return isset($raw[$k]) ? (int)$raw[$k] : 0; };
-    $f = function ($k) use ($raw) { return isset($raw[$k]) ? (float)$raw[$k] : 0.0; };
-
-    // topLists 里本来就带着 Top 舰船 / Top 角色，之前被裁掉了。舰船名要留给前端
-    // 用 ships-data.js 换成中文，所以这里只保留 typeID 和数字。
-    $topShips = [];
-    $topChars = [];
-    if (isset($raw['topLists']) && is_array($raw['topLists'])) {
-        foreach ($raw['topLists'] as $t) {
-            if (!is_array($t) || empty($t['values'])) continue;
-            if ($t['type'] === 'shipType') {
-                foreach (array_slice($t['values'], 0, 15) as $v) {
-                    if (!empty($v['shipTypeID'])) {
-                        $topShips[] = ['shipTypeID' => (int)$v['shipTypeID'],
-                                       'kills' => (int)(isset($v['kills']) ? $v['kills'] : 0),
-                                       'isk'   => (float)(isset($v['isk']) ? $v['isk'] : 0)];
-                    }
-                }
-            } elseif ($t['type'] === 'character') {
-                foreach (array_slice($t['values'], 0, 15) as $v) {
-                    if (!empty($v['characterID'])) {
-                        $topChars[] = ['characterID' => (int)$v['characterID'],
-                                       'name' => isset($v['characterName']) ? (string)$v['characterName'] : '',
-                                       'kills' => (int)(isset($v['kills']) ? $v['kills'] : 0),
-                                       'isk'   => (float)(isset($v['isk']) ? $v['isk'] : 0)];
-                    }
-                }
-            }
-        }
-    }
-
-    return [
-        'topShips' => $topShips,
-        'topCharacters' => $topChars,
-        'type'                => $type,
-        'id'                  => (int)$id,
-        'kills'               => $i('shipsDestroyed'),
-        'losses'              => $i('shipsLost'),
-        'iskDestroyed'        => $f('iskDestroyed'),
-        'iskLost'             => $f('iskLost'),
-        'pointsDestroyed'     => $i('pointsDestroyed'),
-        'pointsLost'          => $i('pointsLost'),
-        'soloKills'           => $i('soloKills'),
-        'soloLosses'          => $i('soloLosses'),
-        'attackersDestroyed'  => $i('attackersDestroyed'),
-        'attackersLost'       => $i('attackersLost'),
-        'dangerRatio'         => $i('dangerRatio'),
-        'gangRatio'           => $i('gangRatio'),
-        'avgGangSize'         => $f('avgGangSize'),
-        'soloRatio'           => $f('soloRatio'),
-        'epoch'               => $i('epoch'),
-    ];
-}
-
-// ID -> 名字（ESI /universe/names/）。直接粘 ID 查询时也要有个标题。
-function kbName($pdo, $type, $id) {
-    global $ESI;
-    $key = 'n:' . $type . ':' . $id;
-    $cached = cacheGet($pdo, $key, KB_NAME_TTL);
-    if ($cached !== null) return isset($cached['name']) ? $cached['name'] : null;
-
-    $r = httpJsonPost("$ESI/universe/names/?datasource=tranquility", [$id]);
-    $name = null;
-    if (is_array($r)) {
-        foreach ($r as $e) {
-            if (isset($e['id'], $e['name']) && (int)$e['id'] === (int)$id) { $name = (string)$e['name']; break; }
-        }
-    }
-    // 解析不出来就不落库，下次再试，免得把一次失败固化 7 天
-    if ($name !== null) cachePut($pdo, $key, ['name' => $name]);
-    return $name;
 }
 
 $action = isset($_GET['action']) ? (string)$_GET['action'] : '';
@@ -329,80 +241,6 @@ if ($action === 'resolve') {
     }
     cachePut($pdo, $key, $out);
     echo json_encode(['results' => $out], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-// ---- 聚合数据 ----
-if ($action === 'stats') {
-    $type = isset($_GET['type']) ? (string)$_GET['type'] : '';
-    if (!in_array($type, $KB_TYPES, true)) fail('invalid type');
-    $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-    if ($id <= 0) fail('invalid id');
-
-    $pdo = db($dataDir);
-    $key = 's:' . $type . ':' . $id;
-    $cached = cacheGet($pdo, $key, KB_TTL);
-    if ($cached !== null) {
-        $cached['cached'] = true;
-        echo json_encode($cached, JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    // 显式带 /kills/，省掉 zKillboard 那次 302
-    $raw = httpJson("https://zkillboard.com/api/stats/$type/$id/kills/");
-    if ($raw === null) fail('upstream unavailable', 502);
-
-    $out = kbTrim($raw, $type, $id);
-    $out['name'] = kbName($pdo, $type, $id);
-    cachePut($pdo, $key, $out);
-    cachePrune($pdo);
-    $out['cached'] = false;
-    echo json_encode($out, JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-// ---- 击杀 / 损失明细列表 ----
-// zKillboard 的列表端点里每条 killmail 都是完整 ESI 结构：attackers[].damage_done、
-// victim.damage_taken、装配、最后一击全都有。所以拉一次列表就够前端列表+详情两处用，
-// 点开某一条不用再发请求。
-if ($action === 'kills') {
-    $type = isset($_GET['type']) ? (string)$_GET['type'] : '';
-    if (!in_array($type, $KB_TYPES, true)) fail('invalid type');
-    $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-    if ($id <= 0) fail('invalid id');
-
-    // zKillboard 的 pastSeconds 上限就是 7 天
-    $days = isset($_GET['days']) ? (int)$_GET['days'] : 7;
-    if ($days < 1 || $days > 7) $days = 7;
-
-    $pdo = db($dataDir);
-    $key = 'k:' . $type . ':' . $id . ':' . $days;
-    $cached = cacheGet($pdo, $key, KB_TTL);
-    if ($cached !== null) {
-        $cached['cached'] = true;
-        echo json_encode($cached, JSON_UNESCAPED_UNICODE);
-        exit;
-    }
-
-    $secs = $days * 86400;
-    $res = httpJsonMulti([
-        'kills'  => "https://zkillboard.com/api/kills/$type/$id/pastSeconds/$secs/",
-        'losses' => "https://zkillboard.com/api/losses/$type/$id/pastSeconds/$secs/",
-    ]);
-    if ($res['kills'] === null && $res['losses'] === null) fail('upstream unavailable', 502);
-
-    $out = ['type' => $type, 'id' => $id, 'days' => $days, 'kills' => [], 'losses' => []];
-    foreach (['kills' => 'kill', 'losses' => 'loss'] as $k => $kind) {
-        $list = is_array($res[$k]) ? $res[$k] : [];
-        foreach ($list as $km) {
-            if (is_array($km)) $out[$k][] = kbTrimKill($km, $kind);
-        }
-    }
-
-    cachePut($pdo, $key, $out);
-    cachePrune($pdo);
-    $out['cached'] = false;
-    echo json_encode($out, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -658,7 +496,7 @@ if ($action === 'battles') {
             $okAny = true;
             $kind = ($k[0] === 'k') ? 'kill' : 'loss';
             foreach ($list as $km) {
-                if (is_array($km)) $kms[] = kbTrimKill($km, $kind, false);   // 不要装配，省一半体积
+                if (is_array($km)) $kms[] = kbTrimKill($km, $kind);
             }
         }
         if (!$okAny) fail('upstream unavailable', 502);

@@ -21,7 +21,6 @@
 - **面板截图** — 角色面板、玩家面板均可一键截图到剪贴板（内容过长会先展开再截）
 - **ESI 查询** — 粘贴角色名列表，自动查询军团/联盟/头衔（需 PHP 后端）
 - **会战报告** — 把一段时间内的击杀流水**自动切成一场场会战**（相邻击杀间隔超过 20 分钟就断开，少于 5 条的片段丢掉），每场给出双方对比：人数 / 损失舰船 / 损失与击毁价值 / 作战效率、**舰船编成对比**（按战列舰、驱逐舰等级别）、**累计损失曲线**（一眼看出在哪一刻崩的）、**伤害排行**、带星系与价值筛选的**击杀流水**
-- **KB 统计** — 输入军团 / 联盟 / 角色的名称或缩写（`PLA-F` 这类 ticker 也行），查看 zKillboard 的作战数据：总览卡片（击杀/损失、摧毁与损失价值、作战效率、危险度）、**舰船统计**、**近 7 天击杀/损失明细**；点任意一条看**单场详情**——参战方各人的舰船与**打出的伤害**、受害者的舰船与**承担伤害**、装配、最后一击。舰船/装备名全部走本地词典转中文
 - **分享链接** — 每次解析生成独立短码链接（`#c=xxxxxx`），发给队友即可看到相同结果
 - **一键截图** — 将解析结果截图为 PNG 复制到剪贴板（需 HTTPS）
 - **暗色/亮色主题** — 默认暗色，可切换
@@ -96,7 +95,7 @@ eve-dscan-cn/
 ├── esi.php               # ESI 代理（单个查询 + 批量查询）
 ├── raid.php              # 记录 API：30人本 & 战斗 共用（SQLite，见下方接口）
 ├── raid_data/            # SQLite 数据目录（raid.db，需 777 可写，勿提交）
-├── kb.php                # KB 统计 API：代理 zKillboard 聚合数据（SQLite 缓存，见下方接口）
+├── kb.php                # 会战报告 API：代理 zKillboard / ESI（SQLite 缓存，见下方接口）
 ├── kb_data/              # KB 缓存目录（kb.db，需 777 可写，勿提交）
 ├── favicon.ico / favicon.png / apple-touch-icon.png  # 站点图标
 ├── make_icon.py          # 图标生成脚本
@@ -153,19 +152,17 @@ SQLite 表 `runs(code, id, ts, note, names, updated_at)`，`code` 存的是**同
 - ⚠️ 部署时必须先建好可写目录，否则 PHP-FPM 建不了库：
   `sudo mkdir -p <站点>/raid_data && sudo chmod 777 <站点>/raid_data`
 
-## KB 统计 API（`kb.php`）
+## 会战报告 API（`kb.php`）
 
 数据全部来自 **zKillboard** 的公开端点 + ESI，站点只做代理 + 缓存，不存原始 killmail，也不需要轮询。
 
 ```bash
+GET ?action=battles&type=allianceID&id=99014027&days=7   # 自动识别会战，返回摘要列表
+GET ?action=report&type=allianceID&id=99014027&days=7&bid=138598626   # 单场会战明细
 GET ?action=resolve&q=PLA-F                    # 名称/缩写 -> 实体（ESI /universe/ids/，支持 ticker）
-GET ?action=stats&type=corporationID&id=98764551   # 聚合总览 + Top 舰船/角色
-GET ?action=kills&type=corporationID&id=98764551&days=7   # 击杀/损失明细（含伤害）
 GET ?action=names&ids=1,2,3                    # 批量 ID -> 名（角色/军团/物品类型）
 GET ?action=types&ids=72872,71478              # 批量 typeID -> 中文名
 GET ?action=systems&ids=30003850,30045352      # 批量星系 ID -> 官方中文名
-GET ?action=battles&type=allianceID&id=99014027&days=7   # 自动识别会战，返回摘要列表
-GET ?action=report&type=allianceID&id=99014027&days=7&bid=138598626   # 单场会战明细
 ```
 
 ### 会战识别怎么做的
@@ -174,14 +171,13 @@ GET ?action=report&type=allianceID&id=99014027&days=7&bid=138598626   # 单场�
 
 分边很直接，因为**这个联盟下只有一个军团**：`victim` 没有 `alliance_id`（zKillboard 不给），所以受害者看 `corporation_id`，参战方看 `alliance_id`。`kind` 字段已经说明是谁丢的船 —— `kill` = 我方拿到的击杀，`loss` = 我方丢船 —— 双方统计互为镜像。
 
-`battles` 只返回摘要（不含 killmail 明细，约 40KB），明细留在服务端缓存里，点开某场再用 `report` 取。会战报告不需要装配数据，所以 `kbTrimKill` 传了 `withItems=false`，缓存体积少一半。
+`battles` 只返回摘要（不含 killmail 明细，约 40KB），明细留在服务端缓存里，点开某场再用 `report` 取。会战报告不需要装配数据，所以 `kbTrimKill` 直接不带 `items`，缓存体积少一半。
 
 SQLite 表 `kb_cache(k, fetched_at, payload)`，一个键一行，全部带 `KB_VER` 前缀（**改了缓存结构就把 `KB_VER` +1**，旧数据自动失效，不用去服务器删库）：
 
 | 键 | 内容 | TTL |
 |---|---|---|
-| `s:<type>:<id>` | 裁剪后的聚合数据 + Top 舰船/角色 | 10 分钟 |
-| `k:<type>:<id>:<days>` | killmail 明细列表 | 10 分钟 |
+| `bt:<type>:<id>:<days>:<gap>` | 识别出的会战 + 各自的 killmail 明细 | 10 分钟 |
 | `q:<md5>` / `nm:<id>` | 名称解析 | 7 天 |
 | `ty:<id>` | 物品/舰船类型中文名 | 30 天 |
 | `sy:<id>` | 星系中文名 | 30 天 |
