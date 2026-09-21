@@ -4343,7 +4343,10 @@ function brChart(kms) {
 
   var hc = 0, fc = 0, pts = [[0, 0, 0]], marks = [], prev = '';
   sorted.forEach(function (k, i) {
-    if (k.kind === 'kill') hc += k.value; else fc += k.value;
+    // 按受害者实际归属分，不用 kind —— kind 只说明这条是从 /kills/ 还是 /losses/ 查来的；
+    // 同一封 killmail 可能两边都出现（本方互相击杀），去重后留下的是 kill 版本，
+    // 那时受害者明明是本方，按 kind 会算成「击毁」。
+    if (kbIsHome(k.victim.corp, 0)) fc += k.value; else hc += k.value;
     pts.push([i + 1, hc, fc]);
     var t = fmtDateTime(Date.parse(k.time)).slice(11);
     if (t !== prev) { prev = t; marks.push({ i: i + 1, t: t }); }
@@ -4409,7 +4412,8 @@ function brTimeline(list, names) {
     .forEach(function (k) {
       var t = fmtDateTime(Date.parse(k.time)).slice(11);
       if (!byMin[t]) { byMin[t] = { t: t, home: [], foe: [] }; groups.push(byMin[t]); }
-      byMin[t][k.kind === 'kill' ? 'foe' : 'home'].push(k);
+      // 同上：用受害者实际归属，不用 kind，否则误伤会被排到对面去
+      byMin[t][kbIsHome(k.victim.corp, 0) ? 'home' : 'foe'].push(k);
     });
 
   // 逐组排布：组内两侧并排，组间按行数累加
