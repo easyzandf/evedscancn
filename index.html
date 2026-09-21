@@ -4236,25 +4236,30 @@ function brComposition(b) {
 
 // 双方累计损失曲线。用内联 SVG + 纯色描边 —— html2canvas 能渲染 SVG，
 // 但解析不了 gradient，所以这里一个渐变都不能有。
+// 累计损失曲线。横轴按**损失序号**等距铺开 —— 和下方时间轴同一种排布（每条损失占一格），
+// 而不是按时间间隔：这场 47 条损失挤在 5 分钟里，按真实时间会缩成一根竖线，
+// 跟下面的时间轴完全对不上。时刻信息改成在横轴上逐段标出来。
 function brChart(kms) {
   if (!kms.length) return '';
   var sorted = kms.slice().sort(function (a, b) { return Date.parse(a.time) - Date.parse(b.time); });
-  var t0 = Date.parse(sorted[0].time);
-  var t1 = Date.parse(sorted[sorted.length - 1].time);
-  if (t1 <= t0) t1 = t0 + 60000;
+  var n = sorted.length;
 
-  var hc = 0, fc = 0, pts = [[t0, 0, 0]];
-  sorted.forEach(function (k) {
+  var hc = 0, fc = 0, pts = [[0, 0, 0]], marks = [], prev = '';
+  sorted.forEach(function (k, i) {
     if (k.kind === 'kill') hc += k.value; else fc += k.value;
-    pts.push([Date.parse(k.time), hc, fc]);
+    pts.push([i + 1, hc, fc]);
+    var t = fmtDateTime(Date.parse(k.time)).slice(11);
+    if (t !== prev) { prev = t; marks.push({ i: i + 1, t: t }); }
   });
+
   var max = Math.max(hc, fc, 1);
   var W = 920, Hh = 190, padL = 64, padB = 26, padT = 12;
-  var x = function (t) { return padL + (t - t0) / (t1 - t0) * (W - padL - 12); };
+  var x = function (i) { return padL + (i / n) * (W - padL - 12); };
   var y = function (v) { return Hh - padB - v / max * (Hh - padB - padT); };
-  var path = function (i) {
-    return pts.map(function (p, j) { return (j ? 'L' : 'M') + x(p[0]).toFixed(1) + ',' + y(p[i]).toFixed(1); }).join(' ');
+  var path = function (idx) {
+    return pts.map(function (p, j) { return (j ? 'L' : 'M') + x(p[0]).toFixed(1) + ',' + y(p[idx]).toFixed(1); }).join(' ');
   };
+
   var yAxis = [0, 0.25, 0.5, 0.75, 1].map(function (f) {
     var v = max * f, yy = y(v);
     return '<line x1="' + padL + '" y1="' + yy.toFixed(1) + '" x2="' + (W - 12) + '" y2="' + yy.toFixed(1)
@@ -4262,20 +4267,29 @@ function brChart(kms) {
       + '<text x="' + (padL - 8) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" font-size="10" '
       + 'fill="var(--dim)">' + fmtIsk(v) + '</text>';
   }).join('');
-  var xLabels = [0, 0.5, 1].map(function (f) {
-    var t = t0 + (t1 - t0) * f;
-    return '<text x="' + x(t).toFixed(1) + '" y="' + (Hh - 8) + '" text-anchor="middle" font-size="10" '
-      + 'fill="var(--dim)">' + fmtDateTime(t).slice(11) + '</text>';
-  }).join('');
 
-  return '<h4 class="kb-h">累计损失曲线 <em>实线＝我方击毁，虚线＝我方被毁</em></h4>'
+  // 时刻刻度：每个分钟段的起点一条竖线加标签；挨太近就跳过，免得叠字
+  var MIN_GAP = 56, lastX = -1e9, xAxis = '';
+  marks.forEach(function (m) {
+    var xx = x(m.i);
+    if (xx - lastX < MIN_GAP) return;
+    lastX = xx;
+    xAxis += '<line x1="' + xx.toFixed(1) + '" y1="' + padT + '" x2="' + xx.toFixed(1) + '" y2="' + (Hh - padB)
+      + '" stroke="var(--border-soft)" stroke-width="1"/>'
+      + '<text x="' + xx.toFixed(1) + '" y="' + (Hh - 8) + '" text-anchor="middle" font-size="10" '
+      + 'fill="var(--dim)">' + m.t + '</text>';
+  });
+
+  return '<h4 class="kb-h">累计损失曲线 <em>实线＝我方击毁，虚线＝我方被毁；'
+    + '横轴按损失顺序等距，与下方时间轴一致</em></h4>'
     + '<svg class="br-chart" viewBox="0 0 ' + W + ' ' + Hh + '" preserveAspectRatio="none">'
-    + yAxis + xLabels
+    + yAxis + xAxis
     + '<path d="' + path(1) + '" fill="none" stroke="var(--cyan)" stroke-width="2"/>'
     + '<path d="' + path(2) + '" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5,4"/>'
     + '</svg>'
     + '<p class="raid-note">我方击毁 <b style="color:var(--cyan)">' + fmtIsk(hc)
-    + '</b> · 我方被毁 <b style="color:var(--red)">' + fmtIsk(fc) + '</b></p>';
+    + '</b> · 我方被毁 <b style="color:var(--red)">' + fmtIsk(fc)
+    + '</b> · 共 ' + n + ' 条损失</p>';
 }
 
 // 时间轴：中间**只有一份时间**，就是每条舰船损失的时刻，左右两列共用它。
