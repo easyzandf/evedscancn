@@ -1028,23 +1028,28 @@
              background: var(--surface-2); overflow: hidden; vertical-align: middle; }
   .br-mini > i { display: block; height: 100%; background: var(--brand); }
 
-  /* 时间轴：纵向位置＝发生时刻 */
-  .tl-head { display: flex; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-  .tl-head span:first-child { flex: 0 0 46px; }
+  /* 时间轴：中间一条共用轴，左本方右敌对，纵向位置严格＝发生时刻 */
+  .tl-head { display: flex; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
   .tl-head span { flex: 1; }
+  .tl-head span:nth-child(2) { flex: 0 0 54px; }   /* 空档，和中间的轴对齐 */
+  .tl-head span:last-child { text-align: right; }
   .tl { display: flex; margin-bottom: 8px; }
-  .tl-axis { flex: 0 0 46px; position: relative; font-size: 10px; color: var(--dim); }
-  .tl-axis span { position: absolute; right: 6px; transform: translateY(-50%); white-space: nowrap; }
-  .tl-col { flex: 1; position: relative; min-width: 0; border-left: 1px solid var(--border-soft); }
-  .tl-col.home { border-left-color: rgba(84,214,226,.35); }
-  .tl-col.foe  { border-left-color: rgba(255,113,113,.35); }
-  .tl-row { position: absolute; left: 8px; right: 4px; height: 24px; display: flex;
-            gap: 6px; align-items: baseline; font-size: 11px; white-space: nowrap; overflow: hidden; }
-  .tl-t { flex: 0 0 36px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .tl-col { flex: 1; position: relative; min-width: 0; }
+  .tl-axis { flex: 0 0 54px; position: relative;
+             border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .tl-axis span { position: absolute; left: 50%; transform: translate(-50%, -50%);
+                  font-size: 10px; color: var(--dim); white-space: nowrap; }
+  /* 密集时行会重叠：不透明底让最上面那条仍可读，同时整块看得出是一堵墙 */
+  .tl-row { position: absolute; left: 0; right: 0; height: 18px; display: flex; gap: 6px;
+            align-items: baseline; font-size: 11px; white-space: nowrap;
+            overflow: hidden; background: var(--bg); }
+  .tl-col.home .tl-row { justify-content: flex-end; }   /* 时间贴中间的轴 */
+  .tl-col.foe  .tl-row { justify-content: flex-start; }
+  .tl-t { flex: 0 0 auto; color: var(--dim); font-variant-numeric: tabular-nums; }
   .tl-n { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
   .tl-s { flex: 0 0 auto; color: var(--brand-2); }
-  .tl-sys { flex: 0 1 auto; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
-  .tl-v { flex: 0 1 auto; margin-left: auto; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+  .tl-sys { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .tl-v { flex: 0 0 auto; color: var(--dim); }
 
   /* responsive */
   @media (max-width: 760px) {
@@ -4251,58 +4256,56 @@ function brChart(kms) {
     + '</b> · 我方被毁 <b style="color:var(--red)">' + fmtIsk(fc) + '</b></p>';
 }
 
-// 时间轴：双方损失按真实时间纵向排布，位置就是发生时刻 —— 一眼看出哪一方在连丢船。
-// 参照 evetools 的 Timeline。同一时段挤太多条时向下顺推，避免叠在一起。
+// 时间轴：中间一条共用时间轴，本方损失列在左、敌对列在右，纵向位置**严格等于**发生时刻。
+// 密集时段行会重叠 —— 那是忠实的：47 条挤在 5 分钟里本来就是一堵墙。不做合并，也不下推
+// （下推会让「位置＝时刻」变成谎话，刻度也就失去意义了）。
 function brTimeline(list, names) {
   if (!list.length) return '';
   var t0 = Date.parse(list[0].time), t1 = Date.parse(list[list.length - 1].time);
   if (t1 <= t0) t1 = t0 + 60000;
 
-  var TL_ROW = 26, PAD = 14;
+  var durMin = Math.max(1, (t1 - t0) / 60000);
+  // 纵向比例固定 ≈7px/分钟（夹在 240~2400px），这样不同会战之间疏密可比
+  var H = Math.min(2400, Math.max(240, durMin * 7));
+  var yOf = function (ms) { return (ms - t0) / (t1 - t0) * H; };
+
   var sides = { home: [], foe: [] };
   list.forEach(function (k) { sides[k.kind === 'kill' ? 'foe' : 'home'].push(k); });
 
-  // 先按时间算纵向位置，再自上而下避让；容器高度取实际用到的最大值
-  var H = Math.max(150, Math.max(sides.home.length, sides.foe.length) * TL_ROW);
-  var laid = { home: [], foe: [] }, bottom = 0;
-  ['home', 'foe'].forEach(function (s) {
-    var rows = sides[s].slice().sort(function (a, z) { return Date.parse(a.time) - Date.parse(z.time); });
-    var last = -1e9;
-    rows.forEach(function (k) {
-      var y = PAD + (Date.parse(k.time) - t0) / (t1 - t0) * (H - TL_ROW);
-      if (y < last + TL_ROW) y = last + TL_ROW;     // 挤在一起就往下顺推
-      last = y;
-      if (y + TL_ROW > bottom) bottom = y + TL_ROW;
-      laid[s].push({ k: k, y: y });
-    });
-  });
-  var boxH = bottom + PAD;
-
   // 星系和参战人数原本只在击杀流水里有，那条表删掉后并到这里 ——
   // 删视图不该顺手把数据也丢了
-  var rowHtml = function (o) {
-    var k = o.k;
-    return '<div class="tl-row" style="top:' + Math.round(o.y) + 'px">'
-      + '<span class="tl-t">' + fmtDateTime(Date.parse(k.time)).slice(11) + '</span>'
-      + '<span class="tl-n">' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</span>'
+  var rowHtml = function (k, isHome) {
+    var body = '<span class="tl-n">' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</span>'
       + '<span class="tl-s">' + esc(kbTypeName(k.victim.ship)) + '</span>'
       + '<span class="tl-sys">' + esc(_kbName(names, k.system)) + '</span>'
       + '<span class="tl-v">' + k.attackers.length + ' 人 · '
-      + k.victim.dmg.toLocaleString() + ' 承受 · ' + fmtIsk(k.value) + '</span></div>';
+      + k.victim.dmg.toLocaleString() + ' 承受 · ' + fmtIsk(k.value) + '</span>';
+    // 时间戳贴中间那条轴：左列放最右，右列放最左
+    var time = '<span class="tl-t">' + fmtDateTime(Date.parse(k.time)).slice(11) + '</span>';
+    return '<div class="tl-row" style="top:' + Math.round(yOf(Date.parse(k.time))) + 'px">'
+      + (isHome ? body + time : time + body) + '</div>';
   };
-  var ticks = [0, 0.5, 1].map(function (f) {
-    var y = PAD + f * (H - TL_ROW);
-    return '<span style="top:' + Math.round(Math.min(y, boxH - 6)) + 'px">'
-      + fmtDateTime(t0 + (t1 - t0) * f).slice(11) + '</span>';
-  }).join('');
 
-  return '<h4 class="kb-h">时间轴 <em>双方损失按时间并列，纵向位置就是发生时刻</em></h4>'
-    + '<div class="tl-head"><span></span><span>本方损失 ' + sides.home.length + ' 舰</span>'
-    + '<span>敌对损失 ' + sides.foe.length + ' 舰</span></div>'
-    + '<div class="tl" style="height:' + Math.round(boxH) + 'px">'
+  // 刻度按跨度取整步长，位置严格线性
+  var step = durMin <= 20 ? 2 : durMin <= 60 ? 5 : durMin <= 180 ? 15 : durMin <= 360 ? 30 : 60;
+  var cur = new Date(t0);
+  cur.setSeconds(0, 0);
+  cur.setMinutes(Math.ceil(cur.getMinutes() / step) * step);
+  var ticks = '';
+  for (var t = cur.getTime(); t <= t1; t += step * 60000) {
+    ticks += '<span style="top:' + Math.round(yOf(t)) + 'px">'
+      + fmtDateTime(t).slice(11) + '</span>';
+  }
+
+  return '<h4 class="kb-h">时间轴 <em>中间是共用时间轴，纵向位置严格等于发生时刻</em></h4>'
+    + '<div class="tl-head"><span>本方损失 ' + sides.home.length + ' 舰</span>'
+    + '<span></span><span>敌对损失 ' + sides.foe.length + ' 舰</span></div>'
+    + '<div class="tl" style="height:' + Math.round(H) + 'px">'
+    + '<div class="tl-col home">'
+    + sides.home.map(function (k) { return rowHtml(k, true); }).join('') + '</div>'
     + '<div class="tl-axis">' + ticks + '</div>'
-    + '<div class="tl-col home">' + laid.home.map(rowHtml).join('') + '</div>'
-    + '<div class="tl-col foe">' + laid.foe.map(rowHtml).join('') + '</div></div>';
+    + '<div class="tl-col foe">'
+    + sides.foe.map(function (k) { return rowHtml(k, false); }).join('') + '</div></div>';
 }
 
 // 参战名单：一人一行 —— 舰船、打出伤害（占比）、击杀、损失价值与承受伤害、军团、联盟。
