@@ -1017,6 +1017,34 @@
   .br-eff span { font-size: 11px; color: var(--dim); }
   .br-chart { width: 100%; height: 190px; display: block; }
 
+  /* 团队里的联盟构成：一眼看出这场是谁家的仗 */
+  .br-ally { margin: 4px 0 10px; font-size: 12px; }
+  .br-ally > div { display: flex; align-items: baseline; gap: 6px; padding: 2px 0; color: var(--text); }
+  .br-ally .n { color: var(--dim); font-variant-numeric: tabular-nums; }
+  .br-ally .tag { font-size: 10px; color: var(--dim); border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; }
+  .br-ally-more { font-size: 11px; color: var(--dim); }
+  /* 名单里伤害列的小条。纯色，html2canvas 解析不了 gradient */
+  .br-mini { display: inline-block; width: 70px; height: 6px; border-radius: 3px;
+             background: var(--surface-2); overflow: hidden; vertical-align: middle; }
+  .br-mini > i { display: block; height: 100%; background: var(--brand); }
+
+  /* 时间轴：纵向位置＝发生时刻 */
+  .tl-head { display: flex; gap: 8px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .tl-head span:first-child { flex: 0 0 46px; }
+  .tl-head span { flex: 1; }
+  .tl { display: flex; margin-bottom: 8px; }
+  .tl-axis { flex: 0 0 46px; position: relative; font-size: 10px; color: var(--dim); }
+  .tl-axis span { position: absolute; right: 6px; transform: translateY(-50%); white-space: nowrap; }
+  .tl-col { flex: 1; position: relative; min-width: 0; border-left: 1px solid var(--border-soft); }
+  .tl-col.home { border-left-color: rgba(84,214,226,.35); }
+  .tl-col.foe  { border-left-color: rgba(255,113,113,.35); }
+  .tl-row { position: absolute; left: 8px; right: 4px; height: 24px; display: flex;
+            gap: 6px; align-items: baseline; font-size: 11px; white-space: nowrap; overflow: hidden; }
+  .tl-t { flex: 0 0 36px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .tl-n { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .tl-s { flex: 0 0 auto; color: var(--brand-2); }
+  .tl-v { flex: 0 1 auto; margin-left: auto; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+
   /* responsive */
   @media (max-width: 760px) {
     .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
@@ -3699,6 +3727,28 @@ function kbMergeSystems(sysIds, names, cb) {
   });
 }
 
+// 军团信息（名字 / 缩写 / 所属联盟）。会战名单要显示「联盟」，但受害者记录里
+// 没有 alliance_id，只能拿 corporation_id 反查。
+var _kbCorpDict = {};
+function kbFetchCorps(ids, cb) {
+  var uniq = {};
+  ids.forEach(function(x) { if (x && !_kbCorpDict[x]) uniq[x] = 1; });
+  var list = Object.keys(uniq).slice(0, 240);
+  if (!list.length) { cb(); return; }
+  var chunks = [];
+  for (var i = 0; i < list.length; i += 80) chunks.push(list.slice(i, i + 80));
+  var left = chunks.length;
+  chunks.forEach(function(c) {
+    _fetch('GET', 'kb.php?action=corps&ids=' + c.join(','), null, function(res) {
+      if (res && res.corps) Object.keys(res.corps).forEach(function(k) { _kbCorpDict[k] = res.corps[k]; });
+      if (--left === 0) cb();
+    });
+  });
+}
+function kbCorpName(id) { var c = _kbCorpDict[id]; return c ? c.name : null; }
+// 不属于任何联盟的军团返回 0，调用方要知道这一点（显示成军团自己）
+function kbCorpAlliance(id) { var c = _kbCorpDict[id]; return c ? c.alliance : 0; }
+
 // 批量 ID -> 名。角色 / 军团等走这一个（ESI /universe/names/ 就是这么设计的）。
 // 接口一次上限 300，超了分片。
 function kbFetchNames(ids, cb) {
@@ -3838,24 +3888,33 @@ function brOpen(bid) {
              ? '这场会战已过期，请返回列表重新分析。' : '加载失败，请稍后重试。') + '</p>';
         return;
       }
-      var ids = [], tids = [], sysIds = [];
+      var ids = [], tids = [], sysIds = [], corpIds = [];
       d.kms.forEach(function (k) {
         sysIds.push(k.system);
         if (k.victim.char) ids.push(k.victim.char);
-        k.attackers.forEach(function (a) { if (a.char) ids.push(a.char); });
+        if (k.victim.corp) corpIds.push(k.victim.corp);
         tids.push(k.victim.ship);
-        k.attackers.forEach(function (a) { tids.push(a.ship); });
-      });
-      ['home', 'foe'].forEach(function (s) {
-        d.battle[s].ships.forEach(function (x) { tids.push(x[0]); });
-        d.battle[s].topDamage.forEach(function (x) { ids.push(x[0]); });
+        k.attackers.forEach(function (a) {
+          if (a.char) ids.push(a.char);
+          if (a.corp) corpIds.push(a.corp);
+          tids.push(a.ship);
+        });
       });
       // 摘要里的 Top 星系只取前 12，明细里可能有别的，两边都要覆盖
       d.battle.systems.forEach(function (s) { sysIds.push(s[0]); });
-      kbFetchNames(ids, function (names) {
-        _br.names = names;
-        kbMergeSystems(sysIds, names, function () {
-          kbFetchTypes(tids, function () { brRender(d, names); });
+
+      // 军团要先解出来 —— 名单的「联盟」列是拿 corp 反查的，再把联盟 ID
+      // 一并塞进名字请求，省一次往返
+      kbFetchCorps(corpIds, function () {
+        Object.keys(_kbCorpDict).forEach(function (cid) {
+          var a = _kbCorpDict[cid].alliance;
+          if (a) ids.push(a);
+        });
+        kbFetchNames(ids, function (names) {
+          _br.names = names;
+          kbMergeSystems(sysIds, names, function () {
+            kbFetchTypes(tids, function () { brRender(d, names); });
+          });
         });
       });
     });
@@ -3874,7 +3933,8 @@ function brRender(d, names) {
 
   document.getElementById('brBody').innerHTML =
       '<div id="brHead"></div><div id="brFilter"></div><div id="brTeams" class="br-teams"></div>'
-    + '<div id="brComp"></div><div id="brChartBox"></div><div id="brDmg"></div><div id="brFeed"></div>';
+    + '<div id="brChartBox"></div><div id="brTL"></div><div id="brComp"></div>'
+    + '<div id="brDmg"></div><div id="brFeed"></div>';
   brRefresh();
 }
 
@@ -3887,10 +3947,22 @@ function brComputeSummary(kms, home) {
     return false;
   };
   var zero = function () {
-    return { pilots: {}, lost: 0, killed: 0, iskLost: 0, iskDestroyed: 0, ships: {}, dmg: {} };
+    return { roster: {}, lost: 0, killed: 0, iskLost: 0, iskDestroyed: 0, ships: {} };
   };
   var S = { home: zero(), foe: zero() };
   var systems = {};
+
+  // 一个人在一次会战里既可能打人、也可能被打，所以按角色 ID 聚合成一条名单记录
+  var who = function (side, char, corp, alli) {
+    var r = S[side].roster[char];
+    if (!r) {
+      r = S[side].roster[char] = { char: char, corp: 0, alli: 0,
+                                   ships: {}, dmg: 0, kills: 0, lossValue: 0, tanked: 0 };
+    }
+    if (!r.corp && corp) r.corp = corp;
+    if (!r.alli && alli) r.alli = alli;
+    return r;
+  };
 
   kms.forEach(function (k) {
     var v = k.victim;
@@ -3906,15 +3978,21 @@ function brComputeSummary(kms, home) {
       var sh = S[loseSide].ships[v.ship] || (S[loseSide].ships[v.ship] = [0, 0]);
       sh[0]++; sh[1] += k.value;
     }
-    if (v.char) S[loseSide].pilots[v.char] = 1;
+    // 受害者没有 alliance_id（zKillboard 不给），先记 corp，联盟回头用 corp 反查
+    if (v.char) {
+      var rv = who(loseSide, v.char, v.corp, 0);
+      rv.lossValue += k.value;
+      rv.tanked += v.dmg || 0;
+      if (v.ship) rv.ships[v.ship] = (rv.ships[v.ship] || 0) + 1;
+    }
 
     k.attackers.forEach(function (a) {
       if (!a.char) return;   // NPC 没有角色
       var side = ((home.alliance && a.alli === home.alliance) || isHomeCorp(a.corp)) ? 'home' : 'foe';
-      S[side].pilots[a.char] = 1;
-      var d = S[side].dmg[a.char] || (S[side].dmg[a.char] = [0, 0]);
-      d[0] += a.dmg;
-      if (a.final) d[1]++;
+      var ra = who(side, a.char, a.corp, a.alli);
+      ra.dmg += a.dmg;
+      if (a.final) ra.kills++;
+      if (a.ship) ra.ships[a.ship] = (ra.ships[a.ship] || 0) + 1;
     });
 
     systems[k.system] = (systems[k.system] || 0) + 1;
@@ -3923,17 +4001,28 @@ function brComputeSummary(kms, home) {
   var shape = function (s) {
     var ships = Object.keys(s.ships).map(function (t) { return [+t, s.ships[t][0], Math.round(s.ships[t][1] * 10) / 10]; });
     ships.sort(function (a, b) { return b[2] - a[2]; });
-    var dmg = Object.keys(s.dmg).map(function (c) { return [+c, s.dmg[c][0], s.dmg[c][1]]; });
-    dmg.sort(function (a, b) { return b[1] - a[1]; });
+
+    var roster = Object.keys(s.roster).map(function (cid) {
+      var p = s.roster[cid];
+      // 本场开得最多的那条船（跨船作战时按次数取主船）
+      var ship = 0, bn = -1;
+      Object.keys(p.ships).forEach(function (t) { if (p.ships[t] > bn) { bn = p.ships[t]; ship = +t; } });
+      return { char: p.char, corp: p.corp, alli: p.alli, ship: ship,
+               dmg: p.dmg, kills: p.kills,
+               lossValue: Math.round(p.lossValue * 10) / 10,
+               tanked: p.tanked, lost: p.lossValue > 0 };
+    });
+    roster.sort(function (a, b) { return b.dmg - a.dmg; });
+
     var tot = s.iskDestroyed + s.iskLost;
     return {
-      pilots: Object.keys(s.pilots).length,
+      pilots: roster.length,
       lost: s.lost, killed: s.killed,
       iskLost: Math.round(s.iskLost * 10) / 10,
       iskDestroyed: Math.round(s.iskDestroyed * 10) / 10,
       efficiency: tot > 0 ? Math.round(s.iskDestroyed / tot * 1000) / 10 : 0,
       ships: ships.slice(0, 40),
-      topDamage: dmg.slice(0, 20)
+      roster: roster
     };
   };
 
@@ -3982,7 +4071,7 @@ function brRefresh() {
   if (!list.length) {
     document.getElementById('brHead').innerHTML =
       '<p class="raid-note">没有符合筛选条件的记录，点上面的「全部星系 / 全部」可以还原。</p>';
-    ['brTeams', 'brComp', 'brChartBox', 'brDmg'].forEach(function (id) {
+    ['brTeams', 'brComp', 'brChartBox', 'brDmg', 'brTL'].forEach(function (id) {
       document.getElementById(id).innerHTML = '';
     });
     document.getElementById('brFeed').innerHTML = '';
@@ -3990,10 +4079,11 @@ function brRefresh() {
   }
 
   document.getElementById('brTeams').innerHTML =
-    brTeamCard('home', '本方', b.home) + brTeamCard('foe', '敌对', b.foe);
-  document.getElementById('brComp').innerHTML = brComposition(b);
+    brTeamCard('home', '本方', b.home, names) + brTeamCard('foe', '敌对', b.foe, names);
   document.getElementById('brChartBox').innerHTML = brChart(list);
-  document.getElementById('brDmg').innerHTML = brDamageBoard(b, names);
+  document.getElementById('brTL').innerHTML = brTimeline(list, names);
+  document.getElementById('brComp').innerHTML = brComposition(b);
+  document.getElementById('brDmg').innerHTML = brRoster(b, names);
 
   // 头部（星系、总损失、人数）
   document.getElementById('brHead').innerHTML = '<p class="raid-note">'
@@ -4040,7 +4130,7 @@ function brPaintFilter(names) {
   });
 }
 
-function brTeamCard(cls, label, s) {
+function brTeamCard(cls, label, s, names) {
   return '<div class="br-team ' + cls + '"><h5>' + label + '</h5>'
     + '<div class="br-kv">'
     + '<div>人数 <b>' + s.pilots + '</b></div>'
@@ -4051,6 +4141,32 @@ function brTeamCard(cls, label, s) {
     + '</div>'
     + '<div class="br-eff ' + cls + '"><i style="width:' + Math.min(100, s.efficiency) + '%"></i></div>'
     + '<div style="font-size:11px;color:var(--dim)">作战效率 ' + s.efficiency + '%（按 ISK）</div>'
+    + brAllianceHtml(s, names)
+    + '</div>';
+}
+
+// 这一方都是哪些联盟的人、各来了多少 —— 按人数降序。
+// 不属于任何联盟的军团单独列（打上「军团」标记），否则会把一堆散人算到一起。
+function brAllianceHtml(side, names) {
+  var by = {};
+  (side.roster || []).forEach(function (p) {
+    var alli = p.alli || kbCorpAlliance(p.corp);
+    var key, label, isCorp = false;
+    if (alli) { key = 'a' + alli; label = _kbName(names, alli); }
+    else if (p.corp) { key = 'c' + p.corp; isCorp = true; label = kbCorpName(p.corp) || _kbName(names, p.corp); }
+    else { key = 'x'; label = '（无军团）'; }
+    if (!by[key]) by[key] = { label: label, n: 0, corp: isCorp };
+    by[key].n++;
+  });
+  var list = Object.keys(by).map(function (k) { return by[k]; });
+  if (!list.length) return '';
+  list.sort(function (a, b) { return b.n - a.n; });
+  return '<div class="br-ally">'
+    + list.slice(0, 8).map(function (x) {
+        return '<div><span class="n">(' + x.n + ')</span>' + esc(x.label)
+          + (x.corp ? '<span class="tag">军团</span>' : '') + '</div>';
+      }).join('')
+    + (list.length > 8 ? '<div class="br-ally-more">另有 ' + (list.length - 8) + ' 个联盟/军团</div>' : '')
     + '</div>';
 }
 
@@ -4137,31 +4253,97 @@ function brChart(kms) {
     + '</b> · 我方被毁 <b style="color:var(--red)">' + fmtIsk(fc) + '</b></p>';
 }
 
-function brDamageBoard(b, names) {
-  function rows(side, label) {
-    if (!side.topDamage || !side.topDamage.length) {
-      return '<h4 class="kb-h">' + label + '伤害排行</h4><p class="raid-note">没有记录。</p>';
-    }
-    var max = side.topDamage[0][1] || 1;
-    // 伤害值要压缩：完整数字加击杀数放不进 .bar-val 那 54px
-    var short = function (v) {
-      if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
-      if (v >= 1e3) return (v / 1e3).toFixed(1) + 'k';
-      return String(v);
-    };
-    return '<h4 class="kb-h">' + label + '伤害排行 <em>伤害 · 最后一击数</em></h4>'
-      + side.topDamage.slice(0, 10).map(function (x) {
-          var pct = Math.round(x[1] / max * 100);
-          return '<div class="bar-row"><span class="bar-lbl">' + esc(_kbName(names, x[0]))
-            + (x[2] ? '<span class="chip-sub">' + x[2] + ' 杀</span>' : '') + '</span>'
-            + '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>'
-            + '<span class="bar-val">' + short(x[1]) + '</span></div>';
-        }).join('');
-  }
-  return rows(b.home, '本方') + rows(b.foe, '敌对');
+// 时间轴：双方损失按真实时间纵向排布，位置就是发生时刻 —— 一眼看出哪一方在连丢船。
+// 参照 evetools 的 Timeline。同一时段挤太多条时向下顺推，避免叠在一起。
+function brTimeline(list, names) {
+  if (!list.length) return '';
+  var t0 = Date.parse(list[0].time), t1 = Date.parse(list[list.length - 1].time);
+  if (t1 <= t0) t1 = t0 + 60000;
+
+  var TL_ROW = 26, PAD = 14;
+  var sides = { home: [], foe: [] };
+  list.forEach(function (k) { sides[k.kind === 'kill' ? 'foe' : 'home'].push(k); });
+
+  // 先按时间算纵向位置，再自上而下避让；容器高度取实际用到的最大值
+  var H = Math.max(150, Math.max(sides.home.length, sides.foe.length) * TL_ROW);
+  var laid = { home: [], foe: [] }, bottom = 0;
+  ['home', 'foe'].forEach(function (s) {
+    var rows = sides[s].slice().sort(function (a, z) { return Date.parse(a.time) - Date.parse(z.time); });
+    var last = -1e9;
+    rows.forEach(function (k) {
+      var y = PAD + (Date.parse(k.time) - t0) / (t1 - t0) * (H - TL_ROW);
+      if (y < last + TL_ROW) y = last + TL_ROW;     // 挤在一起就往下顺推
+      last = y;
+      if (y + TL_ROW > bottom) bottom = y + TL_ROW;
+      laid[s].push({ k: k, y: y });
+    });
+  });
+  var boxH = bottom + PAD;
+
+  var rowHtml = function (o) {
+    var k = o.k;
+    return '<div class="tl-row" style="top:' + Math.round(o.y) + 'px">'
+      + '<span class="tl-t">' + fmtDateTime(Date.parse(k.time)).slice(11) + '</span>'
+      + '<span class="tl-n">' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</span>'
+      + '<span class="tl-s">' + esc(kbTypeName(k.victim.ship)) + '</span>'
+      + '<span class="tl-v">' + k.victim.dmg.toLocaleString() + ' 承受 · ' + fmtIsk(k.value) + '</span></div>';
+  };
+  var ticks = [0, 0.5, 1].map(function (f) {
+    var y = PAD + f * (H - TL_ROW);
+    return '<span style="top:' + Math.round(Math.min(y, boxH - 6)) + 'px">'
+      + fmtDateTime(t0 + (t1 - t0) * f).slice(11) + '</span>';
+  }).join('');
+
+  return '<h4 class="kb-h">时间轴 <em>双方损失按时间并列，纵向位置就是发生时刻</em></h4>'
+    + '<div class="tl-head"><span></span><span>本方损失 ' + sides.home.length + ' 舰</span>'
+    + '<span>敌对损失 ' + sides.foe.length + ' 舰</span></div>'
+    + '<div class="tl" style="height:' + Math.round(boxH) + 'px">'
+    + '<div class="tl-axis">' + ticks + '</div>'
+    + '<div class="tl-col home">' + laid.home.map(rowHtml).join('') + '</div>'
+    + '<div class="tl-col foe">' + laid.foe.map(rowHtml).join('') + '</div></div>';
 }
 
-// 击杀流水，带星系 / 价值筛选（纯前端过滤，不再请求）
+// 参战名单：一人一行 —— 舰船、打出伤害（占比）、击杀、损失价值与承受伤害、军团、联盟。
+// 按伤害降序，伤害排行本身就落在这一张表里了，但还能看出他开的什么船、有没有被打掉。
+// 思路参照 evetools 的 Involved 视图。
+function brRoster(b, names) {
+  var short = function (v) {
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+    if (v >= 1e3) return (v / 1e3).toFixed(1) + 'k';
+    return String(v);
+  };
+  var table = function (side, label, cls) {
+    var rs = side.roster || [];
+    if (!rs.length) return '<h4 class="kb-h">' + label + '参战名单</h4><p class="raid-note">没有记录。</p>';
+    var tot = rs.reduce(function (a, p) { return a + p.dmg; }, 0);
+    var max = rs[0].dmg || 1;
+    return '<h4 class="kb-h">' + label + '参战名单 <em>' + rs.length + ' 人 · 合计伤害 '
+      + short(tot) + '</em></h4>'
+      + '<div class="tbl-wrap"><table class="ship-tbl kb-tbl"><thead><tr>'
+      + '<th>飞行员</th><th>伤害</th><th class="num">击杀</th>'
+      + '<th class="num">损失价值 / 承受</th><th>军团</th><th>联盟</th>'
+      + '</tr></thead><tbody>'
+      + rs.map(function (p) {
+          var alli = p.alli || kbCorpAlliance(p.corp);
+          var corp = p.corp ? (kbCorpName(p.corp) || _kbName(names, p.corp)) : '—';
+          return '<tr style="cursor:default">'
+            + '<td><b style="color:' + (cls === 'home' ? 'var(--cyan)' : 'var(--red)') + '">'
+            + esc(_kbName(names, p.char)) + '</b>'
+            + '<br><span class="chip-sub">' + esc(kbTypeName(p.ship)) + '</span></td>'
+            + '<td>' + short(p.dmg) + ' <span class="chip-sub">'
+            + (tot > 0 ? (p.dmg / tot * 100).toFixed(1) : '0.0') + '%</span>'
+            + '<br><span class="br-mini"><i style="width:' + Math.round(p.dmg / max * 100) + '%"></i></span></td>'
+            + '<td class="num">' + (p.kills || '—') + '</td>'
+            + '<td class="num">' + (p.lost ? fmtIsk(p.lossValue) : '—')
+            + (p.tanked ? '<br><span class="chip-sub">' + short(p.tanked) + ' 承受</span>' : '') + '</td>'
+            + '<td>' + esc(corp) + '</td>'
+            + '<td>' + esc(alli ? _kbName(names, alli) : '—') + '</td></tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  };
+  return table(b.home, '本方', 'home') + table(b.foe, '敌对', 'foe');
+}
+
 // 击杀流水。筛选芯片在 brPaintFilter 里，这里只把传进来的那批渲染出来。
 function brPaintFeed(list, names) {
   var box = document.getElementById('brFeed');

@@ -558,6 +558,47 @@ if ($action === 'report') {
     fail('battle not found', 404);
 }
 
+// ---- 批量军团 ID -> 名字 / 缩写 / 所属联盟 ----
+// 会战名单要显示「联盟」列，但 victim 没有 alliance_id（zKillboard 不给），只有
+// corporation_id —— 所以只能拿军团反查。顺便把名字和缩写一起带回来，省一次请求。
+// 注意：有军团不属于任何联盟（alliance_id 缺省），那种就显示军团自己。
+if ($action === 'corps') {
+    $raw = isset($_GET['ids']) ? (string)$_GET['ids'] : '';
+    $want = [];
+    foreach (explode(',', $raw) as $x) {
+        $x = (int)trim($x);
+        if ($x > 0) $want[$x] = true;
+        if (count($want) >= 80) break;
+    }
+    if (!$want) fail('invalid ids');
+
+    $pdo = db($dataDir);
+    $out = [];
+    $miss = [];
+    foreach (array_keys($want) as $x) {
+        $c = cacheGet($pdo, 'cp:' . $x, KB_NAME_TTL);
+        if ($c !== null && isset($c['name'])) $out[$x] = $c;
+        else $miss[] = $x;
+    }
+    if ($miss) {
+        $urls = [];
+        foreach ($miss as $x) $urls[(string)$x] = "$ESI/corporations/$x/?datasource=tranquility";
+        foreach (httpJsonMulti($urls) as $x => $d) {
+            if (!is_array($d) || empty($d['name'])) continue;
+            $rec = [
+                'name'    => (string)$d['name'],
+                'ticker'  => isset($d['ticker']) ? (string)$d['ticker'] : '',
+                'alliance'=> isset($d['alliance_id']) ? (int)$d['alliance_id'] : 0,
+            ];
+            $out[(int)$x] = $rec;
+            cachePut($pdo, 'cp:' . (int)$x, $rec);
+        }
+        cachePrune($pdo);
+    }
+    echo json_encode(['corps' => $out], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 // ---- 批量星系 ID -> 中文名 ----
 // 星系名不能走 /universe/names/：那个接口没有 language 参数，只给英文（Alparena）。
 // 而星系有官方中文译名（阿尔帕伦纳），所以单独走 /universe/systems/?language=zh。
