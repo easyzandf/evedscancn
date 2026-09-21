@@ -1287,7 +1287,8 @@
         <h3 id="brTitle"></h3>
         <span>
           <button class="raid-shot" onclick="brBack()">← 返回列表</button>
-          <button class="raid-shot" onclick="raidScreenshot(this,'brBody','eve-br')">截图复制</button>
+          <button class="raid-shot" onclick="raidScreenshot(this,'brPart1','eve-br-top')">截图：上半（含时间轴）</button>
+          <button class="raid-shot" onclick="raidScreenshot(this,'brPart2','eve-br-bottom')">截图：下半（编成·名单）</button>
         </span>
       </div>
       <div class="raid-shot-body" id="brBody"></div>
@@ -3953,10 +3954,15 @@ function brRender(d, names) {
   _br.systems = Object.keys(cnt).map(function (id) { return [+id, cnt[id]]; })
     .sort(function (a, b) { return b[1] - a[1]; });
 
+  // 分成两块，各自可以独立截图：
+  //   brPart1 = 总览 → 筛选 → 双方对比 → 损失曲线 → 时间轴
+  //   brPart2 = 舰船编成 → 参战名单
   document.getElementById('brBody').innerHTML =
-      '<div id="brHead"></div><div id="brFilter"></div><div id="brTeams" class="br-teams"></div>'
-    + '<div id="brChartBox"></div><div id="brTL"></div><div id="brComp"></div>'
-    + '<div id="brDmg"></div>';
+      '<div id="brPart1">'
+    +   '<div id="brHead"></div><div id="brFilter"></div><div id="brTeams" class="br-teams"></div>'
+    +   '<div id="brChartBox"></div><div id="brTL"></div>'
+    + '</div>'
+    + '<div id="brPart2"><div id="brComp"></div><div id="brDmg"></div></div>';
   brRefresh();
 }
 
