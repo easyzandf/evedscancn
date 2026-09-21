@@ -3834,7 +3834,8 @@ function _kbName(names, id) {
 // ---- 会战报告 ----
 // kb.php 的 battles 把 killmail 流水按时间间隔切成一场场会战并算好双方统计，
 // report 再取单场的完整明细。前端只负责渲染。
-var _br = { list: null, cur: null, names: {}, tgt: null, fsys: 0, fval: 0 };
+var _br = { list: null, cur: null, names: {}, tgt: null, fsys: 0, fval: 0,
+            reTimer: 0, retry: 0 };   // 后台刷新完成后自动重取用
 // 「本方」名单 —— 必须和 kb.php 里的 $KB_HOME_ALLIANCES / $KB_HOME_CORPS 保持一致，
 // 改一处要改两处。注意 P.L.A 是军团不是联盟，它挂在 Goonswarm Federation 下。
 var BR_HOME_ALLIANCES = [99014027, 1354830081];   // People's Liberation Alliance · Goonswarm Federation
@@ -3887,6 +3888,36 @@ function brTarget(cb) {
   });
 }
 
+// 数据新鲜度提示
+function brShowFresh(d) {
+  var min = d.cachedAt ? Math.floor((Date.now() / 1000 - d.cachedAt) / 60) : 0;
+  if (d.refreshing) {
+    brHint('数据缓存于 ' + (min <= 1 ? '1 分钟内' : min + ' 分钟前') + '，已在后台刷新，稍候自动更新…');
+  } else {
+    brHint(min <= 1 ? '数据：刚刚获取' : '数据缓存于 ' + min + ' 分钟前');
+  }
+}
+
+// 静默重取：不显示「分析中」，拿到就直接重绘列表。
+// 后台刷新大约要几秒，所以服务端说 refreshing 之后隔一会儿来这里取一次。
+function brSilentRefresh() {
+  var t = _br.tgt;
+  if (!t || !_br.list) return;
+  var days = document.getElementById('brDays').value;
+  _fetch('GET', 'kb.php?action=battles&type=' + encodeURIComponent(t.type)
+    + '&id=' + t.id + '&days=' + days, null, function (d) {
+      if (!d || d.error) return;
+      _br.list = d;
+      brRenderList();
+      brShowFresh(d);
+      // 还没刷完就再等一轮；最多两次，避免无限循环
+      if (d.refreshing && _br.retry++ < 2) {
+        clearTimeout(_br.reTimer);
+        _br.reTimer = setTimeout(brSilentRefresh, 9000);
+      }
+    });
+}
+
 // force=true 绕过服务端缓存直接重拉 —— 刚打完的仗最快也要等缓存过期才出现
 function brLoad(force) {
   brShowList();
@@ -3904,14 +3935,14 @@ function brLoad(force) {
       + '&id=' + t.id + '&days=' + days + (force ? '&force=1' : ''), null, function (d) {
         if (!d || d.error) { box.innerHTML = '<p class="raid-note">会战分析失败，请稍后重试。</p>'; return; }
         _br.list = d;
+        _br.retry = 0;
         brRenderList();
-        // 数据新鲜度：缓存超过 5 分钟就提示可以强制刷新
-        if (d.cachedAt) {
-          var min = Math.floor((Date.now() / 1000 - d.cachedAt) / 60);
-          brHint(min <= 1 ? '数据：刚刚获取'
-                          : '数据缓存于 ' + min + ' 分钟前' + (min >= 5 ? '，想看最新请点「强制刷新」' : ''));
-        } else {
-          brHint('数据：刚刚获取');
+        brShowFresh(d);
+        // 服务端说「已经发了旧数据、正在后台刷新」→ 等它刷完再静默取一次，
+        // 用户不用手动刷新，也感觉不到等待
+        if (d.refreshing) {
+          clearTimeout(_br.reTimer);
+          _br.reTimer = setTimeout(brSilentRefresh, 9000);
         }
       });
   });

@@ -30,7 +30,12 @@ if (!is_dir($dataDir)) @mkdir($dataDir, 0777, true);
 // 不用手动去服务器上删库（曾经因为忘了这事，加了新字段却一直读到旧结构）。
 define('KB_VER', 'v2');
 
-define('KB_TTL', 600);          // 聚合数据 10 分钟内直接用缓存
+// 会战列表的缓存策略：软阈值 + 硬过期
+//   超过 KB_SWR_AFTER → 先把旧数据返回给用户，响应发出后**在后台刷新**（用户不用等）
+//   超过 KB_TTL       → 缓存彻底不用了，下次请求只能等重新拉
+// 这样「新鲜度」和「响应速度」就解耦了：数据旧不代表你要等。
+define('KB_TTL', 1800);         // 硬过期 30 分钟
+define('KB_SWR_AFTER', 120);    // 软阈值 2 分钟后再有访问就后台刷新
 define('KB_NAME_TTL', 604800);  // 实体名几乎不变，缓存 7 天
 define('KB_TYPE_TTL', 2592000); // 物品/舰船类型基本不动，缓存 30 天
 define('KB_MAX_AGE', 604800);   // 超过 7 天没被碰过的行清掉
@@ -527,6 +532,98 @@ function kbBattleSummary($kms, $home, $corpMap) {
 }
 
 // ---- 会战列表 ----
+// 重新拉取整份数据 -> 聚类 -> 写回缓存。上游失败返回 null（调用方决定怎么处理），
+// 失败时**绝不写缓存** —— 宁可下次再来，也不能把残缺数据固化下来。
+function kbRefreshBattles($pdo, $key, $type, $id, $days, $gap) {
+    // 分页拉。一页 200 条，7 天约 900 条，所以两侧各要几页。
+    //   · 逐轮翻页，只继续拉还有下一页的那一侧
+    //   · 任何一页失败先重试一次，仍失败就整份作废
+    //   · 判断「还有下一页」只能看这页空不空，**不能看它是否满 200 条** ——
+    //     实测 zKillboard 的 losses 第 1 页只返回 198 条，按「不满 200 就是最后一页」
+    //     会直接漏掉后面两页（约 270 条），会战列表凭空少一大截
+    $PAGE = 200;
+    $MAX_PAGES = 6;                      // 每侧上限 1200 条
+    $secs = $days * 86400;
+    $kms = [];
+    $next = ['kills' => 1, 'losses' => 1];
+    while ($next) {
+        $urls = [];
+        foreach ($next as $side => $p) {
+            $urls[substr($side, 0, 1) . $p] = "https://zkillboard.com/api/$side/$type/$id/pastSeconds/$secs/page/$p/";
+        }
+        $res = httpJsonMulti($urls);
+
+        // 失败的页重试一次
+        $retry = [];
+        foreach ($res as $k => $v) { if (!is_array($v)) $retry[$k] = $urls[$k]; }
+        if ($retry) {
+            foreach (httpJsonMulti($retry) as $k => $v) $res[$k] = $v;
+        }
+
+        $next = [];
+        foreach ($res as $k => $list) {
+            if (!is_array($list)) return null;                 // 重试后仍失败 -> 整份作废
+            $side = ($k[0] === 'k') ? 'kills' : 'losses';
+            $p = (int)substr($k, 1);
+            $kind = ($side === 'kills') ? 'kill' : 'loss';
+            foreach ($list as $km) {
+                if (is_array($km)) $kms[] = kbTrimKill($km, $kind);
+            }
+            if (count($list) > 0 && $p < $MAX_PAGES) $next[$side] = $p + 1;   // 非空就继续翻
+        }
+    }
+
+    $home = kbHomeSide($pdo, $type, $id);
+    $clusters = kbCluster(kbDedupe($kms), $gap * 60, 5);
+
+    $battles = [];
+    foreach ($clusters as $c) {
+        $battles[] = ['id' => (int)$c[0]['id'], 'kms' => $c];
+    }
+    $data = ['type' => $type, 'id' => $id, 'days' => $days, 'gap' => $gap,
+             'home' => $home, 'battles' => $battles];
+
+    // ⚠️ 上游会返回 CDN 缓存的旧页面：实测 page1 少一条时，最新 killmail 会整体退回约 3 分钟。
+    // 后台刷新每 2 分钟就一次，很容易拿旧页面把新缓存覆盖掉，会战列表就会来回来去地回退。
+    // 所以写之前先比一下最新 killmail 的时刻，比现有缓存旧就整份放弃（返回 null）。
+    $prevAt = 0;
+    $prev = cacheGet($pdo, $key, 31536000, $prevAt);          // 读现有的，不看年龄
+    if ($prev && isset($prev['battles'])
+        && kbNewestKm($battles) < kbNewestKm($prev['battles'])) {
+        return null;
+    }
+
+    cachePut($pdo, $key, $data);
+    cachePrune($pdo);
+    return $data;
+}
+
+// 一组会战里最新的那条 killmail 的时刻（用来判断这次拉到的数据是不是比缓存旧）
+function kbNewestKm($battles) {
+    $t = 0;
+    foreach ($battles as $b) {
+        foreach ($b['kms'] as $k) {
+            $ts = strtotime($k['time']);
+            if ($ts > $t) $t = $ts;
+        }
+    }
+    return $t;
+}
+
+// 后台刷新的互斥锁：多个人同时打开、数据又都旧了时，只让一个真去拉上游。
+// 借用同一张 kb_cache 表，用 key 前缀区分；抢不到锁就跳过（说明别人正在刷）。
+function kbTryLock($pdo, $key, $ttl) {
+    $lk = KB_VER . ':lock:' . $key;
+    $pdo->prepare('DELETE FROM kb_cache WHERE k = ? AND fetched_at < ?')->execute([$lk, time() - $ttl]);
+    $ins = $pdo->prepare('INSERT INTO kb_cache (k, fetched_at, payload) VALUES (?, ?, ?)
+        ON CONFLICT(k) DO NOTHING');
+    $ins->execute([$lk, time(), '1']);
+    return $ins->rowCount() > 0;         // 插入成功 = 抢到锁
+}
+function kbUnlock($pdo, $key) {
+    $pdo->prepare('DELETE FROM kb_cache WHERE k = ?')->execute([KB_VER . ':lock:' . $key]);
+}
+
 if ($action === 'battles') {
     $type = isset($_GET['type']) ? (string)$_GET['type'] : '';
     if (!in_array($type, $KB_TYPES, true)) fail('invalid type');
@@ -541,67 +638,26 @@ if ($action === 'battles') {
     $pdo = db($dataDir);
     $key = 'bt:' . $type . ':' . $id . ':' . $days . ':' . $gap;
 
-    // force=1 跳过缓存读取，直接重新拉上游 —— 刚打完的仗要等缓存过期才出现，
-    // 这条路径给「我现在就要看最新」用。仍然照常写回缓存。
+    // force=1 跳过缓存读取直接重拉上游（前端「强制刷新」按钮）
     $force = !empty($_GET['force']);
     $cachedAt = 0;
     $data = $force ? null : cacheGet($pdo, $key, KB_TTL, $cachedAt);
 
-    if ($data === null) {
-        // 分页拉。一页 200 条，7 天约 900 条，所以两侧各要几页。
-        //
-        // ⚠️ 这里曾经是「固定拉 3 页、只要有一页成功就算成功」—— 结果某次 6 页里坏了几页，
-        // 残缺数据被当成完整结果缓存了 10 分钟，会战列表凭空少了一大截。现在：
-        //   · 逐轮翻页，只继续拉还有下一页的那一侧
-        //   · 任何一页失败先重试一次，仍失败就整体 502 —— 宁可报错也绝不缓存残缺数据
-        //
-        // 判断「还有下一页」只能看这一页空不空，**不能看它是否满 200 条** ——
-        // 实测 zKillboard 的 losses 第 1 页只返回 198 条，按「不满 200 就是最后一页」
-        // 会直接漏掉后面两页（约 270 条），会战列表凭空少一大截。
-        $PAGE = 200;
-        $MAX_PAGES = 6;                      // 每侧上限 1200 条
-        $secs = $days * 86400;
-        $kms = [];
-        $next = ['kills' => 1, 'losses' => 1];
-        while ($next) {
-            $urls = [];
-            foreach ($next as $side => $p) {
-                $urls[substr($side, 0, 1) . $p] = "https://zkillboard.com/api/$side/$type/$id/pastSeconds/$secs/page/$p/";
-            }
-            $res = httpJsonMulti($urls);
+    // 缓存够旧但还没硬过期 -> 先把旧的发出去，响应之后在后台刷新
+    $stale = ($data !== null) && (time() - $cachedAt > KB_SWR_AFTER);
 
-            // 失败的页重试一次
-            $retry = [];
-            foreach ($res as $k => $v) { if (!is_array($v)) $retry[$k] = $urls[$k]; }
-            if ($retry) {
-                foreach (httpJsonMulti($retry) as $k => $v) $res[$k] = $v;
-            }
-
-            $next = [];
-            foreach ($res as $k => $list) {
-                if (!is_array($list)) fail('upstream unavailable', 502);   // 重试后仍失败：不缓存，直接报错
-                $side = ($k[0] === 'k') ? 'kills' : 'losses';
-                $p = (int)substr($k, 1);
-                $kind = ($side === 'kills') ? 'kill' : 'loss';
-                foreach ($list as $km) {
-                    if (is_array($km)) $kms[] = kbTrimKill($km, $kind);
-                }
-                if (count($list) > 0 && $p < $MAX_PAGES) $next[$side] = $p + 1;   // 非空就继续翻
-            }
+    if ($data === null) {                    // 冷启动 / 硬过期：只能等
+        $fresh = kbRefreshBattles($pdo, $key, $type, $id, $days, $gap);
+        if ($fresh !== null) {
+            $data = $fresh;
+            $cachedAt = time();
+        } else {
+            // 上游拉失败、或拉回来的比缓存还旧 —— 退回缓存里那份（哪怕已经过期），
+            // 比直接报错强；同时标成 stale，让前端稍后自动重试
+            $data = cacheGet($pdo, $key, 31536000, $cachedAt);
+            if ($data === null) fail('upstream unavailable', 502);
+            $stale = true;
         }
-
-        $home = kbHomeSide($pdo, $type, $id);
-        $clusters = kbCluster(kbDedupe($kms), $gap * 60, 5);
-
-        $battles = [];
-        foreach ($clusters as $c) {
-            $battles[] = ['id' => (int)$c[0]['id'], 'kms' => $c];
-        }
-        $data = ['type' => $type, 'id' => $id, 'days' => $days, 'gap' => $gap,
-                 'home' => $home, 'battles' => $battles];
-        cachePut($pdo, $key, $data);
-        $cachedAt = time();
-        cachePrune($pdo);
     }
 
     // 受害者没有 alliance_id，先把所有受害者军团一次性解析出来（带缓存），
@@ -621,8 +677,18 @@ if ($action === 'battles') {
     echo json_encode([
         'type' => $data['type'], 'id' => $data['id'], 'days' => $data['days'],
         'home' => $data['home'], 'battles' => $out,
-        'cachedAt' => $cachedAt,   // 前端据此显示「数据缓存于 X 分钟前」
+        'cachedAt' => $cachedAt,          // 前端据此显示「数据缓存于 X 分钟前」
+        'refreshing' => $stale,           // 前端据此提示后台刷新中、并自动重取
     ], JSON_UNESCAPED_UNICODE);
+
+    // 响应已经发出去了，下面这段用户不用等
+    if ($stale && function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+        if (kbTryLock($pdo, $key, 300)) {        // 抢到锁才刷，避免并发重复拉上游
+            kbRefreshBattles($pdo, $key, $type, $id, $days, $gap);   // 失败就算了，下次访问再说
+            kbUnlock($pdo, $key);
+        }
+    }
     exit;
 }
 
