@@ -1045,7 +1045,10 @@
                   font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* 行保证不重叠（间距在 brTimeline 里按格高算），所以不需要遮挡处理 */
   .tl-row { position: absolute; left: 0; right: 0; height: 18px; display: flex; gap: 6px;
-            align-items: baseline; font-size: 11px; white-space: nowrap; overflow: hidden; }
+            align-items: baseline; font-size: 11px; white-space: nowrap; overflow: hidden;
+            cursor: pointer; border-radius: 3px; }
+  .tl-row:hover { background: var(--surface-2); }
+  .tl-row:hover .tl-n { color: var(--cyan); }
   .tl-col.home .tl-row { justify-content: flex-end; }   /* 贴近中间的时间 */
   .tl-col.foe  .tl-row { justify-content: flex-start; }
   .tl-n { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
@@ -1430,6 +1433,19 @@
       </div>
     </div>
     <div class="modal-body" id="personBody"></div>
+  </div>
+</div>
+
+<!-- 时间轴上点某条损失：这一封 killmail 的明细 + zKillboard 链接 -->
+<div class="modal-overlay" id="brKmModal">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div class="title" id="brKmTitle">击毁</div>
+      <div class="modal-acts">
+        <button class="modal-close" onclick="closeBrKm()">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" id="brKmBody"></div>
   </div>
 </div>
 
@@ -2003,10 +2019,11 @@ function closeModal() {
 document.addEventListener('click', function(e) {
   if (e.target && e.target.id === 'shipModal') closeModal();
   if (e.target && e.target.id === 'personModal') closePersonModal();
+  if (e.target && e.target.id === 'brKmModal') closeBrKm();
 });
 // close on ESC
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') { closeModal(); closePersonModal(); }
+  if (e.key === 'Escape') { closeModal(); closePersonModal(); closeBrKm(); }
 });
 
 function copyLink() {
@@ -4108,7 +4125,11 @@ function brRefresh() {
   document.getElementById('brTeams').innerHTML =
     brTeamCard('home', '本方', b.home, names) + brTeamCard('foe', '敌对', b.foe, names);
   document.getElementById('brChartBox').innerHTML = brChart(list);
-  document.getElementById('brTL').innerHTML = brTimeline(list, names);
+  var tlBox = document.getElementById('brTL');
+  tlBox.innerHTML = brTimeline(list, names);
+  tlBox.querySelectorAll('.tl-row[data-km]').forEach(function (el) {
+    el.addEventListener('click', function () { brShowKm(parseInt(el.getAttribute('data-km'), 10)); });
+  });
   document.getElementById('brComp').innerHTML = brComposition(b);
   document.getElementById('brDmg').innerHTML = brRoster(b, names);
 
@@ -4331,7 +4352,8 @@ function brTimeline(list, names) {
 
   var rowHtml = function (o) {
     var k = o.k;
-    return '<div class="tl-row" style="top:' + o.y + 'px">'
+    return '<div class="tl-row" data-km="' + k.id + '" title="点击查看这一封 killmail 和 zKillboard 链接" '
+      + 'style="top:' + o.y + 'px">'
       + '<span class="tl-n">' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</span>'
       + '<span class="tl-s">' + esc(kbTypeName(k.victim.ship)) + '</span>'
       + '<span class="tl-sys">' + esc(_kbName(names, k.system)) + '</span>'
@@ -4347,6 +4369,70 @@ function brTimeline(list, names) {
     + '<div class="tl-axis">' + times + '</div>'
     + '<div class="tl-col foe">' + foeRows.map(rowHtml).join('') + '</div></div>';
 }
+
+// 时间轴上点某条损失 —— 这一封 killmail 的明细 + zKillboard 链接（可复制）
+function brShowKm(id) {
+  var c = _br.cur;
+  if (!c) return;
+  var k = null;
+  for (var i = 0; i < c.kms.length; i++) if (c.kms[i].id === id) { k = c.kms[i]; break; }
+  if (!k) return;
+  var names = c.names, v = k.victim;
+  // zKillboard 只要 killmail ID，不用带 hash（实测带 hash 反而 404）
+  var url = 'https://zkillboard.com/kill/' + k.id + '/';
+  var homeLost = kbIsHome(v.corp, 0);
+
+  document.getElementById('brKmTitle').textContent =
+    kbTypeName(v.ship) + ' · ' + (homeLost ? '我方损失' : '我方击毁');
+
+  var h = '<p class="raid-note">' + fmtDateTime(Date.parse(k.time))
+    + ' · ' + esc(_kbName(names, k.system))
+    + ' · 总价值 <b>' + fmtIsk(k.value) + '</b> ISK'
+    + '（掉落 ' + fmtIsk(k.dropped) + ' / 损毁 ' + fmtIsk(k.destroyed) + '）'
+    + (k.solo ? ' · 单挑' : '') + (k.npc ? ' · 含 NPC' : '') + '</p>';
+
+  // KB 链接放在最上面 —— 参战方可能有几十行，压在表格下面就得滚动才够得着
+  h += '<h4 class="kb-h">zKillboard</h4>'
+    + '<p class="raid-note" style="word-break:break-all;margin-bottom:8px">' + esc(url) + '</p>'
+    + '<div class="btnbar" style="margin-top:0">'
+    + '<button class="btn btn-go" id="brKmCopy">复制链接</button>'
+    + '<a class="btn btn-clr" href="' + url + '" target="_blank" rel="noopener">打开 zKillboard</a>'
+    + '</div>';
+
+  h += '<h4 class="kb-h">受害者</h4>'
+    + '<div class="corp-line"><span class="corp-tag">' + esc(kbTypeName(v.ship)) + '</span>'
+    + '<span class="corp-cnt">' + esc(v.char ? _kbName(names, v.char) : '（NPC）') + '</span>'
+    + '<span class="corp-cnt">承担伤害 ' + v.dmg.toLocaleString() + '</span>'
+    + (kbCorpName(v.corp) ? '<span class="corp-cnt">' + esc(kbCorpName(v.corp)) + '</span>' : '')
+    + '</div>';
+
+  var tot = k.attackers.reduce(function (s, a) { return s + a.dmg; }, 0);
+  var atk = k.attackers.slice().sort(function (a, b) { return b.dmg - a.dmg; });
+  h += '<h4 class="kb-h">参战方 <em>' + atk.length + ' 人 · 合计伤害 ' + tot.toLocaleString() + '</em></h4>'
+    + '<div class="tbl-wrap"><table class="ship-tbl kb-tbl"><thead><tr>'
+    + '<th>角色</th><th>舰船</th><th class="num">伤害</th><th></th>'
+    + '</tr></thead><tbody>'
+    + atk.map(function (a) {
+        return '<tr style="cursor:default">'
+          + '<td>' + esc(a.char ? _kbName(names, a.char) : '（NPC）') + '</td>'
+          + '<td>' + esc(kbTypeName(a.ship)) + '</td>'
+          + '<td class="num">' + a.dmg.toLocaleString() + '</td>'
+          + '<td>' + (a.final ? '<span class="kb-final">最后一击</span>' : '') + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  document.getElementById('brKmBody').innerHTML = h;
+  var cb = document.getElementById('brKmCopy');
+  if (cb) cb.addEventListener('click', function () {
+    _copyText(url, cb, function () {
+      cb.textContent = '已复制!';
+      setTimeout(function () { cb.textContent = '复制链接'; }, 1500);
+    });
+  });
+  document.getElementById('brKmModal').classList.add('show');
+}
+
+function closeBrKm() { document.getElementById('brKmModal').classList.remove('show'); }
 
 // 参战名单：一人一行 —— 舰船、打出伤害（占比）、击杀、损失价值与承受伤害、军团、联盟。
 // 按伤害降序，伤害排行本身就落在这一张表里了，但还能看出他开的什么船、有没有被打掉。
