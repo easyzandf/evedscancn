@@ -20,6 +20,7 @@
 - **本方 / 敌对** — 本方军团固定为 PLA-F、P.L.A，其余一律归敌对；**统计只算本方**，敌对只标注总数
 - **面板截图** — 角色面板、玩家面板均可一键截图到剪贴板（内容过长会先展开再截）
 - **ESI 查询** — 粘贴角色名列表，自动查询军团/联盟/头衔（需 PHP 后端）
+- **KB 统计** — 输入军团 / 联盟 / 角色的名称或缩写（`PLA-F` 这类 ticker 也行），查看 zKillboard 的作战总览：击杀/损失、摧毁与损失价值、作战效率、危险度；直接粘贴 zKillboard 链接也可以
 - **分享链接** — 每次解析生成独立短码链接（`#c=xxxxxx`），发给队友即可看到相同结果
 - **一键截图** — 将解析结果截图为 PNG 复制到剪贴板（需 HTTPS）
 - **暗色/亮色主题** — 默认暗色，可切换
@@ -94,6 +95,8 @@ eve-dscan-cn/
 ├── esi.php               # ESI 代理（单个查询 + 批量查询）
 ├── raid.php              # 记录 API：30人本 & 战斗 共用（SQLite，见下方接口）
 ├── raid_data/            # SQLite 数据目录（raid.db，需 777 可写，勿提交）
+├── kb.php                # KB 统计 API：代理 zKillboard 聚合数据（SQLite 缓存，见下方接口）
+├── kb_data/              # KB 缓存目录（kb.db，需 777 可写，勿提交）
 ├── favicon.ico / favicon.png / apple-touch-icon.png  # 站点图标
 ├── make_icon.py          # 图标生成脚本
 ├── fetch_attrs.py        # 从 ESI 拉取舰船属性
@@ -112,8 +115,8 @@ eve-dscan-cn/
 ```bash
 # 文件放到站点目录
 cp index.html ships-data.js traits-data.js items-data.js \
-   api.php esi.php raid.php /www/sites/yoursite/
-mkdir -p cache raid_data && chmod 777 cache raid_data
+   api.php esi.php raid.php kb.php /www/sites/yoursite/
+mkdir -p cache raid_data kb_data && chmod 777 cache raid_data kb_data
 ```
 
 > `raid_data/` 必须可写，否则 PHP-FPM 建不了 SQLite 库，记录接口会 500。
@@ -148,6 +151,25 @@ SQLite 表 `runs(code, id, ts, note, names, updated_at)`，`code` 存的是**同
 - 没有同步码（<8 字符）直接 400；用**不同**的同步码查不到别人的记录
 - ⚠️ 部署时必须先建好可写目录，否则 PHP-FPM 建不了库：
   `sudo mkdir -p <站点>/raid_data && sudo chmod 777 <站点>/raid_data`
+
+## KB 统计 API（`kb.php`）
+
+数据全部来自 **zKillboard** 的公开聚合端点，站点只做代理 + 缓存，不存原始 killmail，也不需要轮询。
+
+```bash
+GET ?action=resolve&q=PLA-F        # 名称/缩写 -> 实体（ESI /universe/ids/，支持 ticker）
+GET ?action=stats&type=corporationID&id=98764551
+```
+
+SQLite 表 `kb_cache(k, fetched_at, payload)`，一个键一行：`stats:<type>:<id>` 存裁剪后的聚合数据（10 分钟 TTL），`q:<md5>` / `n:<type>:<id>` 存名称解析（7 天 TTL）。
+
+- 上游是 `/api/stats/{type}/{id}/kills/`——**一次调用就返回总览要的全部数字**（实测 71KB / 0.8s），所以不需要自己拉 killmail 聚合
+- 显式带 `/kills/` 可以省掉 zKillboard 的一次 302
+- `type` 走白名单（`corporationID` / `allianceID` / `characterID`），因为它会被拼进上游 URL
+- 原始 payload 71KB，裁剪后约 1KB；缓存超过 500 个实体或 7 天会淘汰最旧的
+- ⚠️ 同样需要可写目录：`sudo mkdir -p <站点>/kb_data && sudo chmod 777 <站点>/kb_data`
+
+> 不要把「时间窗统计」（7/30/90 天）做成实时请求：分页拉 kills/losses 实测单页 1.3~8.5s 且会偶发失败，必须后台预热才行。
 
 ## 缓存 API
 

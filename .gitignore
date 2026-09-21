@@ -16,3 +16,7 @@ __pycache__/
 # 30人本记录数据库（服务器本地数据）
 raid_data/
 raid.db
+
+# KB 统计缓存库（服务器本地数据）
+kb_data/
+kb.db

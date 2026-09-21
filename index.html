@@ -994,6 +994,7 @@
     <a href="#" data-pg="buy"><i data-lucide="shopping-cart"></i>装备购买</a>
     <a href="#" data-pg="raid"><i data-lucide="users"></i>30人本</a>
     <a href="#" data-pg="battle"><i data-lucide="swords"></i>战斗</a>
+    <a href="#" data-pg="kb"><i data-lucide="crosshair"></i>KB 统计</a>
     <a href="#" data-pg="about"><i data-lucide="info"></i>帮助</a>
   </div>
   <button class="tog" onclick="toggleTheme()" aria-label="切换主题">
@@ -1170,6 +1171,32 @@
     </div>
   </div>
 
+  <!-- KB 统计 page -->
+  <div id="pg-kb" class="hidden">
+    <div class="page-head">
+      <span class="eyebrow"><i data-lucide="crosshair"></i>EVE Online</span>
+      <h1>KB 统计</h1>
+      <p>输入军团 / 联盟 / 角色的<b>名称或缩写</b>，查看 zKillboard 的作战总览</p>
+    </div>
+
+    <div class="browbar">
+      <input type="text" id="kbInput" placeholder="例如：PLA Fleet / PLA-F / Goonswarm Federation"
+             onkeydown="if(event.key==='Enter')kbLookup()">
+      <button class="btn btn-go" onclick="kbLookup()"><i data-lucide="search"></i>查询</button>
+      <span class="hint" id="kbHint"></span>
+    </div>
+
+    <div id="kbPick" class="hidden"></div>
+
+    <div class="result-wrap hidden" id="kbResult">
+      <div class="raid-view-head">
+        <h3 id="kbTitle"></h3>
+        <button class="raid-shot" onclick="raidScreenshot(this,'kbBody','eve-kb')">截图复制</button>
+      </div>
+      <div class="raid-shot-body" id="kbBody"></div>
+    </div>
+  </div>
+
   <!-- About / README page -->
   <div id="pg-about" class="hidden">
     <div class="doc">
@@ -1187,6 +1214,7 @@
         <li><b>装备购买 Buy List</b> — 粘贴资产 + 配装 → 扣除已有 → 生成需购买清单（资产 / 配装中英文混用均可）</li>
         <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名按时间存档；点记录复现名单，点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
         <li><b>ESI 查询</b> — 粘贴角色名列表，自动查询军团 / 联盟 / 头衔</li>
+        <li><b>KB 统计</b> — 输入军团 / 联盟 / 角色的名称或缩写（<code>PLA-F</code> 这种也行），查看 zKillboard 的作战总览：击杀/损失、摧毁与损失价值、作战效率、危险度等</li>
         <li><b>分享链接</b> — 每次解析生成独立短码，发给队友即看同结果 · <b>一键截图</b> 结果存剪贴板 · <b>亮 / 暗主题</b></li>
       </ul>
 
@@ -2108,11 +2136,12 @@ document.querySelectorAll('.topbar .nav a').forEach(function(a) {
 function switchPg(pg) {
   document.querySelectorAll('.topbar .nav a').forEach(function(x) { x.classList.remove('on'); });
   document.querySelector('.topbar .nav a[data-pg="' + pg + '"]').classList.add('on');
-  ['scan', 'browse', 'buy', 'raid', 'battle', 'about'].forEach(function(p) {
+  ['scan', 'browse', 'buy', 'raid', 'battle', 'kb', 'about'].forEach(function(p) {
     var el = document.getElementById('pg-' + p);
     if (el) el.classList.toggle('hidden', p !== pg);
   });
   if (LOG_KINDS.indexOf(pg) !== -1) raidInit(pg);   // 30人本 / 战斗 共用同一套逻辑
+  if (pg === 'kb') kbInit();
 }
 
 // -- theme --
@@ -3509,6 +3538,133 @@ function raidShowTitle(K, title) {
 
     body.innerHTML = html;
   });
+}
+
+// ---- KB 统计 ----
+// 数据来自 zKillboard 的聚合端点，由 kb.php 代理 + 缓存（10 分钟）。前端只读自己
+// 域名下的接口，不直连上游 —— 免得被对方限流，统计口径也集中在一处。
+var _kb = { results: [], cur: null };
+var KB_KIND = { corporationID: '军团', allianceID: '联盟', characterID: '角色' };
+var KB_PATH = { corporationID: 'corporation', allianceID: 'alliance', characterID: 'character' };
+
+// ISK 要按 T/B/M/K 分级。现有的 fmtNum() 最高只到 B 而且会输出 "2623.10 B kg"，
+// 对 ISK 完全不可用，所以单独一个。
+function fmtIsk(v) {
+  if (v === undefined || v === null) return '—';
+  if (v >= 1e12) return (v / 1e12).toFixed(2) + ' T';
+  if (v >= 1e9)  return (v / 1e9).toFixed(2) + ' B';
+  if (v >= 1e6)  return (v / 1e6).toFixed(2) + ' M';
+  if (v >= 1e3)  return (v / 1e3).toFixed(1) + ' K';
+  return String(v);
+}
+
+function _kbFix(v, d) {
+  return (typeof v === 'number' && isFinite(v)) ? v.toFixed(d) : '—';
+}
+
+function kbHint(msg) { document.getElementById('kbHint').textContent = msg || ''; }
+
+function kbInit() {
+  var i = document.getElementById('kbInput');
+  if (i && !i.value) i.focus();
+}
+
+function kbLookup() {
+  var q = (document.getElementById('kbInput').value || '').trim();
+  if (!q) { kbHint('请输入名称'); return; }
+
+  // 粘 zKillboard 链接也可以，类型直接从路径里取
+  var m = /zkillboard\.com\/(corporation|alliance|character)\/(\d+)/i.exec(q);
+  if (m) {
+    var t = { corporation: 'corporationID', alliance: 'allianceID', character: 'characterID' }[m[1].toLowerCase()];
+    kbShow(t, parseInt(m[2], 10), null);
+    return;
+  }
+  // 光一个数字判断不出是军团还是联盟还是角色，别猜
+  if (/^\d+$/.test(q)) { kbHint('纯数字 ID 分不出类型，请粘贴 zKillboard 链接或输入名称'); return; }
+
+  document.getElementById('kbPick').classList.add('hidden');
+  kbHint('查询中…');
+  _fetch('GET', 'kb.php?action=resolve&q=' + encodeURIComponent(q), null, function(res) {
+    if (!res || !Array.isArray(res.results)) { kbHint('查询失败，请稍后重试'); return; }
+    var rs = res.results;
+    if (!rs.length) { kbHint('没找到「' + q + '」，试试完整名称或军团缩写'); return; }
+    if (rs.length === 1) { kbHint(''); kbShow(rs[0].type, rs[0].id, rs[0].name); return; }
+    kbPick(rs);
+  });
+}
+
+// 一个名字同时命中军团和角色时（例如「PLA」），让用户选
+function kbPick(rs) {
+  _kb.results = rs;
+  kbHint('匹配到多个实体，请选择：');
+  var el = document.getElementById('kbPick');
+  el.classList.remove('hidden');
+  el.innerHTML = '<div class="pgrid">' + rs.map(function(r, i) {
+    return '<span class="pchip" onclick="kbPickGo(' + i + ')">'
+      + esc((KB_KIND[r.type] || r.type) + ' · ' + r.name) + '</span>';
+  }).join('') + '</div>';
+}
+
+function kbPickGo(i) {
+  var r = _kb.results[i];
+  if (!r) return;
+  kbHint('');
+  kbShow(r.type, r.id, r.name);
+}
+
+function kbShow(type, id, name) {
+  document.getElementById('kbPick').classList.add('hidden');
+  document.getElementById('kbResult').classList.remove('hidden');
+  document.getElementById('kbTitle').textContent = (name || ('ID ' + id)) + ' · ' + (KB_KIND[type] || type);
+  document.getElementById('kbBody').innerHTML = '<p class="raid-note">加载中…</p>';
+
+  _fetch('GET', 'kb.php?action=stats&type=' + encodeURIComponent(type) + '&id=' + id, null, function(d) {
+    if (!d || d.error) {
+      document.getElementById('kbBody').innerHTML = '<p class="raid-note">数据获取失败，请稍后重试。</p>';
+      kbHint(d && d.error ? '上游不可用' : '请求失败');
+      return;
+    }
+    kbRender(d, name);
+  });
+}
+
+function kbRender(d, name) {
+  var title = name || d.name || ('ID ' + d.id);
+  document.getElementById('kbTitle').textContent = title + ' · ' + (KB_KIND[d.type] || d.type);
+
+  // epoch 为 0 说明上游对这个实体没有任何记录（比如瞎填的 ID）
+  if (!d.kills && !d.losses && !d.epoch) {
+    document.getElementById('kbBody').innerHTML =
+      '<p class="raid-note">zKillboard 上没有该实体的作战记录。</p>';
+    return;
+  }
+
+  var total = (d.iskDestroyed || 0) + (d.iskLost || 0);
+  var eff = total > 0 ? (d.iskDestroyed / total * 100) : 0;
+  var card = function(val, cap) {
+    return '<div class="stat-card"><b>' + val + '</b><span>' + cap + '</span></div>';
+  };
+
+  var html = '<div class="stat-grid">'
+    + card(d.kills, '击杀') + card(d.losses, '损失')
+    + card(eff.toFixed(1) + '%', '作战效率（按 ISK）') + '</div>'
+    + '<div class="stat-grid">'
+    + card(fmtIsk(d.iskDestroyed), '摧毁价值 (ISK)') + card(fmtIsk(d.iskLost), '损失价值 (ISK)')
+    + card(d.pointsDestroyed, '摧毁分数') + '</div>'
+    + '<div class="stat-grid">'
+    + card(d.soloKills, '单独击杀') + card(d.soloLosses, '单独损失')
+    + card(_kbFix(d.avgGangSize, 1), '平均队伍规模') + '</div>'
+    + '<div class="stat-grid">'
+    + card(d.dangerRatio, '危险度') + card(d.gangRatio + '%', '组队率')
+    + card(_kbFix(d.soloRatio, 1) + '%', '单独作战比例') + '</div>';
+
+  html += '<p class="raid-note">数据来自 <a href="https://zkillboard.com/'
+    + (KB_PATH[d.type] || '') + '/' + d.id + '/" target="_blank" rel="noopener">zKillboard</a>'
+    + (d.epoch ? ' · 上游更新于 ' + fmtDateTime(d.epoch * 1000) : '')
+    + (d.cached ? ' · 本站缓存' : '') + '</p>';
+
+  document.getElementById('kbBody').innerHTML = html;
 }
 
 function closePersonModal() { document.getElementById('personModal').classList.remove('show'); }
