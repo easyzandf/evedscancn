@@ -4259,32 +4259,42 @@ function brChart(kms) {
 }
 
 // 时间轴：中间**只有一份时间**，就是每条舰船损失的时刻，左右两列共用它。
-// 左侧只放本方损失、右侧只放敌对损失，各自对齐到自己那一条时间。
+// 左侧只放本方损失、右侧只放敌对损失。
+//
+// 按**分钟**分组：同一分钟里两侧都有损失时，它们**并排放在同一行**（左本方右敌对），
+// 而不是各占一行、对面空一格。每组行数 = 该分钟里两侧条数的较大值。
+// 每分钟开头画一条贯穿横线隔开。
 //
 // 为什么不做「纵向位置严格 = 时刻」：实测本方有 5 条损失发生在同一时刻，严格线性就会画在
 // 同一个 y 上，时间轴拉多高都分不开（要分开需要 5760px/分钟、容器高 79 万像素）。所以这里
-// 每条损失占一格、一格一个时刻写在中间 —— 时刻是逐条标出来的，不是靠位置隐含的。
+// 时刻是逐条标在中间的，不是靠位置隐含的。
 function brTimeline(list, names) {
   if (!list.length) return '';
-  var GAP = 21;   // 每格高度（行高 + 间隙），保证不重叠
+  var GAP = 21;   // 每行高度（行高 + 间隙）
 
-  // 两侧合并、按时间排序 —— 这就是中间那条时间线
-  var pts = list.slice().sort(function (a, z) { return Date.parse(a.time) - Date.parse(z.time); })
-    .map(function (k, i) { return { k: k, ms: Date.parse(k.time), y: i * GAP }; });
-  var H = pts.length * GAP;
+  // 按分钟归组
+  var groups = [], byMin = {};
+  list.slice().sort(function (a, z) { return Date.parse(a.time) - Date.parse(z.time); })
+    .forEach(function (k) {
+      var t = fmtDateTime(Date.parse(k.time)).slice(11);
+      if (!byMin[t]) { byMin[t] = { t: t, home: [], foe: [] }; groups.push(byMin[t]); }
+      byMin[t][k.kind === 'kill' ? 'foe' : 'home'].push(k);
+    });
 
-  // 中间：每条损失一个时刻。同一分钟连着的只在第一条显示，免得刷屏；
-  // 并在每分钟的**开头画一条贯穿的横线**，把不同分钟的区域隔开。
-  var prev = '', seps = '', times = '';
-  pts.forEach(function (o) {
-    var t = fmtDateTime(o.ms).slice(11);
-    if (t === prev) return;
-    prev = t;
-    if (o.y > 0) seps += '<div class="tl-sep" style="top:' + (o.y - 5) + 'px"></div>';
-    times += '<span style="top:' + (o.y + 9) + 'px">' + t + '</span>';
+  // 逐组排布：组内两侧并排，组间按行数累加
+  var seps = '', times = '', homeRows = [], foeRows = [], y = 0;
+  groups.forEach(function (g) {
+    var n = Math.max(g.home.length, g.foe.length);
+    if (y > 0) seps += '<div class="tl-sep" style="top:' + (y - 5) + 'px"></div>';
+    times += '<span style="top:' + (y + 9) + 'px">' + g.t + '</span>';
+    for (var i = 0; i < n; i++) {
+      if (g.home[i]) homeRows.push({ k: g.home[i], y: y + i * GAP });
+      if (g.foe[i])  foeRows.push({ k: g.foe[i],  y: y + i * GAP });
+    }
+    y += n * GAP;
   });
+  var H = y;
 
-  // 两侧：各自只画自己的损失，纵向对齐中间对应的那一条时间
   var rowHtml = function (o) {
     var k = o.k;
     return '<div class="tl-row" style="top:' + o.y + 'px">'
@@ -4294,10 +4304,8 @@ function brTimeline(list, names) {
       + '<span class="tl-v">' + k.attackers.length + ' 人 · '
       + k.victim.dmg.toLocaleString() + ' 承受 · ' + fmtIsk(k.value) + '</span></div>';
   };
-  var homeRows = pts.filter(function (o) { return o.k.kind !== 'kill'; });
-  var foeRows  = pts.filter(function (o) { return o.k.kind === 'kill'; });
 
-  return '<h4 class="kb-h">时间轴 <em>中间是双方共用的损失时刻，左侧只列本方损失、右侧只列敌对损失</em></h4>'
+  return '<h4 class="kb-h">时间轴 <em>中间是双方共用的损失时刻；同一分钟两侧的损失并排一行</em></h4>'
     + '<div class="tl-head"><span>本方损失 ' + homeRows.length + ' 舰</span>'
     + '<span></span><span>敌对损失 ' + foeRows.length + ' 舰</span></div>'
     + '<div class="tl" style="height:' + H + 'px">' + seps
