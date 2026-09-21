@@ -1028,23 +1028,23 @@
              background: var(--surface-2); overflow: hidden; vertical-align: middle; }
   .br-mini > i { display: block; height: 100%; background: var(--brand); }
 
-  /* 时间轴：中间一条共用轴，左本方右敌对，纵向位置严格＝发生时刻 */
+  /* 时间轴：中间只有一份时间（每条损失的时刻），左右两列共用它 */
   .tl-head { display: flex; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
   .tl-head span { flex: 1; }
-  .tl-head span:nth-child(2) { flex: 0 0 54px; }   /* 空档，和中间的轴对齐 */
+  .tl-head span:nth-child(2) { flex: 0 0 60px; }   /* 空档，和中间的轴对齐 */
   .tl-head span:last-child { text-align: right; }
   .tl { display: flex; margin-bottom: 8px; }
   .tl-col { flex: 1; position: relative; min-width: 0; }
-  .tl-axis { flex: 0 0 54px; position: relative;
+  .tl-axis { flex: 0 0 60px; position: relative;
              border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+  /* 每条损失的时刻。行高 18px，所以纵向中心在 y+9 */
   .tl-axis span { position: absolute; left: 50%; transform: translate(-50%, -50%);
-                  font-size: 10px; color: var(--dim); white-space: nowrap; }
-  /* 行保证不重叠（间距在 brTimeline 里按行高算），所以不需要遮挡处理 */
+                  font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* 行保证不重叠（间距在 brTimeline 里按格高算），所以不需要遮挡处理 */
   .tl-row { position: absolute; left: 0; right: 0; height: 18px; display: flex; gap: 6px;
             align-items: baseline; font-size: 11px; white-space: nowrap; overflow: hidden; }
-  .tl-col.home .tl-row { justify-content: flex-end; }   /* 时间贴中间的轴 */
+  .tl-col.home .tl-row { justify-content: flex-end; }   /* 贴近中间的时间 */
   .tl-col.foe  .tl-row { justify-content: flex-start; }
-  .tl-t { flex: 0 0 auto; color: var(--dim); font-variant-numeric: tabular-nums; }
   .tl-n { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
   .tl-s { flex: 0 0 auto; color: var(--brand-2); }
   .tl-sys { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
@@ -4255,84 +4255,50 @@ function brChart(kms) {
     + '</b> · 我方被毁 <b style="color:var(--red)">' + fmtIsk(fc) + '</b></p>';
 }
 
-// 时间轴：中间一条共用时间轴，本方损失列在左、敌对列在右。
+// 时间轴：中间**只有一份时间**，就是每条舰船损失的时刻，左右两列共用它。
+// 左侧只放本方损失、右侧只放敌对损失，各自对齐到自己那一条时间。
 //
-// 为什么不做「位置严格 = 时刻」：实测本方有 5 条损失发生在同一时刻，严格线性就会画在同一个
-// y 上 —— 时间轴拉多高都分不开（要分开需要 5760px/分钟、容器高 79 万像素）。所以：
-//   · 行按时间排序后逐条摆放，保证至少一个行高间距 —— 绝不遮挡，每行完整可见
-//   · 两侧合并排序后**共用同一套定位**，所以中间那条轴对左右两列都成立
-//   · 刻度从这套定位**插值**出来，与实际布局一致 —— 不再画一条跟布局打架的线性刻度
-// 稀疏处没触发避让，仍然近似线性；密集处拉伸，容器随之变高。每行都带自己的时间戳，
-// 精确时刻不会丢。
+// 为什么不做「纵向位置严格 = 时刻」：实测本方有 5 条损失发生在同一时刻，严格线性就会画在
+// 同一个 y 上，时间轴拉多高都分不开（要分开需要 5760px/分钟、容器高 79 万像素）。所以这里
+// 每条损失占一格、一格一个时刻写在中间 —— 时刻是逐条标出来的，不是靠位置隐含的。
 function brTimeline(list, names) {
   if (!list.length) return '';
-  var t0 = Date.parse(list[0].time), t1 = Date.parse(list[list.length - 1].time);
-  if (t1 <= t0) t1 = t0 + 60000;
+  var GAP = 21;   // 每格高度（行高 + 间隙），保证不重叠
 
-  var durMin = Math.max(1, (t1 - t0) / 60000);
-  var GAP = 21;                                    // 行高 + 间隙，保证不重叠
-  var LIN_H = Math.min(1600, Math.max(200, durMin * 6));   // 未避让时的线性基准高度
-  var scale = LIN_H / (t1 - t0);                   // px / ms
+  // 两侧合并、按时间排序 —— 这就是中间那条时间线
+  var pts = list.slice().sort(function (a, z) { return Date.parse(a.time) - Date.parse(z.time); })
+    .map(function (k, i) { return { k: k, ms: Date.parse(k.time), y: i * GAP }; });
+  var H = pts.length * GAP;
 
-  // 1. 两侧合并、按时间排序，逐条定位（先按线性，再保证最小间距）
-  var merged = list.slice().sort(function (a, z) { return Date.parse(a.time) - Date.parse(z.time); });
-  var pts = [], last = -1e9;
-  merged.forEach(function (k) {
-    var ms = Date.parse(k.time);
-    var y = Math.max((ms - t0) * scale, last + GAP);
-    last = y;
-    pts.push({ k: k, ms: ms, y: y });
-  });
-  var H = pts[pts.length - 1].y + GAP;
+  // 中间：每条损失一个时刻。同一分钟连着的只在第一条显示，免得刷屏
+  var prev = '';
+  var times = pts.map(function (o) {
+    var t = fmtDateTime(o.ms).slice(11);
+    var show = (t !== prev);
+    prev = t;
+    return show ? '<span style="top:' + (o.y + 9) + 'px">' + t + '</span>' : '';
+  }).join('');
 
-  // 2. 刻度从这套定位插值 —— 与画出来的布局一致
-  var yAt = function (T) {
-    if (T <= pts[0].ms) return pts[0].y - (pts[0].ms - T) * scale;
-    var n = pts.length - 1;
-    if (T >= pts[n].ms) return pts[n].y + (T - pts[n].ms) * scale;
-    for (var i = 0; i < n; i++) {
-      if (T >= pts[i].ms && T <= pts[i + 1].ms) {
-        var span = pts[i + 1].ms - pts[i].ms;
-        var f = span > 0 ? (T - pts[i].ms) / span : 0;
-        return pts[i].y + (pts[i + 1].y - pts[i].y) * f;
-      }
-    }
-    return 0;
-  };
-  var step = durMin <= 20 ? 2 : durMin <= 60 ? 5 : durMin <= 180 ? 15 : durMin <= 360 ? 30 : 60;
-  var cur = new Date(t0);
-  cur.setSeconds(0, 0);
-  cur.setMinutes(Math.ceil(cur.getMinutes() / step) * step);
-  var ticks = '';
-  for (var t = cur.getTime(); t <= t1; t += step * 60000) {
-    ticks += '<span style="top:' + Math.round(yAt(t)) + 'px">' + fmtDateTime(t).slice(11) + '</span>';
-  }
-
-  // 3. 分回两列渲染（位置沿用上面那套共用定位）
-  // 星系和参战人数原本只在击杀流水里有，那条表删掉后并到这里 ——
-  // 删视图不该顺手把数据也丢了
-  var rowHtml = function (o, isHome) {
+  // 两侧：各自只画自己的损失，纵向对齐中间对应的那一条时间
+  var rowHtml = function (o) {
     var k = o.k;
-    var body = '<span class="tl-n">' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</span>'
+    return '<div class="tl-row" style="top:' + o.y + 'px">'
+      + '<span class="tl-n">' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</span>'
       + '<span class="tl-s">' + esc(kbTypeName(k.victim.ship)) + '</span>'
       + '<span class="tl-sys">' + esc(_kbName(names, k.system)) + '</span>'
       + '<span class="tl-v">' + k.attackers.length + ' 人 · '
-      + k.victim.dmg.toLocaleString() + ' 承受 · ' + fmtIsk(k.value) + '</span>';
-    // 时间戳贴中间那条轴：左列放最右，右列放最左
-    var time = '<span class="tl-t">' + fmtDateTime(o.ms).slice(11) + '</span>';
-    return '<div class="tl-row" style="top:' + Math.round(o.y) + 'px">'
-      + (isHome ? body + time : time + body) + '</div>';
+      + k.victim.dmg.toLocaleString() + ' 承受 · ' + fmtIsk(k.value) + '</span></div>';
   };
   var homeRows = pts.filter(function (o) { return o.k.kind !== 'kill'; });
   var foeRows  = pts.filter(function (o) { return o.k.kind === 'kill'; });
 
-  return '<h4 class="kb-h">时间轴 <em>中间是共用时间轴；顺序严格，纵向位置在稀疏处即时刻</em></h4>'
+  return '<h4 class="kb-h">时间轴 <em>中间是双方共用的损失时刻，左侧只列本方损失、右侧只列敌对损失</em></h4>'
     + '<div class="tl-head"><span>本方损失 ' + homeRows.length + ' 舰</span>'
     + '<span></span><span>敌对损失 ' + foeRows.length + ' 舰</span></div>'
-    + '<div class="tl" style="height:' + Math.round(H) + 'px">'
-    + '<div class="tl-col home">' + homeRows.map(function (o) { return rowHtml(o, true); }).join('') + '</div>'
-    + '<div class="tl-axis">' + ticks + '</div>'
-    + '<div class="tl-col foe">' + foeRows.map(function (o) { return rowHtml(o, false); }).join('') + '</div></div>';
+    + '<div class="tl" style="height:' + H + 'px">'
+    + '<div class="tl-col home">' + homeRows.map(rowHtml).join('') + '</div>'
+    + '<div class="tl-axis">' + times + '</div>'
+    + '<div class="tl-col foe">' + foeRows.map(rowHtml).join('') + '</div></div>';
 }
 
 // 参战名单：一人一行 —— 舰船、打出伤害（占比）、击杀、损失价值与承受伤害、军团、联盟。
