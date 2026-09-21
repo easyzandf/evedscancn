@@ -966,6 +966,18 @@
   .bar-row .bar-fill { height: 100%; border-radius: 4px; background: var(--brand); }
   .bar-row .bar-val { flex: 0 0 54px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+  /* KB 统计：区块标题 + 紧凑明细表 */
+  .kb-h { font-size: 13px; color: var(--brand); font-weight: normal; margin: 20px 0 8px; }
+  .kb-h em { color: var(--dim); font-style: normal; font-size: 12px; margin-left: 6px; }
+  .kb-tbl td, .kb-tbl th { font-size: 12px; padding: 4px 8px; }
+  .kb-tbl tbody tr { cursor: pointer; }
+  .kb-tbl tbody tr:hover td { background: var(--surface-2); }
+  /* 伤害占比条。纯色，html2canvas 解析不了 gradient（见 .bar-fill 的注释） */
+  .kb-dmgbar { display: inline-block; width: 74px; height: 8px; border-radius: 4px;
+               background: var(--surface-2); overflow: hidden; vertical-align: middle; }
+  .kb-dmgbar > i { display: block; height: 100%; background: var(--brand); }
+  .kb-final { color: var(--red); font-weight: 600; }
+
   /* responsive */
   @media (max-width: 760px) {
     .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
@@ -1214,7 +1226,7 @@
         <li><b>装备购买 Buy List</b> — 粘贴资产 + 配装 → 扣除已有 → 生成需购买清单（资产 / 配装中英文混用均可）</li>
         <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名按时间存档；点记录复现名单，点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
         <li><b>ESI 查询</b> — 粘贴角色名列表，自动查询军团 / 联盟 / 头衔</li>
-        <li><b>KB 统计</b> — 输入军团 / 联盟 / 角色的名称或缩写（<code>PLA-F</code> 这种也行），查看 zKillboard 的作战总览：击杀/损失、摧毁与损失价值、作战效率、危险度等</li>
+        <li><b>KB 统计</b> — 输入军团 / 联盟 / 角色的名称或缩写（<code>PLA-F</code> 这种也行），查看 zKillboard 的作战数据：总览卡片、舰船统计、近 7 天击杀/损失明细；点任意一条看单场详情（参战方各人的舰船与伤害、受害者的承担伤害、装配、最后一击）</li>
         <li><b>分享链接</b> — 每次解析生成独立短码，发给队友即看同结果 · <b>一键截图</b> 结果存剪贴板 · <b>亮 / 暗主题</b></li>
       </ul>
 
@@ -1332,6 +1344,20 @@
       </div>
     </div>
     <div class="modal-body" id="personBody"></div>
+  </div>
+</div>
+
+<!-- 单条 killmail 详情：参战方、舰船、伤害、装配 -->
+<div class="modal-overlay" id="kbModal">
+  <div class="modal wide">
+    <div class="modal-head">
+      <div class="title" id="kbModalTitle">击杀</div>
+      <div class="modal-acts">
+        <button class="modal-shot" onclick="raidScreenshot(this,'kbModalBody','eve-kb-kill')">截图复制</button>
+        <button class="modal-close" onclick="closeKbModal()">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" id="kbModalBody"></div>
   </div>
 </div>
 
@@ -1905,10 +1931,11 @@ function closeModal() {
 document.addEventListener('click', function(e) {
   if (e.target && e.target.id === 'shipModal') closeModal();
   if (e.target && e.target.id === 'personModal') closePersonModal();
+  if (e.target && e.target.id === 'kbModal') closeKbModal();
 });
 // close on ESC
 document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') { closeModal(); closePersonModal(); }
+  if (e.key === 'Escape') { closeModal(); closePersonModal(); closeKbModal(); }
 });
 
 function copyLink() {
@@ -3565,6 +3592,7 @@ function _kbFix(v, d) {
 function kbHint(msg) { document.getElementById('kbHint').textContent = msg || ''; }
 
 function kbInit() {
+  loadItems();   // 明细里的装备模块要靠它换中文名，先预热
   var i = document.getElementById('kbInput');
   if (i && !i.value) i.focus();
 }
@@ -3629,6 +3657,75 @@ function kbShow(type, id, name) {
   });
 }
 
+// typeID -> 中文名。本地 ships-data.js（531 艘，带中文）优先；其次 items-data.js
+// （5976 项，顶层键就是 typeID，装备模块靠它）；都没有就退回 #id 而不是空白。
+var _kbShipIdx = null;
+var _kbTypeDict = {};   // ESI 补来的 typeID -> 中文名（本地词典没有的那些）
+
+// 只查本地词典，查不到返回 null
+function kbTypeLocal(id) {
+  if (!id) return null;
+  if (!_kbShipIdx) {
+    _kbShipIdx = {};
+    var arr = (typeof SHIPS_DATA !== 'undefined' && SHIPS_DATA) ? SHIPS_DATA : [];
+    arr.forEach(function(s) {
+      if (s && s.attr && s.attr.typeID != null) _kbShipIdx[s.attr.typeID] = s.cn;
+    });
+  }
+  if (_kbShipIdx[id]) return _kbShipIdx[id];
+  var it = window.ITEMS_DATA && window.ITEMS_DATA[id];
+  if (it) return it.zh || it.en || null;
+  return null;
+}
+
+function kbTypeName(id) {
+  if (!id) return '未知';
+  return kbTypeLocal(id) || _kbTypeDict[id] || ('#' + id);
+}
+
+// 本地词典没收录的类型（NPC 舰船、建筑、无人机等）批量找 ESI 补中文名。
+// /universe/names/ 也能解 typeID 但只给英文，所以走 /universe/types/?language=zh。
+function kbFetchTypes(ids, cb) {
+  var uniq = {};
+  ids.forEach(function(x) { if (x && !kbTypeLocal(x) && !_kbTypeDict[x]) uniq[x] = 1; });
+  var list = Object.keys(uniq).slice(0, 120);   // 上限，别一次打太多 ESI
+  if (!list.length) { cb(); return; }
+  var chunks = [];
+  for (var i = 0; i < list.length; i += 60) chunks.push(list.slice(i, i + 60));
+  var left = chunks.length;
+  chunks.forEach(function(c) {
+    _fetch('GET', 'kb.php?action=types&ids=' + c.join(','), null, function(res) {
+      if (res && res.types) Object.keys(res.types).forEach(function(k) { _kbTypeDict[k] = res.types[k]; });
+      if (--left === 0) cb();
+    });
+  });
+}
+
+// 批量 ID -> 名。角色 / 军团 / 星系都走这一个（ESI /universe/names/ 就是这么设计的）。
+// 接口一次上限 300，超了分片。
+function kbFetchNames(ids, cb) {
+  var uniq = {};
+  ids.forEach(function(x) { if (x) uniq[x] = 1; });
+  var list = Object.keys(uniq);
+  if (!list.length) { cb({}); return; }
+  var out = {}, chunks = [];
+  for (var i = 0; i < list.length; i += 300) chunks.push(list.slice(i, i + 300));
+  var left = chunks.length;
+  chunks.forEach(function(c) {
+    _fetch('GET', 'kb.php?action=names&ids=' + c.join(','), null, function(res) {
+      if (res && res.names) Object.keys(res.names).forEach(function(k) { out[k] = res.names[k]; });
+      if (--left === 0) cb(out);
+    });
+  });
+}
+function _kbName(names, id) {
+  if (!id) return '未知';
+  return names[id] || ('#' + id);
+}
+
+var KB_SHOW = 50;        // 每个列表最多渲染多少行
+var _kbLists = null;     // 当前实体的击杀/损失明细，详情弹窗从这里取
+
 function kbRender(d, name) {
   var title = name || d.name || ('ID ' + d.id);
   document.getElementById('kbTitle').textContent = title + ' · ' + (KB_KIND[d.type] || d.type);
@@ -3659,13 +3756,160 @@ function kbRender(d, name) {
     + card(d.dangerRatio, '危险度') + card(d.gangRatio + '%', '组队率')
     + card(_kbFix(d.soloRatio, 1) + '%', '单独作战比例') + '</div>';
 
+  // 舰船统计：来自同一个 stats payload 里的 topLists，零额外请求
+  var ships = d.topShips || [];
+  if (ships.length) {
+    var maxK = ships[0].kills || 1;
+    html += '<h4 class="kb-h">舰船统计 <em>按击杀数</em></h4>'
+      + ships.map(function(s) {
+          return _barRow(kbTypeName(s.shipTypeID) + '  ·  ' + fmtIsk(s.isk) + ' ISK', s.kills, maxK, false);
+        }).join('');
+  }
+
+  // 明细异步补进来：stats 是秒回的，kills 要拉两个大页，别让它挡住上面的卡片
+  html += '<div id="kbKills"></div>';
+
   html += '<p class="raid-note">数据来自 <a href="https://zkillboard.com/'
     + (KB_PATH[d.type] || '') + '/' + d.id + '/" target="_blank" rel="noopener">zKillboard</a>'
     + (d.epoch ? ' · 上游更新于 ' + fmtDateTime(d.epoch * 1000) : '')
     + (d.cached ? ' · 本站缓存' : '') + '</p>';
 
   document.getElementById('kbBody').innerHTML = html;
+  kbLoadKills(d);
 }
+
+// 击杀/损失明细。列表端点里每条都是完整 ESI 结构，所以拉一次就够列表和详情两处用，
+// 点开某一条不用再发请求。
+function kbLoadKills(d) {
+  var box = document.getElementById('kbKills');
+  if (!box) return;
+  _kbLists = null;
+  box.innerHTML = '<h4 class="kb-h">击杀 / 损失明细</h4>'
+    + '<p class="raid-note">加载中…（近 7 天，首次约需数秒）</p>';
+
+  _fetch('GET', 'kb.php?action=kills&type=' + encodeURIComponent(d.type) + '&id=' + d.id + '&days=7',
+    null, function(r) {
+      if (!r || r.error) {
+        box.innerHTML = '<h4 class="kb-h">击杀 / 损失明细</h4>'
+          + '<p class="raid-note">明细获取失败，请稍后重试。</p>';
+        return;
+      }
+      // 只给要显示的那几条解析名字，别把 400 条里几千个 ID 全拉一遍
+      var ids = [], tids = [];
+      (d.topShips || []).forEach(function(s) { tids.push(s.shipTypeID); });
+      ['kills', 'losses'].forEach(function(k) {
+        (r[k] || []).slice(0, KB_SHOW).forEach(function(km) {
+          ids.push(km.system);
+          if (km.victim.char) ids.push(km.victim.char);
+          km.attackers.forEach(function(a) { if (a.char) ids.push(a.char); });
+          tids.push(km.victim.ship);
+          km.attackers.forEach(function(a) { tids.push(a.ship); });
+          km.victim.items.forEach(function(it) { tids.push(it[0]); });
+        });
+      });
+      kbFetchNames(ids, function(names) {
+        _kbLists = { data: r, names: names };
+        // 本地词典没有的类型先补中文名，再渲染
+        kbFetchTypes(tids, function() { kbRenderLists(r, names); });
+      });
+    });
+}
+
+function kbRenderLists(r, names) {
+  var box = document.getElementById('kbKills');
+  if (!box) return;
+  box.innerHTML = kbKillTable('最近击杀', r.kills, names, 'kill')
+                + kbKillTable('最近损失', r.losses, names, 'loss');
+
+  box.querySelectorAll('tr[data-kmid]').forEach(function(tr) {
+    tr.addEventListener('click', function() {
+      kbDetail(tr.getAttribute('data-kkind'), parseInt(tr.getAttribute('data-kmid'), 10));
+    });
+  });
+}
+
+function kbKillTable(title, list, names, kind) {
+  if (!list || !list.length) {
+    return '<h4 class="kb-h">' + title + '</h4><p class="raid-note">近 7 天没有记录。</p>';
+  }
+  var rows = list.slice(0, KB_SHOW).map(function(k) {
+    return '<tr data-kmid="' + k.id + '" data-kkind="' + esc(k.kind) + '">'
+      + '<td>' + fmtDateTime(Date.parse(k.time)) + '</td>'
+      + '<td>' + esc(kbTypeName(k.victim.ship)) + '</td>'
+      + '<td>' + esc(_kbName(names, k.victim.char)) + '</td>'
+      + '<td>' + esc(_kbName(names, k.system)) + '</td>'
+      + '<td class="num">' + fmtIsk(k.value) + '</td>'
+      + '<td class="num">' + (k.attackers.length + 1) + '</td></tr>';
+  }).join('');
+
+  return '<h4 class="kb-h">' + title + ' <em>近 7 天 ' + list.length + ' 条'
+    + (list.length > KB_SHOW ? '，显示最近 ' + KB_SHOW + ' 条' : '')
+    + ' · 点任意一行看明细</em></h4>'
+    + '<div class="tbl-wrap"><table class="ship-tbl kb-tbl"><thead><tr>'
+    + '<th>时间</th><th>舰船</th><th>受害者</th><th>星系</th>'
+    + '<th class="num">价值</th><th class="num">参战</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+// 单条详情：参战方（各人打出的伤害）、受害者的承担伤害与装配
+function kbDetail(kind, id) {
+  if (!_kbLists) return;
+  var list = (kind === 'loss') ? _kbLists.data.losses : _kbLists.data.kills;
+  var k = null;
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) { k = list[i]; break; }
+  if (!k) return;
+  var names = _kbLists.names;
+
+  document.getElementById('kbModalTitle').textContent =
+    kbTypeName(k.victim.ship) + (k.kind === 'kill' ? ' · 我方击杀' : ' · 我方损失');
+
+  var h = '<p class="raid-note">' + fmtDateTime(Date.parse(k.time))
+    + ' · ' + esc(_kbName(names, k.system))
+    + ' · 总价值 <b>' + fmtIsk(k.value) + '</b> ISK'
+    + '（掉落 ' + fmtIsk(k.dropped) + ' / 损毁 ' + fmtIsk(k.destroyed) + '）'
+    + (k.solo ? ' · 单挑' : '') + (k.npc ? ' · 含 NPC' : '')
+    + ' · <a href="https://zkillboard.com/kill/' + k.id + '/" target="_blank" rel="noopener">zKillboard</a></p>';
+
+  var v = k.victim;
+  h += '<h4 class="kb-h">受害者</h4>'
+    + '<div class="corp-line"><span class="corp-tag">' + esc(kbTypeName(v.ship)) + '</span>'
+    + '<span class="corp-cnt">' + esc(_kbName(names, v.char)) + '</span>'
+    + '<span class="corp-cnt">承担伤害 ' + v.dmg.toLocaleString() + '</span></div>';
+
+  // 参战方：伤害从高到低，最后一击单独标出来
+  var total = k.attackers.reduce(function(s, a) { return s + a.dmg; }, 0);
+  var maxD = k.attackers.reduce(function(m, a) { return a.dmg > m ? a.dmg : m; }, 1);
+  var atk = k.attackers.slice().sort(function(a, b) { return b.dmg - a.dmg; });
+  h += '<h4 class="kb-h">参战方 <em>' + atk.length + ' 人 · 合计伤害 '
+    + total.toLocaleString() + '</em></h4>'
+    + '<div class="tbl-wrap"><table class="ship-tbl kb-tbl"><thead><tr>'
+    + '<th>角色</th><th>舰船</th><th class="num">伤害</th><th>占比</th><th></th>'
+    + '</tr></thead><tbody>'
+    + atk.map(function(a) {
+        var pct = total > 0 ? (a.dmg / total * 100) : 0;
+        var w = Math.round(a.dmg / maxD * 100);
+        return '<tr style="cursor:default">'
+          + '<td>' + esc(a.char ? _kbName(names, a.char) : '（NPC）') + '</td>'
+          + '<td>' + esc(kbTypeName(a.ship)) + '</td>'
+          + '<td class="num">' + a.dmg.toLocaleString() + '</td>'
+          + '<td>' + pct.toFixed(1) + '% <span class="kb-dmgbar"><i style="width:' + w + '%"></i></span></td>'
+          + '<td>' + (a.final ? '<span class="kb-final">最后一击</span>' : '') + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  // 受害者装配
+  if (v.items && v.items.length) {
+    h += '<h4 class="kb-h">装配 <em>' + v.items.length + ' 项</em></h4>'
+      + '<div class="pgrid">' + v.items.map(function(it) {
+          return '<span class="pchip">' + esc(kbTypeName(it[0])) + (it[1] > 1 ? ' ×' + it[1] : '') + '</span>';
+        }).join('') + '</div>';
+  }
+
+  document.getElementById('kbModalBody').innerHTML = h;
+  document.getElementById('kbModal').classList.add('show');
+}
+
+function closeKbModal() { document.getElementById('kbModal').classList.remove('show'); }
 
 function closePersonModal() { document.getElementById('personModal').classList.remove('show'); }
 function raidGoto(K, id) {

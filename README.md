@@ -20,7 +20,7 @@
 - **本方 / 敌对** — 本方军团固定为 PLA-F、P.L.A，其余一律归敌对；**统计只算本方**，敌对只标注总数
 - **面板截图** — 角色面板、玩家面板均可一键截图到剪贴板（内容过长会先展开再截）
 - **ESI 查询** — 粘贴角色名列表，自动查询军团/联盟/头衔（需 PHP 后端）
-- **KB 统计** — 输入军团 / 联盟 / 角色的名称或缩写（`PLA-F` 这类 ticker 也行），查看 zKillboard 的作战总览：击杀/损失、摧毁与损失价值、作战效率、危险度；直接粘贴 zKillboard 链接也可以
+- **KB 统计** — 输入军团 / 联盟 / 角色的名称或缩写（`PLA-F` 这类 ticker 也行），查看 zKillboard 的作战数据：总览卡片（击杀/损失、摧毁与损失价值、作战效率、危险度）、**舰船统计**、**近 7 天击杀/损失明细**；点任意一条看**单场详情**——参战方各人的舰船与**打出的伤害**、受害者的舰船与**承担伤害**、装配、最后一击。舰船/装备名全部走本地词典转中文
 - **分享链接** — 每次解析生成独立短码链接（`#c=xxxxxx`），发给队友即可看到相同结果
 - **一键截图** — 将解析结果截图为 PNG 复制到剪贴板（需 HTTPS）
 - **暗色/亮色主题** — 默认暗色，可切换
@@ -154,22 +154,38 @@ SQLite 表 `runs(code, id, ts, note, names, updated_at)`，`code` 存的是**同
 
 ## KB 统计 API（`kb.php`）
 
-数据全部来自 **zKillboard** 的公开聚合端点，站点只做代理 + 缓存，不存原始 killmail，也不需要轮询。
+数据全部来自 **zKillboard** 的公开端点 + ESI，站点只做代理 + 缓存，不存原始 killmail，也不需要轮询。
 
 ```bash
-GET ?action=resolve&q=PLA-F        # 名称/缩写 -> 实体（ESI /universe/ids/，支持 ticker）
-GET ?action=stats&type=corporationID&id=98764551
+GET ?action=resolve&q=PLA-F                    # 名称/缩写 -> 实体（ESI /universe/ids/，支持 ticker）
+GET ?action=stats&type=corporationID&id=98764551   # 聚合总览 + Top 舰船/角色
+GET ?action=kills&type=corporationID&id=98764551&days=7   # 击杀/损失明细（含伤害）
+GET ?action=names&ids=1,2,3                    # 批量 ID -> 名（角色/军团/星系/物品类型）
+GET ?action=types&ids=72872,71478              # 批量 typeID -> 中文名
 ```
 
-SQLite 表 `kb_cache(k, fetched_at, payload)`，一个键一行：`stats:<type>:<id>` 存裁剪后的聚合数据（10 分钟 TTL），`q:<md5>` / `n:<type>:<id>` 存名称解析（7 天 TTL）。
+SQLite 表 `kb_cache(k, fetched_at, payload)`，一个键一行，全部带 `KB_VER` 前缀（**改了缓存结构就把 `KB_VER` +1**，旧数据自动失效，不用去服务器删库）：
 
-- 上游是 `/api/stats/{type}/{id}/kills/`——**一次调用就返回总览要的全部数字**（实测 71KB / 0.8s），所以不需要自己拉 killmail 聚合
-- 显式带 `/kills/` 可以省掉 zKillboard 的一次 302
-- `type` 走白名单（`corporationID` / `allianceID` / `characterID`），因为它会被拼进上游 URL
-- 原始 payload 71KB，裁剪后约 1KB；缓存超过 500 个实体或 7 天会淘汰最旧的
+| 键 | 内容 | TTL |
+|---|---|---|
+| `s:<type>:<id>` | 裁剪后的聚合数据 + Top 舰船/角色 | 10 分钟 |
+| `k:<type>:<id>:<days>` | killmail 明细列表 | 10 分钟 |
+| `q:<md5>` / `nm:<id>` | 名称解析 | 7 天 |
+| `ty:<id>` | 物品/舰船类型中文名 | 30 天 |
+
+要点：
+
+- 聚合走 `/api/stats/{type}/{id}/kills/`——**一次调用就返回总览要的全部数字**（实测 71KB / 0.8s），不用自己拉 killmail 做聚合。显式带 `/kills/` 能省掉 zKillboard 的一次 302。
+- 明细走 `/api/kills/` + `/api/losses/`，用 `curl_multi` **并行**拉（单页 200 条 / 700KB+，串行明显更慢）。列表端点里每条都带完整 ESI 结构 —— `attackers[].damage_done`、`victim.damage_taken`、装配、最后一击 —— 所以**前端列表和详情共用同一份数据，点开某条不用再发请求**。
+- `type` 走白名单（`corporationID` / `allianceID` / `characterID`），因为它会被拼进上游 URL。
+- 响应在 PHP 里 gzip（`ob_gzhandler`）：nginx 全局的 `gzip_types` 没有 `application/json`，击杀明细 360KB 压完约 65KB。
 - ⚠️ 同样需要可写目录：`sudo mkdir -p <站点>/kb_data && sudo chmod 777 <站点>/kb_data`
 
-> 不要把「时间窗统计」（7/30/90 天）做成实时请求：分页拉 kills/losses 实测单页 1.3~8.5s 且会偶发失败，必须后台预热才行。
+> 不要把「自定义时间窗统计」做成实时请求：`pastSeconds` 上限就是 7 天，更长的窗口要自己分页求和，实测单页 1.3~8.5s 且会偶发失败，得配后台预热任务才行。
+
+### 舰船/装备中文名从哪来
+
+前端按优先级解析 typeID：`ships-data.js`（531 艘，`attr.typeID` 索引）→ `items-data.js`（5976 项，顶层键就是 typeID）→ `kb.php?action=types`（本地没有的 NPC 舰船/建筑/无人机等，走 ESI `/universe/types/?language=zh`）。所以页面上不会出现裸露的 `#数字`。
 
 ## 缓存 API
 
