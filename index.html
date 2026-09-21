@@ -1043,6 +1043,7 @@
   .tl-t { flex: 0 0 36px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .tl-n { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
   .tl-s { flex: 0 0 auto; color: var(--brand-2); }
+  .tl-sys { flex: 0 1 auto; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
   .tl-v { flex: 0 1 auto; margin-left: auto; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
 
   /* responsive */
@@ -3934,7 +3935,7 @@ function brRender(d, names) {
   document.getElementById('brBody').innerHTML =
       '<div id="brHead"></div><div id="brFilter"></div><div id="brTeams" class="br-teams"></div>'
     + '<div id="brChartBox"></div><div id="brTL"></div><div id="brComp"></div>'
-    + '<div id="brDmg"></div><div id="brFeed"></div>';
+    + '<div id="brDmg"></div>';
   brRefresh();
 }
 
@@ -4074,7 +4075,6 @@ function brRefresh() {
     ['brTeams', 'brComp', 'brChartBox', 'brDmg', 'brTL'].forEach(function (id) {
       document.getElementById(id).innerHTML = '';
     });
-    document.getElementById('brFeed').innerHTML = '';
     return;
   }
 
@@ -4090,8 +4090,6 @@ function brRefresh() {
     + b.systems.map(function (s) { return esc(_kbName(names, s[0])); }).join(' · ')
     + ' · 总损失 <b>' + fmtIsk(b.iskTotal) + '</b> ISK · '
     + b.home.pilots + ' 人 vs ' + b.foe.pilots + ' 人</p>';
-
-  brPaintFeed(list, names);
 }
 
 // 筛选芯片。星系多选（可全选/清空），价值单选。选中后下方统计与流水一起重算。
@@ -4280,13 +4278,17 @@ function brTimeline(list, names) {
   });
   var boxH = bottom + PAD;
 
+  // 星系和参战人数原本只在击杀流水里有，那条表删掉后并到这里 ——
+  // 删视图不该顺手把数据也丢了
   var rowHtml = function (o) {
     var k = o.k;
     return '<div class="tl-row" style="top:' + Math.round(o.y) + 'px">'
       + '<span class="tl-t">' + fmtDateTime(Date.parse(k.time)).slice(11) + '</span>'
       + '<span class="tl-n">' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</span>'
       + '<span class="tl-s">' + esc(kbTypeName(k.victim.ship)) + '</span>'
-      + '<span class="tl-v">' + k.victim.dmg.toLocaleString() + ' 承受 · ' + fmtIsk(k.value) + '</span></div>';
+      + '<span class="tl-sys">' + esc(_kbName(names, k.system)) + '</span>'
+      + '<span class="tl-v">' + k.attackers.length + ' 人 · '
+      + k.victim.dmg.toLocaleString() + ' 承受 · ' + fmtIsk(k.value) + '</span></div>';
   };
   var ticks = [0, 0.5, 1].map(function (f) {
     var y = PAD + f * (H - TL_ROW);
@@ -4342,36 +4344,6 @@ function brRoster(b, names) {
       + '</tbody></table></div>';
   };
   return table(b.home, '本方', 'home') + table(b.foe, '敌对', 'foe');
-}
-
-// 击杀流水。筛选芯片在 brPaintFilter 里，这里只把传进来的那批渲染出来。
-function brPaintFeed(list, names) {
-  var box = document.getElementById('brFeed');
-  var desc = list.slice().sort(function (a, z) { return Date.parse(z.time) - Date.parse(a.time); });
-  var h = '<h4 class="kb-h">击杀流水 <em>' + desc.length + ' 条</em></h4>';
-  if (!desc.length) {
-    h += '<p class="raid-note">没有符合筛选条件的记录。</p>';
-  } else {
-    h += '<div class="tbl-wrap"><table class="ship-tbl kb-tbl"><thead><tr>'
-      + '<th>时间</th><th>结果</th><th>舰船</th><th>损失方</th><th>星系</th>'
-      + '<th class="num">价值</th><th class="num">参战</th><th class="num">承担伤害</th>'
-      + '</tr></thead><tbody>'
-      + desc.map(function (k) {
-          var ours = k.kind === 'kill';
-          return '<tr style="cursor:default">'
-            + '<td>' + fmtDateTime(Date.parse(k.time)) + '</td>'
-            + '<td><span style="color:' + (ours ? 'var(--cyan)' : 'var(--red)') + '">'
-            + (ours ? '我方击毁' : '我方损失') + '</span></td>'
-            + '<td>' + esc(kbTypeName(k.victim.ship)) + '</td>'
-            + '<td>' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</td>'
-            + '<td>' + esc(_kbName(names, k.system)) + '</td>'
-            + '<td class="num">' + fmtIsk(k.value) + '</td>'
-            + '<td class="num">' + k.attackers.length + '</td>'
-            + '<td class="num">' + k.victim.dmg.toLocaleString() + '</td></tr>';
-        }).join('')
-      + '</tbody></table></div>';
-  }
-  box.innerHTML = h;
 }
 
 function closePersonModal() { document.getElementById('personModal').classList.remove('show'); }
