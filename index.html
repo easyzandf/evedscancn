@@ -962,8 +962,10 @@
   }
   .bar-row .bar-track { flex: 1; background: var(--surface-2); border-radius: 4px; height: 16px; overflow: hidden; }
   /* 纯色而非渐变：html2canvas 解析不了这里的 gradient，会让整块截图失败
-     （addColorStop 收到非有限值），详见 raidScreenshot 的使用场景 */
-  .bar-row .bar-fill { height: 100%; border-radius: 4px; background: var(--brand); }
+     （addColorStop 收到非有限值），详见 raidScreenshot 的使用场景。
+     display:block 不能省 —— 这是个 <span>，inline 元素的 width/height 不生效。
+     之前没有这条，所有条形图的填充一直渲染成 0 宽，只看得见空底槽。 */
+  .bar-fill { display: block; height: 100%; border-radius: 4px; background: var(--brand); }
   .bar-row .bar-val { flex: 0 0 54px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 
   /* KB 统计：区块标题 + 紧凑明细表 */
@@ -977,6 +979,45 @@
                background: var(--surface-2); overflow: hidden; vertical-align: middle; }
   .kb-dmgbar > i { display: block; height: 100%; background: var(--brand); }
   .kb-final { color: var(--red); font-weight: 600; }
+
+  /* 会战报告 */
+  .br-row {
+    display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px;
+    background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .br-row:hover { border-color: var(--brand); }
+  .br-when { flex: 0 0 128px; }
+  .br-when b { display: block; font-size: 13px; color: var(--text); font-weight: 600; }
+  .br-when span { font-size: 11px; color: var(--dim); }
+  .br-mid { flex: 1; min-width: 0; }
+  /* 双方占比条：纯色，不用 gradient（html2canvas 解析不了） */
+  .br-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-2); margin-top: 6px; }
+  .br-bar i { display: block; height: 100%; }
+  .br-bar .win  { background: var(--brand); }
+  .br-bar .lose { background: var(--red); }
+  .br-side { flex: 0 0 auto; text-align: right; font-size: 12px; line-height: 1.5; }
+  .br-side .dim { color: var(--dim); }
+
+  .br-teams { display: flex; gap: 14px; flex-wrap: wrap; margin: 4px 0 8px; }
+  .br-team {
+    flex: 1; min-width: 250px; padding: 12px 14px; border-radius: var(--radius);
+    background: var(--surface); border: 1px solid var(--border-soft);
+  }
+  .br-team.home { border-color: rgba(84,214,226,.40); }
+  .br-team.foe  { border-color: rgba(255,113,113,.40); }
+  .br-team h5 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+  .br-team.home h5 { color: var(--cyan); }
+  .br-team.foe  h5 { color: var(--red); }
+  .br-kv { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-bottom: 8px; }
+  .br-kv div { font-size: 12px; color: var(--muted); }
+  .br-kv div b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .br-eff { height: 16px; border-radius: 8px; background: var(--surface-2); overflow: hidden; margin-bottom: 10px; }
+  .br-eff i { display: block; height: 100%; }
+  .br-eff.home i { background: var(--cyan); }
+  .br-eff.foe  i { background: var(--red); }
+  .br-eff span { font-size: 11px; color: var(--dim); }
+  .br-chart { width: 100%; height: 190px; display: block; }
 
   /* responsive */
   @media (max-width: 760px) {
@@ -1006,6 +1047,7 @@
     <a href="#" data-pg="buy"><i data-lucide="shopping-cart"></i>装备购买</a>
     <a href="#" data-pg="raid"><i data-lucide="users"></i>30人本</a>
     <a href="#" data-pg="battle"><i data-lucide="swords"></i>战斗</a>
+    <a href="#" data-pg="br"><i data-lucide="flame"></i>会战报告</a>
     <a href="#" data-pg="kb"><i data-lucide="crosshair"></i>KB 统计</a>
     <a href="#" data-pg="about"><i data-lucide="info"></i>帮助</a>
   </div>
@@ -1183,6 +1225,42 @@
     </div>
   </div>
 
+  <!-- 会战报告 page -->
+  <div id="pg-br" class="hidden">
+    <div id="brListView">
+      <div class="page-head">
+        <span class="eyebrow"><i data-lucide="flame"></i>EVE Online</span>
+        <h1>会战报告</h1>
+        <p>把一段时间内的击杀流水自动切成一场场会战，对比双方战损、编成与伤害</p>
+      </div>
+
+      <div class="browbar">
+        <input type="text" id="brInput" placeholder="军团 / 联盟 / 角色（留空则用本方联盟）"
+               onkeydown="if(event.key==='Enter')brLoad()">
+        <select id="brDays" onchange="brLoad()">
+          <option value="1">最近 24 小时</option>
+          <option value="3">最近 3 天</option>
+          <option value="7" selected>最近 7 天</option>
+        </select>
+        <button class="btn btn-go" onclick="brLoad()"><i data-lucide="search"></i>分析</button>
+        <span class="hint" id="brHint"></span>
+      </div>
+
+      <div id="brList"></div>
+    </div>
+
+    <div id="brReportView" class="hidden">
+      <div class="raid-view-head">
+        <h3 id="brTitle"></h3>
+        <span>
+          <button class="raid-shot" onclick="brBack()">← 返回列表</button>
+          <button class="raid-shot" onclick="raidScreenshot(this,'brBody','eve-br')">截图复制</button>
+        </span>
+      </div>
+      <div class="raid-shot-body" id="brBody"></div>
+    </div>
+  </div>
+
   <!-- KB 统计 page -->
   <div id="pg-kb" class="hidden">
     <div class="page-head">
@@ -1226,6 +1304,7 @@
         <li><b>装备购买 Buy List</b> — 粘贴资产 + 配装 → 扣除已有 → 生成需购买清单（资产 / 配装中英文混用均可）</li>
         <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名按时间存档；点记录复现名单，点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
         <li><b>ESI 查询</b> — 粘贴角色名列表，自动查询军团 / 联盟 / 头衔</li>
+        <li><b>会战报告</b> — 把击杀流水自动切成一场场会战，每场给出双方对比（人数 / 损失 / 击毁 / 效率）、舰船编成、累计损失曲线、伤害排行和带筛选的击杀流水；点列表任意一场即可展开</li>
         <li><b>KB 统计</b> — 输入军团 / 联盟 / 角色的名称或缩写（<code>PLA-F</code> 这种也行），查看 zKillboard 的作战数据：总览卡片、舰船统计、近 7 天击杀/损失明细；点任意一条看单场详情（参战方各人的舰船与伤害、受害者的承担伤害、装配、最后一击）</li>
         <li><b>分享链接</b> — 每次解析生成独立短码，发给队友即看同结果 · <b>一键截图</b> 结果存剪贴板 · <b>亮 / 暗主题</b></li>
       </ul>
@@ -2163,11 +2242,12 @@ document.querySelectorAll('.topbar .nav a').forEach(function(a) {
 function switchPg(pg) {
   document.querySelectorAll('.topbar .nav a').forEach(function(x) { x.classList.remove('on'); });
   document.querySelector('.topbar .nav a[data-pg="' + pg + '"]').classList.add('on');
-  ['scan', 'browse', 'buy', 'raid', 'battle', 'kb', 'about'].forEach(function(p) {
+  ['scan', 'browse', 'buy', 'raid', 'battle', 'br', 'kb', 'about'].forEach(function(p) {
     var el = document.getElementById('pg-' + p);
     if (el) el.classList.toggle('hidden', p !== pg);
   });
   if (LOG_KINDS.indexOf(pg) !== -1) raidInit(pg);   // 30人本 / 战斗 共用同一套逻辑
+  if (pg === 'br') brInit();
   if (pg === 'kb') kbInit();
 }
 
@@ -3662,20 +3742,32 @@ function kbShow(type, id, name) {
 var _kbShipIdx = null;
 var _kbTypeDict = {};   // ESI 补来的 typeID -> 中文名（本地词典没有的那些）
 
-// 只查本地词典，查不到返回 null
-function kbTypeLocal(id) {
-  if (!id) return null;
+// 索引整个舰船对象（不只是名字）—— 会战编成要按 subcat（战列舰/护卫舰…）分组
+function _kbShipIndex() {
   if (!_kbShipIdx) {
     _kbShipIdx = {};
     var arr = (typeof SHIPS_DATA !== 'undefined' && SHIPS_DATA) ? SHIPS_DATA : [];
     arr.forEach(function(s) {
-      if (s && s.attr && s.attr.typeID != null) _kbShipIdx[s.attr.typeID] = s.cn;
+      if (s && s.attr && s.attr.typeID != null) _kbShipIdx[s.attr.typeID] = s;
     });
   }
-  if (_kbShipIdx[id]) return _kbShipIdx[id];
+  return _kbShipIdx;
+}
+
+// 只查本地词典，查不到返回 null
+function kbTypeLocal(id) {
+  if (!id) return null;
+  var s = _kbShipIndex()[id];
+  if (s) return s.cn;
   var it = window.ITEMS_DATA && window.ITEMS_DATA[id];
   if (it) return it.zh || it.en || null;
   return null;
+}
+
+// 舰船级别，用于会战编成分组。本地词典没有的（NPC 船、建筑）归到「其他」
+function kbShipClass(id) {
+  var s = _kbShipIndex()[id];
+  return (s && s.subcat) ? s.subcat : '其他';
 }
 
 function kbTypeName(id) {
@@ -3910,6 +4002,349 @@ function kbDetail(kind, id) {
 }
 
 function closeKbModal() { document.getElementById('kbModal').classList.remove('show'); }
+
+// ---- 会战报告 ----
+// kb.php 的 battles 把 killmail 流水按时间间隔切成一场场会战并算好双方统计，
+// report 再取单场的完整明细。前端只负责渲染。
+var _br = { list: null, cur: null, names: {}, tgt: null, fsys: 0, fval: 0 };
+var BR_HOME_ALLIANCE = 99014027;   // People's Liberation Alliance（PLA）
+
+function brInit() {
+  loadItems();
+  var i = document.getElementById('brInput');
+  if (i && !i.value) i.focus();
+  if (!_br.list) brLoad();   // 首次进来先把本方联盟的会战列出来
+}
+
+function brHint(m) { document.getElementById('brHint').textContent = m || ''; }
+function brShowList() {
+  document.getElementById('brListView').classList.remove('hidden');
+  document.getElementById('brReportView').classList.add('hidden');
+}
+function brShowReport() {
+  document.getElementById('brListView').classList.add('hidden');
+  document.getElementById('brReportView').classList.remove('hidden');
+}
+function brBack() { brShowList(); }
+
+// 输入 -> {type,id}；留空就用本方联盟
+function brTarget(cb) {
+  var q = (document.getElementById('brInput').value || '').trim();
+  if (!q) { cb({ type: 'allianceID', id: BR_HOME_ALLIANCE }, null); return; }
+  var m = /zkillboard\.com\/(corporation|alliance|character)\/(\d+)/i.exec(q);
+  if (m) {
+    cb({ type: { corporation: 'corporationID', alliance: 'allianceID', character: 'characterID' }[m[1].toLowerCase()],
+         id: parseInt(m[2], 10) }, null);
+    return;
+  }
+  if (/^\d+$/.test(q)) { cb(null, '纯数字 ID 分不出类型，请粘贴 zKillboard 链接或输入名称'); return; }
+  _fetch('GET', 'kb.php?action=resolve&q=' + encodeURIComponent(q), null, function(res) {
+    if (!res || !Array.isArray(res.results)) { cb(null, '查询失败，请稍后重试'); return; }
+    if (!res.results.length) { cb(null, '没找到「' + q + '」'); return; }
+    cb(res.results[0], null);   // 一个名字命中多个实体时取第一个
+  });
+}
+
+function brLoad() {
+  brShowList();
+  _br.list = null;
+  var box = document.getElementById('brList');
+  box.innerHTML = '<p class="raid-note">分析中…（要拉取上游数据，首次约需数秒）</p>';
+  brHint('');
+  brTarget(function (t, err) {
+    if (err) { box.innerHTML = '<p class="raid-note">' + esc(err) + '</p>'; return; }
+    _br.tgt = t;
+    var days = document.getElementById('brDays').value;
+    _fetch('GET', 'kb.php?action=battles&type=' + encodeURIComponent(t.type)
+      + '&id=' + t.id + '&days=' + days, null, function (d) {
+        if (!d || d.error) { box.innerHTML = '<p class="raid-note">会战分析失败，请稍后重试。</p>'; return; }
+        _br.list = d;
+        brRenderList();
+      });
+  });
+}
+
+function brRenderList() {
+  var d = _br.list, bs = (d && d.battles) || [];
+  var box = document.getElementById('brList');
+  if (!bs.length) {
+    box.innerHTML = '<p class="raid-note">这段时间没识别出会战（少于 5 条击杀的片段不算一场）。</p>';
+    return;
+  }
+  var sids = [];
+  bs.forEach(function (b) { b.systems.forEach(function (s) { sids.push(s[0]); }); });
+
+  kbFetchNames(sids, function (names) {
+    var html = '<h4 class="kb-h">识别出 ' + bs.length + ' 场会战'
+      + ' <em>近 ' + d.days + ' 天 · 点任意一场看报告</em></h4>';
+    html += bs.map(function (b) {
+      var dur = Math.max(1, Math.round((b.t1 - b.t0) / 60));
+      var sys = b.systems.length
+        ? esc(_kbName(names, b.systems[0][0])) + (b.systems.length > 1 ? ' +' + (b.systems.length - 1) : '')
+        : '—';
+      // 这条 bar 表示「全场被摧毁的 ISK 里，双方各贡献了多少」
+      var tot = b.home.iskDestroyed + b.foe.iskDestroyed;
+      var hp = tot > 0 ? b.home.iskDestroyed / tot * 100 : 50;
+      return '<div class="br-row" data-br="' + b.id + '">'
+        + '<div class="br-when"><b>' + fmtDateTime(b.t0 * 1000) + '</b>'
+        + '<span>' + dur + ' 分钟 · ' + b.killmails + ' 条</span></div>'
+        + '<div class="br-mid"><div style="font-size:12px;color:var(--muted)">' + sys + '</div>'
+        + '<div class="br-bar"><i class="win" style="width:' + hp.toFixed(1) + '%"></i>'
+        + '<i class="lose" style="width:' + (100 - hp).toFixed(1) + '%"></i></div></div>'
+        + '<div class="br-side">'
+        + '<span style="color:var(--cyan)">击毁 ' + fmtIsk(b.home.iskDestroyed) + '</span> · '
+        + '<span style="color:var(--red)">被毁 ' + fmtIsk(b.home.iskLost) + '</span><br>'
+        + '<span class="dim">' + b.home.pilots + ' 人 vs ' + b.foe.pilots + ' 人 · 效率 '
+        + b.home.efficiency + '%</span></div></div>';
+    }).join('');
+    box.innerHTML = html;
+    box.querySelectorAll('.br-row').forEach(function (el) {
+      el.addEventListener('click', function () { brOpen(parseInt(el.getAttribute('data-br'), 10)); });
+    });
+  });
+}
+
+function brOpen(bid) {
+  var t = _br.tgt, days = document.getElementById('brDays').value;
+  brShowReport();
+  document.getElementById('brTitle').textContent = '加载中…';
+  document.getElementById('brBody').innerHTML = '<p class="raid-note">加载会战明细…</p>';
+
+  _fetch('GET', 'kb.php?action=report&type=' + encodeURIComponent(t.type) + '&id=' + t.id
+    + '&days=' + days + '&bid=' + bid, null, function (d) {
+      if (!d || d.error) {
+        document.getElementById('brBody').innerHTML = '<p class="raid-note">'
+          + (d && d.error === 'battle expired, reload the list'
+             ? '这场会战已过期，请返回列表重新分析。' : '加载失败，请稍后重试。') + '</p>';
+        return;
+      }
+      var ids = [], tids = [];
+      d.kms.forEach(function (k) {
+        ids.push(k.system);
+        if (k.victim.char) ids.push(k.victim.char);
+        k.attackers.forEach(function (a) { if (a.char) ids.push(a.char); });
+        tids.push(k.victim.ship);
+        k.attackers.forEach(function (a) { tids.push(a.ship); });
+      });
+      ['home', 'foe'].forEach(function (s) {
+        d.battle[s].ships.forEach(function (x) { tids.push(x[0]); });
+        d.battle[s].topDamage.forEach(function (x) { ids.push(x[0]); });
+      });
+      kbFetchNames(ids, function (names) {
+        _br.names = names;
+        kbFetchTypes(tids, function () { brRender(d, names); });
+      });
+    });
+}
+
+function brRender(d, names) {
+  var b = d.battle, kms = d.kms;
+  var dur = Math.max(1, Math.round((b.t1 - b.t0) / 60));
+  document.getElementById('brTitle').textContent =
+    fmtDateTime(b.t0 * 1000) + ' · ' + dur + ' 分钟 · ' + kms.length + ' 条击杀';
+
+  _br.cur = { kms: kms, names: names, battle: b };
+  _br.fsys = 0; _br.fval = 0;
+
+  var h = '<p class="raid-note">'
+    + b.systems.map(function (s) { return esc(_kbName(names, s[0])); }).join(' · ')
+    + ' · 总损失 <b>' + fmtIsk(b.iskTotal) + '</b> ISK · '
+    + b.home.pilots + ' 人 vs ' + b.foe.pilots + ' 人</p>';
+
+  h += '<div class="br-teams">'
+    + brTeamCard('home', '本方', b.home)
+    + brTeamCard('foe', '敌对', b.foe) + '</div>';
+
+  h += brComposition(b);
+  h += brChart(kms);
+  h += brDamageBoard(b, names);
+  h += '<div id="brFeed"></div>';
+
+  document.getElementById('brBody').innerHTML = h;
+  brRenderFeed();
+}
+
+function brTeamCard(cls, label, s) {
+  return '<div class="br-team ' + cls + '"><h5>' + label + '</h5>'
+    + '<div class="br-kv">'
+    + '<div>人数 <b>' + s.pilots + '</b></div>'
+    + '<div>损失 <b>' + s.lost + '</b> 舰</div>'
+    + '<div>击毁 <b>' + s.killed + '</b> 舰</div>'
+    + '<div>损失价值 <b>' + fmtIsk(s.iskLost) + '</b></div>'
+    + '<div>击毁价值 <b>' + fmtIsk(s.iskDestroyed) + '</b></div>'
+    + '</div>'
+    + '<div class="br-eff ' + cls + '"><i style="width:' + Math.min(100, s.efficiency) + '%"></i></div>'
+    + '<div style="font-size:11px;color:var(--dim)">作战效率 ' + s.efficiency + '%（按 ISK）</div>'
+    + '</div>';
+}
+
+// 舰船编成：按级别（战列舰 / 护卫舰 …）把双方的损失并排列出来
+function brComposition(b) {
+  function group(side) {
+    var by = {};
+    side.ships.forEach(function (x) {
+      var c = kbShipClass(x[0]);
+      if (!by[c]) by[c] = { n: 0, isk: 0 };
+      by[c].n += x[1];
+      by[c].isk += x[2];
+    });
+    return by;
+  }
+  var H = group(b.home), F = group(b.foe);
+  var keys = {};
+  Object.keys(H).forEach(function (k) { keys[k] = 1; });
+  Object.keys(F).forEach(function (k) { keys[k] = 1; });
+  var list = Object.keys(keys);
+  if (!list.length) return '';
+  list.sort(function (a, c) {
+    var va = (H[a] ? H[a].isk : 0) + (F[a] ? F[a].isk : 0);
+    var vc = (H[c] ? H[c].isk : 0) + (F[c] ? F[c].isk : 0);
+    return vc - va;
+  });
+  var cell = function (g) {
+    if (!g) return '<span style="color:var(--dim)">—</span>';
+    return '<b>' + g.n + '</b> <span style="color:var(--dim)">' + fmtIsk(g.isk) + '</span>';
+  };
+  return '<h4 class="kb-h">舰船编成 <em>按损失数量与价值</em></h4>'
+    + '<div class="tbl-wrap"><table class="ship-tbl kb-tbl"><thead><tr>'
+    + '<th>舰船级别</th><th class="num">本方损失</th><th class="num">敌对损失</th>'
+    + '</tr></thead><tbody>'
+    + list.map(function (k) {
+        return '<tr style="cursor:default"><td>' + esc(k) + '</td>'
+          + '<td class="num">' + cell(H[k]) + '</td>'
+          + '<td class="num">' + cell(F[k]) + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+}
+
+// 双方累计损失曲线。用内联 SVG + 纯色描边 —— html2canvas 能渲染 SVG，
+// 但解析不了 gradient，所以这里一个渐变都不能有。
+function brChart(kms) {
+  if (!kms.length) return '';
+  var sorted = kms.slice().sort(function (a, b) { return Date.parse(a.time) - Date.parse(b.time); });
+  var t0 = Date.parse(sorted[0].time);
+  var t1 = Date.parse(sorted[sorted.length - 1].time);
+  if (t1 <= t0) t1 = t0 + 60000;
+
+  var hc = 0, fc = 0, pts = [[t0, 0, 0]];
+  sorted.forEach(function (k) {
+    if (k.kind === 'kill') hc += k.value; else fc += k.value;
+    pts.push([Date.parse(k.time), hc, fc]);
+  });
+  var max = Math.max(hc, fc, 1);
+  var W = 920, Hh = 190, padL = 64, padB = 26, padT = 12;
+  var x = function (t) { return padL + (t - t0) / (t1 - t0) * (W - padL - 12); };
+  var y = function (v) { return Hh - padB - v / max * (Hh - padB - padT); };
+  var path = function (i) {
+    return pts.map(function (p, j) { return (j ? 'L' : 'M') + x(p[0]).toFixed(1) + ',' + y(p[i]).toFixed(1); }).join(' ');
+  };
+  var yAxis = [0, 0.25, 0.5, 0.75, 1].map(function (f) {
+    var v = max * f, yy = y(v);
+    return '<line x1="' + padL + '" y1="' + yy.toFixed(1) + '" x2="' + (W - 12) + '" y2="' + yy.toFixed(1)
+      + '" stroke="var(--border-soft)" stroke-width="1"/>'
+      + '<text x="' + (padL - 8) + '" y="' + (yy + 4).toFixed(1) + '" text-anchor="end" font-size="10" '
+      + 'fill="var(--dim)">' + fmtIsk(v) + '</text>';
+  }).join('');
+  var xLabels = [0, 0.5, 1].map(function (f) {
+    var t = t0 + (t1 - t0) * f;
+    return '<text x="' + x(t).toFixed(1) + '" y="' + (Hh - 8) + '" text-anchor="middle" font-size="10" '
+      + 'fill="var(--dim)">' + fmtDateTime(t).slice(11) + '</text>';
+  }).join('');
+
+  return '<h4 class="kb-h">累计损失曲线 <em>实线＝我方击毁，虚线＝我方被毁</em></h4>'
+    + '<svg class="br-chart" viewBox="0 0 ' + W + ' ' + Hh + '" preserveAspectRatio="none">'
+    + yAxis + xLabels
+    + '<path d="' + path(1) + '" fill="none" stroke="var(--cyan)" stroke-width="2"/>'
+    + '<path d="' + path(2) + '" fill="none" stroke="var(--red)" stroke-width="2" stroke-dasharray="5,4"/>'
+    + '</svg>'
+    + '<p class="raid-note">我方击毁 <b style="color:var(--cyan)">' + fmtIsk(hc)
+    + '</b> · 我方被毁 <b style="color:var(--red)">' + fmtIsk(fc) + '</b></p>';
+}
+
+function brDamageBoard(b, names) {
+  function rows(side, label) {
+    if (!side.topDamage || !side.topDamage.length) {
+      return '<h4 class="kb-h">' + label + '伤害排行</h4><p class="raid-note">没有记录。</p>';
+    }
+    var max = side.topDamage[0][1] || 1;
+    // 伤害值要压缩：完整数字加击杀数放不进 .bar-val 那 54px
+    var short = function (v) {
+      if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M';
+      if (v >= 1e3) return (v / 1e3).toFixed(1) + 'k';
+      return String(v);
+    };
+    return '<h4 class="kb-h">' + label + '伤害排行 <em>伤害 · 最后一击数</em></h4>'
+      + side.topDamage.slice(0, 10).map(function (x) {
+          var pct = Math.round(x[1] / max * 100);
+          return '<div class="bar-row"><span class="bar-lbl">' + esc(_kbName(names, x[0]))
+            + (x[2] ? '<span class="chip-sub">' + x[2] + ' 杀</span>' : '') + '</span>'
+            + '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>'
+            + '<span class="bar-val">' + short(x[1]) + '</span></div>';
+        }).join('');
+  }
+  return rows(b.home, '本方') + rows(b.foe, '敌对');
+}
+
+// 击杀流水，带星系 / 价值筛选（纯前端过滤，不再请求）
+function brRenderFeed() {
+  var c = _br.cur;
+  var box = document.getElementById('brFeed');
+  if (!c || !box) return;
+  var kms = c.kms, names = c.names, b = c.battle;
+
+  var sysChips = [[0, '全部星系']].concat(b.systems.map(function (s) { return [s[0], _kbName(names, s[0])]; }));
+  var vals = [[0, '全部'], [1e7, '10M+'], [1e8, '100M+'], [1e9, '1B+'], [1e10, '10B+']];
+
+  var list = kms.filter(function (k) {
+    if (_br.fsys && k.system !== _br.fsys) return false;
+    if (_br.fval && k.value < _br.fval) return false;
+    return true;
+  }).sort(function (a, z) { return Date.parse(z.time) - Date.parse(a.time); });
+
+  var chip = function (arr, cur, fn) {
+    return arr.map(function (x) {
+      return '<span class="pchip' + (x[0] === cur ? ' home' : '') + '" data-brf="' + fn + ':' + x[0] + '">'
+        + esc(x[1]) + '</span>';
+    }).join('');
+  };
+
+  var h = '<h4 class="kb-h">击杀流水 <em>' + list.length + ' / ' + kms.length + ' 条</em></h4>'
+    + '<div class="pgrid" style="margin-bottom:6px">' + chip(sysChips, _br.fsys, 's') + '</div>'
+    + '<div class="pgrid" style="margin-bottom:10px">' + chip(vals, _br.fval, 'v') + '</div>';
+
+  if (!list.length) {
+    h += '<p class="raid-note">没有符合筛选条件的记录。</p>';
+  } else {
+    h += '<div class="tbl-wrap"><table class="ship-tbl kb-tbl"><thead><tr>'
+      + '<th>时间</th><th>结果</th><th>舰船</th><th>损失方</th><th>星系</th>'
+      + '<th class="num">价值</th><th class="num">参战</th><th class="num">承担伤害</th>'
+      + '</tr></thead><tbody>'
+      + list.map(function (k) {
+          var ours = k.kind === 'kill';
+          return '<tr style="cursor:default">'
+            + '<td>' + fmtDateTime(Date.parse(k.time)) + '</td>'
+            + '<td><span style="color:' + (ours ? 'var(--cyan)' : 'var(--red)') + '">'
+            + (ours ? '我方击毁' : '我方损失') + '</span></td>'
+            + '<td>' + esc(kbTypeName(k.victim.ship)) + '</td>'
+            + '<td>' + esc(k.victim.char ? _kbName(names, k.victim.char) : '（NPC）') + '</td>'
+            + '<td>' + esc(_kbName(names, k.system)) + '</td>'
+            + '<td class="num">' + fmtIsk(k.value) + '</td>'
+            + '<td class="num">' + k.attackers.length + '</td>'
+            + '<td class="num">' + k.victim.dmg.toLocaleString() + '</td></tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  }
+  box.innerHTML = h;
+
+  box.querySelectorAll('[data-brf]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var p = el.getAttribute('data-brf').split(':');
+      if (p[0] === 's') _br.fsys = parseInt(p[1], 10);
+      else _br.fval = parseFloat(p[1]);
+      brRenderFeed();
+    });
+  });
+}
 
 function closePersonModal() { document.getElementById('personModal').classList.remove('show'); }
 function raidGoto(K, id) {

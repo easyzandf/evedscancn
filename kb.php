@@ -177,7 +177,10 @@ function kbTrimItems($items) {
 }
 
 // 单条 killmail：参战方（含各自打出的伤害）、受害者的承担伤害与装配、价值明细。
-function kbTrimKill($k, $kind) {
+// $withItems：会战报告要一次装几百条，装配能占掉一半体积，那边不需要就传 false。
+// 注意 victim 没有 alliance_id（zKillboard 不给），只有 corporation_id —— 分边时
+// 受害者要靠 corp 判断，参战方才有 alliance_id。
+function kbTrimKill($k, $kind, $withItems = true) {
     $v   = (isset($k['victim']) && is_array($k['victim'])) ? $k['victim'] : [];
     $zkb = (isset($k['zkb']) && is_array($k['zkb'])) ? $k['zkb'] : [];
 
@@ -188,6 +191,7 @@ function kbTrimKill($k, $kind) {
             $atk[] = [
                 'char'  => isset($a['character_id']) ? (int)$a['character_id'] : 0,
                 'corp'  => isset($a['corporation_id']) ? (int)$a['corporation_id'] : 0,
+                'alli'  => isset($a['alliance_id']) ? (int)$a['alliance_id'] : 0,
                 'ship'  => isset($a['ship_type_id']) ? (int)$a['ship_type_id'] : 0,
                 'dmg'   => isset($a['damage_done']) ? (int)$a['damage_done'] : 0,
                 'final' => !empty($a['final_blow']),
@@ -195,7 +199,7 @@ function kbTrimKill($k, $kind) {
         }
     }
 
-    return [
+    $out = [
         'kind'      => $kind,
         'id'        => isset($k['killmail_id']) ? (int)$k['killmail_id'] : 0,
         'time'      => isset($k['killmail_time']) ? (string)$k['killmail_time'] : '',
@@ -212,10 +216,11 @@ function kbTrimKill($k, $kind) {
             'corp'  => isset($v['corporation_id']) ? (int)$v['corporation_id'] : 0,
             'ship'  => isset($v['ship_type_id']) ? (int)$v['ship_type_id'] : 0,
             'dmg'   => isset($v['damage_taken']) ? (int)$v['damage_taken'] : 0,
-            'items' => kbTrimItems(isset($v['items']) ? $v['items'] : []),
         ],
         'attackers' => $atk,
     ];
+    if ($withItems) $out['victim']['items'] = kbTrimItems(isset($v['items']) ? $v['items'] : []);
+    return $out;
 }
 
 // 只留总览卡片要用的字段。原始 payload 71KB，裁完约 1KB —— 公开站点被查几百个
@@ -474,6 +479,245 @@ if ($action === 'types') {
     }
     echo json_encode(['types' => $out], JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+// ---- 会战识别 ----
+// 把 killmail 流水按时间间隔切成一场场会战：相邻两条差得久就断开。
+// 这是会战报告的核心 —— 从流水还原出「一场仗」这个单位。
+
+// 本方是谁：查联盟就是那个联盟，查军团就是那个军团。参战方带 alliance_id，
+// 受害者不带（zKillboard 不给），所以受害者只能靠 corp 判断。
+function kbHomeSide($pdo, $type, $id) {
+    global $ESI;
+    if ($type === 'corporationID') return ['alliance' => 0, 'corps' => [(int)$id]];
+
+    $key = 'ac:' . (int)$id;   // 联盟的军团列表，很少变，缓存 7 天
+    $cached = cacheGet($pdo, $key, KB_NAME_TTL);
+    if ($cached !== null && isset($cached['corps'])) {
+        return ['alliance' => (int)$id, 'corps' => $cached['corps']];
+    }
+    $r = httpJson("$ESI/alliances/" . (int)$id . "/corporations/?datasource=tranquility");
+    $corps = [];
+    if (is_array($r)) {
+        foreach ($r as $c) { $c = (int)$c; if ($c > 0) $corps[] = $c; }
+        cachePut($pdo, $key, ['corps' => $corps]);
+    }
+    return ['alliance' => (int)$id, 'corps' => $corps];
+}
+
+// 同一条 killmail 可能同时出现在 kills 和 losses 里（本方既打又被打），按 id 去重。
+// 入参是扁平的 killmail 数组（各页已经合并过了）。
+function kbDedupe($kms) {
+    $by = [];
+    foreach ($kms as $k) {
+        if (!isset($by[$k['id']])) $by[$k['id']] = $k;
+    }
+    return array_values($by);
+}
+
+function kbCluster($kms, $gapSec, $minSize) {
+    usort($kms, function ($a, $b) { return strcmp($a['time'], $b['time']); });
+    $out = []; $cur = []; $prev = null;
+    foreach ($kms as $k) {
+        $ts = strtotime($k['time']);
+        if ($prev !== null && ($ts - $prev) > $gapSec) {
+            if (count($cur) >= $minSize) $out[] = $cur;
+            $cur = [];
+        }
+        $cur[] = $k;
+        $prev = $ts;
+    }
+    if (count($cur) >= $minSize) $out[] = $cur;
+    return $out;
+}
+
+// 一场会战的双方统计。kind 已经说明是谁丢的船：
+// 'kill' = 我方拿到的击杀（对面丢船），'loss' = 我方丢船。
+function kbBattleSummary($kms, $home) {
+    $isHomeCorp = function ($corp) use ($home) {
+        return $corp && in_array((int)$corp, $home['corps'], true);
+    };
+    $isHomeAttacker = function ($a) use ($home, $isHomeCorp) {
+        if ($home['alliance'] && (int)$a['alli'] === (int)$home['alliance']) return true;
+        return $isHomeCorp($a['corp']);
+    };
+
+    $sides = [
+        'home' => ['pilots' => [], 'lost' => 0, 'killed' => 0, 'iskLost' => 0.0,
+                   'iskDestroyed' => 0.0, 'ships' => [], 'dmg' => []],
+        'foe'  => ['pilots' => [], 'lost' => 0, 'killed' => 0, 'iskLost' => 0.0,
+                   'iskDestroyed' => 0.0, 'ships' => [], 'dmg' => []],
+    ];
+    $systems = [];
+
+    foreach ($kms as $k) {
+        $v = $k['victim'];
+        $vHome = $isHomeCorp($v['corp']);
+        $winSide  = $k['kind'] === 'kill' ? 'home' : 'foe';   // 谁拿到了这个击杀
+        $loseSide = $k['kind'] === 'kill' ? 'foe'  : 'home';  // 谁丢了船
+
+        $sides[$loseSide]['lost']++;
+        $sides[$loseSide]['iskLost'] += $k['value'];
+        $sides[$winSide]['killed']++;
+        $sides[$winSide]['iskDestroyed'] += $k['value'];
+
+        // 损失舰船按 typeID 归拢，级别（战列舰/护卫舰…）交给前端用 ships-data 映射
+        $st = (int)$v['ship'];
+        if ($st) {
+            if (!isset($sides[$loseSide]['ships'][$st])) $sides[$loseSide]['ships'][$st] = [0, 0.0];
+            $sides[$loseSide]['ships'][$st][0]++;
+            $sides[$loseSide]['ships'][$st][1] += $k['value'];
+        }
+
+        if ($v['char']) $sides[$loseSide]['pilots'][$v['char']] = 1;
+
+        // 参战方：本方/敌对 + 各自打出的伤害（伤害榜用）
+        foreach ($k['attackers'] as $a) {
+            if (!$a['char']) continue;                       // NPC 没有角色
+            $side = $isHomeAttacker($a) ? 'home' : 'foe';
+            $sides[$side]['pilots'][$a['char']] = 1;
+            if (!isset($sides[$side]['dmg'][$a['char']])) $sides[$side]['dmg'][$a['char']] = [0, 0];
+            $sides[$side]['dmg'][$a['char']][0] += $a['dmg'];
+            if ($a['final']) $sides[$side]['dmg'][$a['char']][1]++;
+        }
+
+        $systems[(int)$k['system']] = (isset($systems[(int)$k['system']]) ? $systems[(int)$k['system']] : 0) + 1;
+    }
+
+    $shape = function ($s) {
+        $ships = [];
+        foreach ($s['ships'] as $tid => $v) $ships[] = [(int)$tid, $v[0], round($v[1], 1)];
+        usort($ships, function ($a, $b) { return $b[2] <=> $a[2]; });   // 按价值降序
+
+        $dmg = [];
+        foreach ($s['dmg'] as $cid => $v) $dmg[] = [(int)$cid, $v[0], $v[1]];
+        usort($dmg, function ($a, $b) { return $b[1] <=> $a[1]; });
+
+        $tot = $s['iskDestroyed'] + $s['iskLost'];
+        return [
+            'pilots'        => count($s['pilots']),
+            'lost'          => $s['lost'],
+            'killed'        => $s['killed'],
+            'iskLost'       => round($s['iskLost'], 1),
+            'iskDestroyed'  => round($s['iskDestroyed'], 1),
+            'efficiency'    => $tot > 0 ? round($s['iskDestroyed'] / $tot * 100, 1) : 0,
+            'ships'         => array_slice($ships, 0, 40),
+            'topDamage'     => array_slice($dmg, 0, 20),
+        ];
+    };
+
+    arsort($systems);
+    $sysList = [];
+    foreach ($systems as $sid => $n) $sysList[] = [(int)$sid, $n];
+    $sysList = array_slice($sysList, 0, 12);
+
+    $t0 = strtotime($kms[0]['time']);
+    $t1 = strtotime($kms[count($kms) - 1]['time']);
+
+    return [
+        'id'         => (int)$kms[0]['id'],
+        't0'         => $t0,
+        't1'         => $t1,
+        'killmails'  => count($kms),
+        'iskTotal'   => round(array_sum(array_map(function ($k) { return $k['value']; }, $kms)), 1),
+        'systems'    => $sysList,
+        'home'       => $shape($sides['home']),
+        'foe'        => $shape($sides['foe']),
+    ];
+}
+
+// ---- 会战列表 ----
+if ($action === 'battles') {
+    $type = isset($_GET['type']) ? (string)$_GET['type'] : '';
+    if (!in_array($type, $KB_TYPES, true)) fail('invalid type');
+    $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    if ($id <= 0) fail('invalid id');
+
+    $days = isset($_GET['days']) ? (int)$_GET['days'] : 7;
+    if ($days < 1 || $days > 7) $days = 7;
+    $gap = isset($_GET['gap']) ? (int)$_GET['gap'] : 20;
+    if ($gap < 5 || $gap > 240) $gap = 20;
+
+    $pdo = db($dataDir);
+    $key = 'bt:' . $type . ':' . $id . ':' . $days . ':' . $gap;
+    $data = cacheGet($pdo, $key, KB_TTL);
+
+    if ($data === null) {
+        // 7 天联盟数据约 795 条，一页 200，所以要翻页。并行拉，别串行。
+        $secs = $days * 86400;
+        $urls = [];
+        for ($p = 1; $p <= 3; $p++) {
+            $urls["k$p"] = "https://zkillboard.com/api/kills/$type/$id/pastSeconds/$secs/page/$p/";
+            $urls["l$p"] = "https://zkillboard.com/api/losses/$type/$id/pastSeconds/$secs/page/$p/";
+        }
+        $res = httpJsonMulti($urls);
+        $okAny = false;
+        $kms = [];
+        foreach ($res as $k => $list) {
+            if (!is_array($list)) continue;
+            $okAny = true;
+            $kind = ($k[0] === 'k') ? 'kill' : 'loss';
+            foreach ($list as $km) {
+                if (is_array($km)) $kms[] = kbTrimKill($km, $kind, false);   // 不要装配，省一半体积
+            }
+        }
+        if (!$okAny) fail('upstream unavailable', 502);
+
+        $home = kbHomeSide($pdo, $type, $id);
+        $clusters = kbCluster(kbDedupe($kms), $gap * 60, 5);
+
+        $battles = [];
+        foreach ($clusters as $c) {
+            $battles[] = ['id' => (int)$c[0]['id'], 'kms' => $c];
+        }
+        $data = ['type' => $type, 'id' => $id, 'days' => $days, 'gap' => $gap,
+                 'home' => $home, 'battles' => $battles];
+        cachePut($pdo, $key, $data);
+        cachePrune($pdo);
+    }
+
+    // 列表只要摘要，把 killmail 明细留在缓存里，点开某场再取
+    $out = [];
+    foreach ($data['battles'] as $b) {
+        $s = kbBattleSummary($b['kms'], $data['home']);
+        $out[] = $s;
+    }
+    usort($out, function ($a, $b) { return $b['t0'] - $a['t0']; });   // 新的在前
+    echo json_encode([
+        'type' => $data['type'], 'id' => $data['id'], 'days' => $data['days'],
+        'home' => $data['home'], 'battles' => $out, 'cached' => true,
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ---- 单场会战明细 ----
+if ($action === 'report') {
+    $type = isset($_GET['type']) ? (string)$_GET['type'] : '';
+    if (!in_array($type, $KB_TYPES, true)) fail('invalid type');
+    $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    if ($id <= 0) fail('invalid id');
+    $bid = isset($_GET['bid']) ? (int)$_GET['bid'] : 0;
+    if ($bid <= 0) fail('invalid bid');
+
+    $days = isset($_GET['days']) ? (int)$_GET['days'] : 7;
+    if ($days < 1 || $days > 7) $days = 7;
+    $gap = isset($_GET['gap']) ? (int)$_GET['gap'] : 20;
+    if ($gap < 5 || $gap > 240) $gap = 20;
+
+    $pdo = db($dataDir);
+    $data = cacheGet($pdo, 'bt:' . $type . ':' . $id . ':' . $days . ':' . $gap, KB_TTL);
+    if ($data === null) fail('battle expired, reload the list', 409);
+
+    foreach ($data['battles'] as $b) {
+        if ((int)$b['id'] !== $bid) continue;
+        echo json_encode([
+            'battle' => kbBattleSummary($b['kms'], $data['home']),
+            'home'   => $data['home'],
+            'kms'    => $b['kms'],
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    fail('battle not found', 404);
 }
 
 fail('invalid action');
