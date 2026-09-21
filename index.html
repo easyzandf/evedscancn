@@ -682,7 +682,11 @@
   }
   table.ship-tbl tr.subhead .en { margin-left: 6px; color: var(--dim); }
 
-  .tbl-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border-soft); border-radius: var(--radius); }
+  /* box-sizing 不能省：本站没有全局 border-box，默认 content-box 下
+     width:100% 再加 2px 边框会比容器宽 2px。在宽容器里看不出来，
+     但放进会滚动的弹窗就会多出一条横向滚动条。 */
+  .tbl-wrap { width: 100%; box-sizing: border-box; overflow-x: auto;
+              border: 1px solid var(--border-soft); border-radius: var(--radius); }
   .tbl-wrap table.ship-tbl { margin: 0; min-width: 620px; }
 
   /* tags / pills */
@@ -749,6 +753,8 @@
   .modal-body { padding: 16px 18px; }
   /* 玩家（头衔）面板内容多，用更宽的弹窗，别挤在一起 */
   .modal.wide { max-width: min(960px, 94vw); }
+  /* killmail 弹窗：参战方表格四列，比通用宽弹窗再宽一点 */
+  #brKmModal .modal { max-width: min(1120px, 94vw); }
   .modal.wide .modal-body { max-height: 78vh; overflow-y: auto; }
   .ttl-sec { border-top: 1px solid var(--border-soft); padding-top: 12px; margin-top: 16px; }
   .ttl-sec:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
