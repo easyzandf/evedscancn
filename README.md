@@ -173,12 +173,19 @@ SQLite 表 `runs(code, id, ts, note, names, updated_at)`，`code` 存的是**同
 
 ```bash
 GET ?action=battles&type=allianceID&id=99014027&days=7   # 自动识别会战，返回摘要列表
+GET ?action=battles&...&force=1                # 跳过缓存读取直接重拉上游（前端「强制刷新」按钮）
+                                               # 仍照常写回缓存；响应带 cachedAt 供前端显示数据新鲜度
 GET ?action=report&type=allianceID&id=99014027&days=7&bid=138598626   # 单场会战明细
 GET ?action=resolve&q=PLA-F                    # 名称/缩写 -> 实体（ESI /universe/ids/，支持 ticker）
 GET ?action=names&ids=1,2,3                    # 批量 ID -> 名（角色/军团/物品类型）
 GET ?action=types&ids=72872,71478              # 批量 typeID -> 中文名
 GET ?action=systems&ids=30003850,30045352      # 批量星系 ID -> 官方中文名
 ```
+
+### 翻页的两个坑（都踩过）
+
+1. **判断「还有下一页」只能看这页空不空，不能看它是否满 200 条。** 实测 zKillboard 的 `losses` 第 1 页只返回 **198** 条，按「不满 200 就是最后一页」会直接漏掉后面两页（约 270 条），会战列表凭空少一大截。
+2. **任何一页失败都不能当成功处理。** 早期写法是「只要有一页成功就算成功」，结果某次 6 页里坏了几页，残留的残缺数据被当成完整结果缓存了 10 分钟。现在失败先重试一次，仍失败就整体 502 —— **宁可报错也绝不缓存残缺数据**。
 
 ### 会战识别怎么做的
 

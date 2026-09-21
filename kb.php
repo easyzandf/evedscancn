@@ -77,14 +77,17 @@ function db($dataDir) {
     return $pdo;
 }
 
-function cacheGet($pdo, $key, $ttl) {
+// $at 可选，命中时回传这条缓存的写入时间 —— 前端要显示「数据缓存于 X 分钟前」
+function cacheGet($pdo, $key, $ttl, &$at = null) {
     $st = $pdo->prepare('SELECT fetched_at, payload FROM kb_cache WHERE k = ?');
     $st->execute([KB_VER . ':' . $key]);
     $r = $st->fetch(PDO::FETCH_ASSOC);
     if (!$r) return null;
     if (time() - (int)$r['fetched_at'] > $ttl) return null;
     $d = json_decode($r['payload'], true);
-    return is_array($d) ? $d : null;
+    if (!is_array($d)) return null;
+    $at = (int)$r['fetched_at'];
+    return $d;
 }
 
 function cachePut($pdo, $key, $data) {
@@ -537,28 +540,55 @@ if ($action === 'battles') {
 
     $pdo = db($dataDir);
     $key = 'bt:' . $type . ':' . $id . ':' . $days . ':' . $gap;
-    $data = cacheGet($pdo, $key, KB_TTL);
+
+    // force=1 跳过缓存读取，直接重新拉上游 —— 刚打完的仗要等缓存过期才出现，
+    // 这条路径给「我现在就要看最新」用。仍然照常写回缓存。
+    $force = !empty($_GET['force']);
+    $cachedAt = 0;
+    $data = $force ? null : cacheGet($pdo, $key, KB_TTL, $cachedAt);
 
     if ($data === null) {
-        // 7 天联盟数据约 795 条，一页 200，所以要翻页。并行拉，别串行。
+        // 分页拉。一页 200 条，7 天约 900 条，所以两侧各要几页。
+        //
+        // ⚠️ 这里曾经是「固定拉 3 页、只要有一页成功就算成功」—— 结果某次 6 页里坏了几页，
+        // 残缺数据被当成完整结果缓存了 10 分钟，会战列表凭空少了一大截。现在：
+        //   · 逐轮翻页，只继续拉还有下一页的那一侧
+        //   · 任何一页失败先重试一次，仍失败就整体 502 —— 宁可报错也绝不缓存残缺数据
+        //
+        // 判断「还有下一页」只能看这一页空不空，**不能看它是否满 200 条** ——
+        // 实测 zKillboard 的 losses 第 1 页只返回 198 条，按「不满 200 就是最后一页」
+        // 会直接漏掉后面两页（约 270 条），会战列表凭空少一大截。
+        $PAGE = 200;
+        $MAX_PAGES = 6;                      // 每侧上限 1200 条
         $secs = $days * 86400;
-        $urls = [];
-        for ($p = 1; $p <= 3; $p++) {
-            $urls["k$p"] = "https://zkillboard.com/api/kills/$type/$id/pastSeconds/$secs/page/$p/";
-            $urls["l$p"] = "https://zkillboard.com/api/losses/$type/$id/pastSeconds/$secs/page/$p/";
-        }
-        $res = httpJsonMulti($urls);
-        $okAny = false;
         $kms = [];
-        foreach ($res as $k => $list) {
-            if (!is_array($list)) continue;
-            $okAny = true;
-            $kind = ($k[0] === 'k') ? 'kill' : 'loss';
-            foreach ($list as $km) {
-                if (is_array($km)) $kms[] = kbTrimKill($km, $kind);
+        $next = ['kills' => 1, 'losses' => 1];
+        while ($next) {
+            $urls = [];
+            foreach ($next as $side => $p) {
+                $urls[substr($side, 0, 1) . $p] = "https://zkillboard.com/api/$side/$type/$id/pastSeconds/$secs/page/$p/";
+            }
+            $res = httpJsonMulti($urls);
+
+            // 失败的页重试一次
+            $retry = [];
+            foreach ($res as $k => $v) { if (!is_array($v)) $retry[$k] = $urls[$k]; }
+            if ($retry) {
+                foreach (httpJsonMulti($retry) as $k => $v) $res[$k] = $v;
+            }
+
+            $next = [];
+            foreach ($res as $k => $list) {
+                if (!is_array($list)) fail('upstream unavailable', 502);   // 重试后仍失败：不缓存，直接报错
+                $side = ($k[0] === 'k') ? 'kills' : 'losses';
+                $p = (int)substr($k, 1);
+                $kind = ($side === 'kills') ? 'kill' : 'loss';
+                foreach ($list as $km) {
+                    if (is_array($km)) $kms[] = kbTrimKill($km, $kind);
+                }
+                if (count($list) > 0 && $p < $MAX_PAGES) $next[$side] = $p + 1;   // 非空就继续翻
             }
         }
-        if (!$okAny) fail('upstream unavailable', 502);
 
         $home = kbHomeSide($pdo, $type, $id);
         $clusters = kbCluster(kbDedupe($kms), $gap * 60, 5);
@@ -570,6 +600,7 @@ if ($action === 'battles') {
         $data = ['type' => $type, 'id' => $id, 'days' => $days, 'gap' => $gap,
                  'home' => $home, 'battles' => $battles];
         cachePut($pdo, $key, $data);
+        $cachedAt = time();
         cachePrune($pdo);
     }
 
@@ -589,7 +620,8 @@ if ($action === 'battles') {
     usort($out, function ($a, $b) { return $b['t0'] - $a['t0']; });   // 新的在前
     echo json_encode([
         'type' => $data['type'], 'id' => $data['id'], 'days' => $data['days'],
-        'home' => $data['home'], 'battles' => $out, 'cached' => true,
+        'home' => $data['home'], 'battles' => $out,
+        'cachedAt' => $cachedAt,   // 前端据此显示「数据缓存于 X 分钟前」
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }

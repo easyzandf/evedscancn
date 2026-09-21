@@ -1285,6 +1285,8 @@
           <option value="7" selected>最近 7 天</option>
         </select>
         <button class="btn btn-go" onclick="brLoad()"><i data-lucide="search"></i>分析</button>
+        <button class="btn btn-clr" onclick="brLoad(true)"
+                title="跳过服务器缓存直接重拉上游数据。刚打完的仗要等缓存过期（最长 10 分钟）才出现，想立刻看到就用这个">强制刷新</button>
         <span class="hint" id="brHint"></span>
       </div>
 
@@ -3885,21 +3887,32 @@ function brTarget(cb) {
   });
 }
 
-function brLoad() {
+// force=true 绕过服务端缓存直接重拉 —— 刚打完的仗最快也要等缓存过期才出现
+function brLoad(force) {
   brShowList();
   _br.list = null;
   var box = document.getElementById('brList');
-  box.innerHTML = '<p class="raid-note">分析中…（要拉取上游数据，首次约需数秒）</p>';
+  box.innerHTML = '<p class="raid-note">'
+    + (force ? '正在绕过缓存重新拉取上游数据…（比平时慢，约需数秒到十几秒）'
+             : '分析中…（要拉取上游数据，首次约需数秒）') + '</p>';
   brHint('');
   brTarget(function (t, err) {
     if (err) { box.innerHTML = '<p class="raid-note">' + esc(err) + '</p>'; return; }
     _br.tgt = t;
     var days = document.getElementById('brDays').value;
     _fetch('GET', 'kb.php?action=battles&type=' + encodeURIComponent(t.type)
-      + '&id=' + t.id + '&days=' + days, null, function (d) {
+      + '&id=' + t.id + '&days=' + days + (force ? '&force=1' : ''), null, function (d) {
         if (!d || d.error) { box.innerHTML = '<p class="raid-note">会战分析失败，请稍后重试。</p>'; return; }
         _br.list = d;
         brRenderList();
+        // 数据新鲜度：缓存超过 5 分钟就提示可以强制刷新
+        if (d.cachedAt) {
+          var min = Math.floor((Date.now() / 1000 - d.cachedAt) / 60);
+          brHint(min <= 1 ? '数据：刚刚获取'
+                          : '数据缓存于 ' + min + ' 分钟前' + (min >= 5 ? '，想看最新请点「强制刷新」' : ''));
+        } else {
+          brHint('数据：刚刚获取');
+        }
       });
   });
 }
