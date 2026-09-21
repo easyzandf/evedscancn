@@ -863,6 +863,8 @@
     color: var(--text); cursor: pointer;
   }
   .pchip:hover { border-color: var(--cyan); color: var(--cyan); }
+  /* 会战报告的筛选芯片：多选，选中态要一眼看出来 */
+  .pchip.on { background: var(--brand-dim); border-color: var(--brand); color: var(--brand-2); font-weight: 600; }
 
   /* 统计卡片 */
   .stat-grid { display: flex; gap: 12px; flex-wrap: wrap; margin: 4px 0 18px; }
@@ -3860,30 +3862,182 @@ function brOpen(bid) {
 }
 
 function brRender(d, names) {
-  var b = d.battle, kms = d.kms;
-  var dur = Math.max(1, Math.round((b.t1 - b.t0) / 60));
-  document.getElementById('brTitle').textContent =
-    fmtDateTime(b.t0 * 1000) + ' · ' + dur + ' 分钟 · ' + kms.length + ' 条击杀';
+  _br.cur = { kms: d.kms, names: names, home: d.home };
+  _br.fsys = {};   // 多选：键存在即为选中
+  _br.fval = 0;
 
-  _br.cur = { kms: kms, names: names, battle: b };
-  _br.fsys = 0; _br.fval = 0;
+  // 芯片用完整星系列表（服务端的摘要只给前 12 个，筛选后还会缩水，不能拿来当选项）
+  var cnt = {};
+  d.kms.forEach(function (k) { cnt[k.system] = (cnt[k.system] || 0) + 1; });
+  _br.systems = Object.keys(cnt).map(function (id) { return [+id, cnt[id]]; })
+    .sort(function (a, b) { return b[1] - a[1]; });
 
-  var h = '<p class="raid-note">'
+  document.getElementById('brBody').innerHTML =
+      '<div id="brHead"></div><div id="brFilter"></div><div id="brTeams" class="br-teams"></div>'
+    + '<div id="brComp"></div><div id="brChartBox"></div><div id="brDmg"></div><div id="brFeed"></div>';
+  brRefresh();
+}
+
+// 服务端算的是「整场会战」。星系/价值筛选改了之后要重算，所以这里把
+// kbBattleSummary 的那套逻辑在前端实现一份，按筛选后的 killmail 走。
+function brComputeSummary(kms, home) {
+  var isHomeCorp = function (corp) {
+    if (!corp) return false;
+    for (var i = 0; i < home.corps.length; i++) if (home.corps[i] === corp) return true;
+    return false;
+  };
+  var zero = function () {
+    return { pilots: {}, lost: 0, killed: 0, iskLost: 0, iskDestroyed: 0, ships: {}, dmg: {} };
+  };
+  var S = { home: zero(), foe: zero() };
+  var systems = {};
+
+  kms.forEach(function (k) {
+    var v = k.victim;
+    var winSide  = k.kind === 'kill' ? 'home' : 'foe';   // 谁拿到这个击杀
+    var loseSide = k.kind === 'kill' ? 'foe'  : 'home';  // 谁丢了船
+
+    S[loseSide].lost++;
+    S[loseSide].iskLost += k.value;
+    S[winSide].killed++;
+    S[winSide].iskDestroyed += k.value;
+
+    if (v.ship) {
+      var sh = S[loseSide].ships[v.ship] || (S[loseSide].ships[v.ship] = [0, 0]);
+      sh[0]++; sh[1] += k.value;
+    }
+    if (v.char) S[loseSide].pilots[v.char] = 1;
+
+    k.attackers.forEach(function (a) {
+      if (!a.char) return;   // NPC 没有角色
+      var side = ((home.alliance && a.alli === home.alliance) || isHomeCorp(a.corp)) ? 'home' : 'foe';
+      S[side].pilots[a.char] = 1;
+      var d = S[side].dmg[a.char] || (S[side].dmg[a.char] = [0, 0]);
+      d[0] += a.dmg;
+      if (a.final) d[1]++;
+    });
+
+    systems[k.system] = (systems[k.system] || 0) + 1;
+  });
+
+  var shape = function (s) {
+    var ships = Object.keys(s.ships).map(function (t) { return [+t, s.ships[t][0], Math.round(s.ships[t][1] * 10) / 10]; });
+    ships.sort(function (a, b) { return b[2] - a[2]; });
+    var dmg = Object.keys(s.dmg).map(function (c) { return [+c, s.dmg[c][0], s.dmg[c][1]]; });
+    dmg.sort(function (a, b) { return b[1] - a[1]; });
+    var tot = s.iskDestroyed + s.iskLost;
+    return {
+      pilots: Object.keys(s.pilots).length,
+      lost: s.lost, killed: s.killed,
+      iskLost: Math.round(s.iskLost * 10) / 10,
+      iskDestroyed: Math.round(s.iskDestroyed * 10) / 10,
+      efficiency: tot > 0 ? Math.round(s.iskDestroyed / tot * 1000) / 10 : 0,
+      ships: ships.slice(0, 40),
+      topDamage: dmg.slice(0, 20)
+    };
+  };
+
+  var sysList = Object.keys(systems).map(function (id) { return [+id, systems[id]]; });
+  sysList.sort(function (a, b) { return b[1] - a[1]; });
+
+  return {
+    t0: kms.length ? Math.floor(Date.parse(kms[0].time) / 1000) : 0,
+    t1: kms.length ? Math.floor(Date.parse(kms[kms.length - 1].time) / 1000) : 0,
+    killmails: kms.length,
+    iskTotal: Math.round(kms.reduce(function (a, k) { return a + k.value; }, 0) * 10) / 10,
+    systems: sysList.slice(0, 12),
+    home: shape(S.home), foe: shape(S.foe)
+  };
+}
+
+// 筛选后的 killmail，按时间升序（统计和曲线都按时间走）
+function brFiltered() {
+  var c = _br.cur;
+  if (!c) return [];
+  var on = Object.keys(_br.fsys);
+  return c.kms.filter(function (k) {
+    if (on.length && !_br.fsys[k.system]) return false;
+    if (_br.fval && k.value < _br.fval) return false;
+    return true;
+  }).sort(function (a, z) { return Date.parse(a.time) - Date.parse(z.time); });
+}
+
+function brRefresh() {
+  var c = _br.cur;
+  if (!c) return;
+  var list = brFiltered();
+  var b = brComputeSummary(list, c.home);
+  var names = c.names;
+  var all = c.kms.length;
+
+  document.getElementById('brTitle').textContent = list.length
+    ? fmtDateTime(b.t0 * 1000) + ' · ' + Math.max(1, Math.round((b.t1 - b.t0) / 60)) + ' 分钟 · '
+      + list.length + ' 条击杀' + (list.length === all ? '' : '（整场 ' + all + ' 条）')
+    : '没有符合条件的记录';
+
+  // 筛选区任何时候都要在 —— 筛空了还得能点回来
+  brPaintFilter(names);
+
+  // 筛选后一条不剩时，别摆一排 0 的卡片，只留提示
+  if (!list.length) {
+    document.getElementById('brHead').innerHTML =
+      '<p class="raid-note">没有符合筛选条件的记录，点上面的「全部星系 / 全部」可以还原。</p>';
+    ['brTeams', 'brComp', 'brChartBox', 'brDmg'].forEach(function (id) {
+      document.getElementById(id).innerHTML = '';
+    });
+    document.getElementById('brFeed').innerHTML = '';
+    return;
+  }
+
+  document.getElementById('brTeams').innerHTML =
+    brTeamCard('home', '本方', b.home) + brTeamCard('foe', '敌对', b.foe);
+  document.getElementById('brComp').innerHTML = brComposition(b);
+  document.getElementById('brChartBox').innerHTML = brChart(list);
+  document.getElementById('brDmg').innerHTML = brDamageBoard(b, names);
+
+  // 头部（星系、总损失、人数）
+  document.getElementById('brHead').innerHTML = '<p class="raid-note">'
     + b.systems.map(function (s) { return esc(_kbName(names, s[0])); }).join(' · ')
     + ' · 总损失 <b>' + fmtIsk(b.iskTotal) + '</b> ISK · '
     + b.home.pilots + ' 人 vs ' + b.foe.pilots + ' 人</p>';
 
-  h += '<div class="br-teams">'
-    + brTeamCard('home', '本方', b.home)
-    + brTeamCard('foe', '敌对', b.foe) + '</div>';
+  brPaintFeed(list, names);
+}
 
-  h += brComposition(b);
-  h += brChart(kms);
-  h += brDamageBoard(b, names);
-  h += '<div id="brFeed"></div>';
+// 筛选芯片。星系多选（可全选/清空），价值单选。选中后下方统计与流水一起重算。
+function brPaintFilter(names) {
+  var el = document.getElementById('brFilter');
+  var anySys = Object.keys(_br.fsys).length > 0;
+  var sysChips = _br.systems.map(function (s) {
+    return '<span class="pchip' + (_br.fsys[s[0]] ? ' on' : '') + '" data-brf="s:' + s[0] + '">'
+      + esc(_kbName(names, s[0])) + '<span class="chip-sub">' + s[1] + '</span></span>';
+  }).join('');
+  var vals = [[0, '全部'], [1e7, '10M+'], [1e8, '100M+'], [1e9, '1B+'], [1e10, '10B+']];
+  var valChips = vals.map(function (x) {
+    return '<span class="pchip' + (x[0] === _br.fval ? ' on' : '') + '" data-brf="v:' + x[0] + '">'
+      + esc(x[1]) + '</span>';
+  }).join('');
 
-  document.getElementById('brBody').innerHTML = h;
-  brRenderFeed();
+  el.innerHTML = '<h4 class="kb-h">筛选 <em>下方统计与流水都只算选中的部分；星系可多选</em></h4>'
+    + '<div class="pgrid" style="margin-bottom:6px">'
+    + '<span class="pchip' + (anySys ? '' : ' on') + '" data-brf="s:0">全部星系</span>'
+    + sysChips + '</div>'
+    + '<div class="pgrid" style="margin-bottom:10px">' + valChips + '</div>';
+
+  el.querySelectorAll('[data-brf]').forEach(function (chip) {
+    chip.addEventListener('click', function () {
+      var p = chip.getAttribute('data-brf').split(':');
+      if (p[0] === 's') {
+        var id = parseInt(p[1], 10);
+        if (!id) _br.fsys = {};                    // 「全部星系」= 清空多选
+        else if (_br.fsys[id]) delete _br.fsys[id];
+        else _br.fsys[id] = 1;
+      } else {
+        _br.fval = parseFloat(p[1]);
+      }
+      brRefresh();
+    });
+  });
 }
 
 function brTeamCard(cls, label, s) {
@@ -4008,40 +4162,19 @@ function brDamageBoard(b, names) {
 }
 
 // 击杀流水，带星系 / 价值筛选（纯前端过滤，不再请求）
-function brRenderFeed() {
-  var c = _br.cur;
+// 击杀流水。筛选芯片在 brPaintFilter 里，这里只把传进来的那批渲染出来。
+function brPaintFeed(list, names) {
   var box = document.getElementById('brFeed');
-  if (!c || !box) return;
-  var kms = c.kms, names = c.names, b = c.battle;
-
-  var sysChips = [[0, '全部星系']].concat(b.systems.map(function (s) { return [s[0], _kbName(names, s[0])]; }));
-  var vals = [[0, '全部'], [1e7, '10M+'], [1e8, '100M+'], [1e9, '1B+'], [1e10, '10B+']];
-
-  var list = kms.filter(function (k) {
-    if (_br.fsys && k.system !== _br.fsys) return false;
-    if (_br.fval && k.value < _br.fval) return false;
-    return true;
-  }).sort(function (a, z) { return Date.parse(z.time) - Date.parse(a.time); });
-
-  var chip = function (arr, cur, fn) {
-    return arr.map(function (x) {
-      return '<span class="pchip' + (x[0] === cur ? ' home' : '') + '" data-brf="' + fn + ':' + x[0] + '">'
-        + esc(x[1]) + '</span>';
-    }).join('');
-  };
-
-  var h = '<h4 class="kb-h">击杀流水 <em>' + list.length + ' / ' + kms.length + ' 条</em></h4>'
-    + '<div class="pgrid" style="margin-bottom:6px">' + chip(sysChips, _br.fsys, 's') + '</div>'
-    + '<div class="pgrid" style="margin-bottom:10px">' + chip(vals, _br.fval, 'v') + '</div>';
-
-  if (!list.length) {
+  var desc = list.slice().sort(function (a, z) { return Date.parse(z.time) - Date.parse(a.time); });
+  var h = '<h4 class="kb-h">击杀流水 <em>' + desc.length + ' 条</em></h4>';
+  if (!desc.length) {
     h += '<p class="raid-note">没有符合筛选条件的记录。</p>';
   } else {
     h += '<div class="tbl-wrap"><table class="ship-tbl kb-tbl"><thead><tr>'
       + '<th>时间</th><th>结果</th><th>舰船</th><th>损失方</th><th>星系</th>'
       + '<th class="num">价值</th><th class="num">参战</th><th class="num">承担伤害</th>'
       + '</tr></thead><tbody>'
-      + list.map(function (k) {
+      + desc.map(function (k) {
           var ours = k.kind === 'kill';
           return '<tr style="cursor:default">'
             + '<td>' + fmtDateTime(Date.parse(k.time)) + '</td>'
@@ -4057,15 +4190,6 @@ function brRenderFeed() {
       + '</tbody></table></div>';
   }
   box.innerHTML = h;
-
-  box.querySelectorAll('[data-brf]').forEach(function (el) {
-    el.addEventListener('click', function () {
-      var p = el.getAttribute('data-brf').split(':');
-      if (p[0] === 's') _br.fsys = parseInt(p[1], 10);
-      else _br.fval = parseFloat(p[1]);
-      brRenderFeed();
-    });
-  });
 }
 
 function closePersonModal() { document.getElementById('personModal').classList.remove('show'); }
