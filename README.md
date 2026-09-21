@@ -161,8 +161,9 @@ SQLite 表 `runs(code, id, ts, note, names, updated_at)`，`code` 存的是**同
 GET ?action=resolve&q=PLA-F                    # 名称/缩写 -> 实体（ESI /universe/ids/，支持 ticker）
 GET ?action=stats&type=corporationID&id=98764551   # 聚合总览 + Top 舰船/角色
 GET ?action=kills&type=corporationID&id=98764551&days=7   # 击杀/损失明细（含伤害）
-GET ?action=names&ids=1,2,3                    # 批量 ID -> 名（角色/军团/星系/物品类型）
+GET ?action=names&ids=1,2,3                    # 批量 ID -> 名（角色/军团/物品类型）
 GET ?action=types&ids=72872,71478              # 批量 typeID -> 中文名
+GET ?action=systems&ids=30003850,30045352      # 批量星系 ID -> 官方中文名
 GET ?action=battles&type=allianceID&id=99014027&days=7   # 自动识别会战，返回摘要列表
 GET ?action=report&type=allianceID&id=99014027&days=7&bid=138598626   # 单场会战明细
 ```
@@ -183,6 +184,8 @@ SQLite 表 `kb_cache(k, fetched_at, payload)`，一个键一行，全部带 `KB_
 | `k:<type>:<id>:<days>` | killmail 明细列表 | 10 分钟 |
 | `q:<md5>` / `nm:<id>` | 名称解析 | 7 天 |
 | `ty:<id>` | 物品/舰船类型中文名 | 30 天 |
+| `sy:<id>` | 星系中文名 | 30 天 |
+| `ac:<id>` | 联盟的军团列表（分边用） | 7 天 |
 
 要点：
 
@@ -197,6 +200,10 @@ SQLite 表 `kb_cache(k, fetched_at, payload)`，一个键一行，全部带 `KB_
 ### 舰船/装备中文名从哪来
 
 前端按优先级解析 typeID：`ships-data.js`（531 艘，`attr.typeID` 索引）→ `items-data.js`（5976 项，顶层键就是 typeID）→ `kb.php?action=types`（本地没有的 NPC 舰船/建筑/无人机等，走 ESI `/universe/types/?language=zh`）。所以页面上不会出现裸露的 `#数字`。
+
+星系名要单独走 `?action=systems`：ESI 的 `/universe/names/` **没有 `language` 参数、只返回英文**（Alparena），而星系有官方中文译名（阿尔帕伦纳），得打 `/universe/systems/{id}/?language=zh`。角色名和军团名是玩家自取的，本来就没有中文，仍走 `names`。
+
+> 少数星域编号类星系（`6-AOLS`、`NCG-PW`）的中文名和英文名**是同一个字符串** —— CCP 不翻译这类字母数字编号，显示原样是对的。
 
 ## 缓存 API
 

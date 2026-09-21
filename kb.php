@@ -720,4 +720,40 @@ if ($action === 'report') {
     fail('battle not found', 404);
 }
 
+// ---- 批量星系 ID -> 中文名 ----
+// 星系名不能走 /universe/names/：那个接口没有 language 参数，只给英文（Alparena）。
+// 而星系有官方中文译名（阿尔帕伦纳），所以单独走 /universe/systems/?language=zh。
+// 角色/军团名是玩家自取的，本来就没有中文，仍然走 names。
+if ($action === 'systems') {
+    $raw = isset($_GET['ids']) ? (string)$_GET['ids'] : '';
+    $want = [];
+    foreach (explode(',', $raw) as $x) {
+        $x = (int)trim($x);
+        if ($x > 0) $want[$x] = true;
+        if (count($want) >= 60) break;
+    }
+    if (!$want) fail('invalid ids');
+
+    $pdo = db($dataDir);
+    $out = [];
+    $miss = [];
+    foreach (array_keys($want) as $x) {
+        $c = cacheGet($pdo, 'sy:' . $x, KB_TYPE_TTL);
+        if ($c !== null && isset($c['name'])) $out[$x] = $c['name'];
+        else $miss[] = $x;
+    }
+    if ($miss) {
+        $urls = [];
+        foreach ($miss as $x) $urls[(string)$x] = "$ESI/universe/systems/$x/?datasource=tranquility&language=zh";
+        foreach (httpJsonMulti($urls) as $x => $d) {
+            if (!is_array($d) || empty($d['name'])) continue;
+            $out[(int)$x] = (string)$d['name'];
+            cachePut($pdo, 'sy:' . (int)$x, ['name' => (string)$d['name']]);
+        }
+        cachePrune($pdo);
+    }
+    echo json_encode(['systems' => $out], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 fail('invalid action');

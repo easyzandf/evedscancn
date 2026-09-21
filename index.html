@@ -3793,7 +3793,34 @@ function kbFetchTypes(ids, cb) {
   });
 }
 
-// 批量 ID -> 名。角色 / 军团 / 星系都走这一个（ESI /universe/names/ 就是这么设计的）。
+// 星系名要单独取：/universe/names/ 没有 language 参数，只给英文（Alparena），
+// 而星系有官方中文译名（阿尔帕伦纳）。角色/军团名是玩家自取的，仍走 names。
+var _kbSysDict = {};
+function kbFetchSystems(ids, cb) {
+  var uniq = {};
+  ids.forEach(function(x) { if (x && !_kbSysDict[x]) uniq[x] = 1; });
+  var list = Object.keys(uniq).slice(0, 120);
+  if (!list.length) { cb(); return; }
+  var chunks = [];
+  for (var i = 0; i < list.length; i += 60) chunks.push(list.slice(i, i + 60));
+  var left = chunks.length;
+  chunks.forEach(function(c) {
+    _fetch('GET', 'kb.php?action=systems&ids=' + c.join(','), null, function(res) {
+      if (res && res.systems) Object.keys(res.systems).forEach(function(k) { _kbSysDict[k] = res.systems[k]; });
+      if (--left === 0) cb();
+    });
+  });
+}
+
+// 把中文星系名并进 names 映射，这样后面所有 _kbName(names, sysId) 都不用改
+function kbMergeSystems(sysIds, names, cb) {
+  kbFetchSystems(sysIds, function() {
+    sysIds.forEach(function(id) { if (_kbSysDict[id]) names[id] = _kbSysDict[id]; });
+    cb();
+  });
+}
+
+// 批量 ID -> 名。角色 / 军团等走这一个（ESI /universe/names/ 就是这么设计的）。
 // 接口一次上限 300，超了分片。
 function kbFetchNames(ids, cb) {
   var uniq = {};
@@ -3887,11 +3914,11 @@ function kbLoadKills(d) {
         return;
       }
       // 只给要显示的那几条解析名字，别把 400 条里几千个 ID 全拉一遍
-      var ids = [], tids = [];
+      var ids = [], tids = [], sysIds = [];
       (d.topShips || []).forEach(function(s) { tids.push(s.shipTypeID); });
       ['kills', 'losses'].forEach(function(k) {
         (r[k] || []).slice(0, KB_SHOW).forEach(function(km) {
-          ids.push(km.system);
+          sysIds.push(km.system);
           if (km.victim.char) ids.push(km.victim.char);
           km.attackers.forEach(function(a) { if (a.char) ids.push(a.char); });
           tids.push(km.victim.ship);
@@ -3901,8 +3928,10 @@ function kbLoadKills(d) {
       });
       kbFetchNames(ids, function(names) {
         _kbLists = { data: r, names: names };
-        // 本地词典没有的类型先补中文名，再渲染
-        kbFetchTypes(tids, function() { kbRenderLists(r, names); });
+        // 本地词典没有的类型先补中文名、星系补中文译名，再渲染
+        kbMergeSystems(sysIds, names, function() {
+          kbFetchTypes(tids, function() { kbRenderLists(r, names); });
+        });
       });
     });
 }
@@ -4075,31 +4104,33 @@ function brRenderList() {
   bs.forEach(function (b) { b.systems.forEach(function (s) { sids.push(s[0]); }); });
 
   kbFetchNames(sids, function (names) {
-    var html = '<h4 class="kb-h">识别出 ' + bs.length + ' 场会战'
-      + ' <em>近 ' + d.days + ' 天 · 点任意一场看报告</em></h4>';
-    html += bs.map(function (b) {
-      var dur = Math.max(1, Math.round((b.t1 - b.t0) / 60));
-      var sys = b.systems.length
-        ? esc(_kbName(names, b.systems[0][0])) + (b.systems.length > 1 ? ' +' + (b.systems.length - 1) : '')
-        : '—';
-      // 这条 bar 表示「全场被摧毁的 ISK 里，双方各贡献了多少」
-      var tot = b.home.iskDestroyed + b.foe.iskDestroyed;
-      var hp = tot > 0 ? b.home.iskDestroyed / tot * 100 : 50;
-      return '<div class="br-row" data-br="' + b.id + '">'
-        + '<div class="br-when"><b>' + fmtDateTime(b.t0 * 1000) + '</b>'
-        + '<span>' + dur + ' 分钟 · ' + b.killmails + ' 条</span></div>'
-        + '<div class="br-mid"><div style="font-size:12px;color:var(--muted)">' + sys + '</div>'
-        + '<div class="br-bar"><i class="win" style="width:' + hp.toFixed(1) + '%"></i>'
-        + '<i class="lose" style="width:' + (100 - hp).toFixed(1) + '%"></i></div></div>'
-        + '<div class="br-side">'
-        + '<span style="color:var(--cyan)">击毁 ' + fmtIsk(b.home.iskDestroyed) + '</span> · '
-        + '<span style="color:var(--red)">被毁 ' + fmtIsk(b.home.iskLost) + '</span><br>'
-        + '<span class="dim">' + b.home.pilots + ' 人 vs ' + b.foe.pilots + ' 人 · 效率 '
-        + b.home.efficiency + '%</span></div></div>';
-    }).join('');
-    box.innerHTML = html;
-    box.querySelectorAll('.br-row').forEach(function (el) {
-      el.addEventListener('click', function () { brOpen(parseInt(el.getAttribute('data-br'), 10)); });
+    kbMergeSystems(sids, names, function () {
+      var html = '<h4 class="kb-h">识别出 ' + bs.length + ' 场会战'
+        + ' <em>近 ' + d.days + ' 天 · 点任意一场看报告</em></h4>';
+      html += bs.map(function (b) {
+        var dur = Math.max(1, Math.round((b.t1 - b.t0) / 60));
+        var sys = b.systems.length
+          ? esc(_kbName(names, b.systems[0][0])) + (b.systems.length > 1 ? ' +' + (b.systems.length - 1) : '')
+          : '—';
+        // 这条 bar 表示「全场被摧毁的 ISK 里，双方各贡献了多少」
+        var tot = b.home.iskDestroyed + b.foe.iskDestroyed;
+        var hp = tot > 0 ? b.home.iskDestroyed / tot * 100 : 50;
+        return '<div class="br-row" data-br="' + b.id + '">'
+          + '<div class="br-when"><b>' + fmtDateTime(b.t0 * 1000) + '</b>'
+          + '<span>' + dur + ' 分钟 · ' + b.killmails + ' 条</span></div>'
+          + '<div class="br-mid"><div style="font-size:12px;color:var(--muted)">' + sys + '</div>'
+          + '<div class="br-bar"><i class="win" style="width:' + hp.toFixed(1) + '%"></i>'
+          + '<i class="lose" style="width:' + (100 - hp).toFixed(1) + '%"></i></div></div>'
+          + '<div class="br-side">'
+          + '<span style="color:var(--cyan)">击毁 ' + fmtIsk(b.home.iskDestroyed) + '</span> · '
+          + '<span style="color:var(--red)">被毁 ' + fmtIsk(b.home.iskLost) + '</span><br>'
+          + '<span class="dim">' + b.home.pilots + ' 人 vs ' + b.foe.pilots + ' 人 · 效率 '
+          + b.home.efficiency + '%</span></div></div>';
+      }).join('');
+      box.innerHTML = html;
+      box.querySelectorAll('.br-row').forEach(function (el) {
+        el.addEventListener('click', function () { brOpen(parseInt(el.getAttribute('data-br'), 10)); });
+      });
     });
   });
 }
@@ -4118,9 +4149,9 @@ function brOpen(bid) {
              ? '这场会战已过期，请返回列表重新分析。' : '加载失败，请稍后重试。') + '</p>';
         return;
       }
-      var ids = [], tids = [];
+      var ids = [], tids = [], sysIds = [];
       d.kms.forEach(function (k) {
-        ids.push(k.system);
+        sysIds.push(k.system);
         if (k.victim.char) ids.push(k.victim.char);
         k.attackers.forEach(function (a) { if (a.char) ids.push(a.char); });
         tids.push(k.victim.ship);
@@ -4130,9 +4161,13 @@ function brOpen(bid) {
         d.battle[s].ships.forEach(function (x) { tids.push(x[0]); });
         d.battle[s].topDamage.forEach(function (x) { ids.push(x[0]); });
       });
+      // 摘要里的 Top 星系只取前 12，明细里可能有别的，两边都要覆盖
+      d.battle.systems.forEach(function (s) { sysIds.push(s[0]); });
       kbFetchNames(ids, function (names) {
         _br.names = names;
-        kbFetchTypes(tids, function () { brRender(d, names); });
+        kbMergeSystems(sysIds, names, function () {
+          kbFetchTypes(tids, function () { brRender(d, names); });
+        });
       });
     });
 }
