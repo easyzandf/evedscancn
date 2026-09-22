@@ -3554,6 +3554,10 @@ function raidShowPerson(K, name) {
   });
 }
 // 点头衔 -> 该玩家的面板：名下所有账号 + 「30人本」和「战斗」两边的参与数据
+var TTL_PER_PAGE = 5;                  // 头衔面板里每个日志每页显示几场
+var _ttlPg  = { raid: 1, battle: 1 };  // 两个日志各自的页码
+var _ttlCur = null;                    // 当前面板的数据（翻页重绘用，避免重新查 ESI）
+
 function raidShowTitle(K, title) {
   var m = document.getElementById('personModal');
   var body = document.getElementById('personBody');
@@ -3574,6 +3578,7 @@ function raidShowTitle(K, title) {
   });
   if (!candidates.length) { body.innerHTML = '<div class="empty">还没有任何记录</div>'; return; }
 
+  _ttlCur = null;
   raidLookupNames(candidates, function() {
     // 归属该头衔的角色
     var chars = {};
@@ -3587,107 +3592,149 @@ function raidShowTitle(K, title) {
       body.innerHTML = '<div class="empty">没有找到属于该头衔的角色</div>';
       return;
     }
-
-    // 名下角色：按军团分行
-    var byCorp = {}, corpOrder = [];
-    Object.keys(chars).sort().forEach(function(n) {
-      var c = chars[n].corp;
-      if (!byCorp[c]) { byCorp[c] = []; corpOrder.push(c); }
-      byCorp[c].push(n);
-    });
-    corpOrder.sort(function(a, b) {
-      var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
-      if (ha !== hb) return ha - hb;
-      return byCorp[b].length - byCorp[a].length;
-    });
-
-    var html = '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:0 0 8px">'
-      + '名下角色（' + Object.keys(chars).length + ' 个）</h3>';
-    html += corpOrder.map(function(corp) {
-      return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(corp) ? ' home' : '') + '">'
-        + esc(corp) + '</span><span class="corp-cnt">×' + byCorp[corp].length + ' 角色</span>'
-        + '<span class="pgrid">' + byCorp[corp].map(function(n) {
-            return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
-          }).join('') + '</span></div>';
-    }).join('');
-
-    // 两边日志各自的参与数据
-    LOG_KINDS.forEach(function(k) {
-      var runs = _log[k].recs.filter(function(r) {
-        return r.names.some(function(n) { return chars[n]; });
-      });
-      html += '<div class="ttl-sec"><h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:0 0 10px">'
-        + esc(LOG_LABEL[k]) + '</h3>';
-      if (!runs.length) {
-        html += '<p style="color:var(--dim);font-size:12px;margin:0">未参加</p></div>';
-        return;
-      }
-      runs.sort(function(a, b) { return b.ts - a.ts; });
-      var hours = new Array(24).fill(0);
-      runs.forEach(function(r) { hours[new Date(r.ts).getHours()]++; });
-      var maxH = Math.max.apply(null, hours);
-      html += '<p class="raid-note" style="margin:0 0 10px">出场 <b>' + runs.length + '</b> 场 · 首次 '
-        + fmtDateKey(runs[runs.length - 1].ts) + ' · 最近 ' + fmtDateKey(runs[0].ts) + '</p>';
-
-      // 按军团拆开：各军团参与了几个角色、多少场
-      var cs = {}, csOrder = [];
-      runs.forEach(function(r) {
-        var seen = {};
-        r.names.forEach(function(n) {
-          if (!chars[n]) return;
-          var c = chars[n].corp;
-          if (!cs[c]) { cs[c] = { chars: {}, runs: 0 }; csOrder.push(c); }
-          cs[c].chars[n] = 1;
-          if (!seen[c]) { seen[c] = 1; cs[c].runs++; }
-        });
-      });
-      csOrder.sort(function(a, b) {
-        var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
-        if (ha !== hb) return ha - hb;
-        return cs[b].runs - cs[a].runs;
-      });
-      html += '<div style="margin:0 0 10px">' + csOrder.map(function(c) {
-        return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(c) ? ' home' : '') + '">'
-          + esc(c) + '</span><span class="corp-cnt">×' + Object.keys(cs[c].chars).length + ' 角色</span>'
-          + '<span class="corp-cnt">' + cs[c].runs + ' 场</span></div>';
-      }).join('') + '</div>';
-
-      html += hours.map(function(v, i) { return v ? _barRow(_pad2(i) + ':00', v, maxH, false) : ''; }).join('');
-      html += '<div class="tbl-wrap"><table class="ship-tbl"><thead><tr>'
-        + '<th>时间</th><th>出场的角色（含军团）</th><th class="num">本场人数</th></tr></thead><tbody>'
-        + runs.map(function(r) {
-            // 出场的角色按军团分行，跨军团时一眼能看出这场用了哪些团的号
-            var byCorp = {}, order = [];
-            r.names.forEach(function(n) {
-              if (!chars[n]) return;
-              var c = chars[n].corp;
-              if (!byCorp[c]) { byCorp[c] = []; order.push(c); }
-              byCorp[c].push(n);
-            });
-            order.sort(function(a, b) {
-              var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
-              if (ha !== hb) return ha - hb;                     // 本方军团在前
-              if (byCorp[b].length !== byCorp[a].length) return byCorp[b].length - byCorp[a].length;
-              return a < b ? -1 : 1;
-            });
-            var cell = order.map(function(c) {
-              // 军团后面标这一场该团上了几个号，不用数胶囊
-              return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(c) ? ' home' : '') + '">'
-                + esc(c) + '</span><span class="corp-cnt">×' + byCorp[c].length + '</span><span class="pgrid">'
-                + byCorp[c].slice().sort(function(x, y) { return x < y ? -1 : 1; }).map(function(n) {
-                    return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
-                  }).join('')
-                + '</span></div>';
-            }).join('');
-            return '<tr><td>' + fmtDateTime(r.ts) + '</td><td>' + cell
-              + '</td><td class="num">' + r.names.length + '</td></tr>';
-          }).join('')
-        + '</tbody></table></div></div>';
-    });
-
-    body.innerHTML = html;
+    _ttlCur = { title: title, chars: chars };
+    _ttlPg = { raid: 1, battle: 1 };   // 每次打开都从第一页开始
+    raidPaintTitle();
   });
 }
+
+// 该头衔名下角色在某个日志里参加过的场次，新的在前
+function raidTitleRuns(k, chars) {
+  return _log[k].recs.filter(function(r) {
+    return r.names.some(function(n) { return chars[n]; });
+  }).sort(function(a, b) { return b.ts - a.ts; });
+}
+
+function raidTtlPage(k, d) {
+  if (!_ttlCur) return;
+  var runs = raidTitleRuns(k, _ttlCur.chars);
+  var pages = Math.max(1, Math.ceil(runs.length / TTL_PER_PAGE));
+  _ttlPg[k] = Math.min(Math.max(1, (_ttlPg[k] || 1) + d), pages);
+  raidPaintTitle();
+}
+
+// 画头衔面板。翻页也走这里 —— 数据存在 _ttlCur 里，不重新查 ESI。
+function raidPaintTitle() {
+  var body = document.getElementById('personBody');
+  if (!_ttlCur) return;
+  var chars = _ttlCur.chars;
+
+  // 名下角色：按军团分行
+  var byCorp = {}, corpOrder = [];
+  Object.keys(chars).sort().forEach(function(n) {
+    var c = chars[n].corp;
+    if (!byCorp[c]) { byCorp[c] = []; corpOrder.push(c); }
+    byCorp[c].push(n);
+  });
+  corpOrder.sort(function(a, b) {
+    var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
+    if (ha !== hb) return ha - hb;
+    return byCorp[b].length - byCorp[a].length;
+  });
+
+  var html = '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:0 0 8px">'
+    + '名下角色（' + Object.keys(chars).length + ' 个）</h3>';
+  html += corpOrder.map(function(corp) {
+    return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(corp) ? ' home' : '') + '">'
+      + esc(corp) + '</span><span class="corp-cnt">×' + byCorp[corp].length + ' 角色</span>'
+      + '<span class="pgrid">' + byCorp[corp].map(function(n) {
+          return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+        }).join('') + '</span></div>';
+  }).join('');
+
+  // 两边日志各自的参与数据
+  LOG_KINDS.forEach(function(k) {
+    var runs = raidTitleRuns(k, chars);
+    html += '<div class="ttl-sec"><h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:0 0 10px">'
+      + esc(LOG_LABEL[k]) + '</h3>';
+    if (!runs.length) {
+      html += '<p style="color:var(--dim);font-size:12px;margin:0">未参加</p></div>';
+      return;
+    }
+
+    // 上方那些统计（出场数 / 首次最近 / 军团小计 / 时段分布）都按**全部场次**算，
+    // 只有下面那张场次表分页 —— 每页 TTL_PER_PAGE 条，其余翻页看。
+    var pages = Math.max(1, Math.ceil(runs.length / TTL_PER_PAGE));
+    var pg = Math.min(Math.max(1, _ttlPg[k] || 1), pages);
+    _ttlPg[k] = pg;
+    var pageRuns = runs.slice((pg - 1) * TTL_PER_PAGE, pg * TTL_PER_PAGE);
+
+    var hours = new Array(24).fill(0);
+    runs.forEach(function(r) { hours[new Date(r.ts).getHours()]++; });
+    var maxH = Math.max.apply(null, hours);
+    html += '<p class="raid-note" style="margin:0 0 10px">出场 <b>' + runs.length + '</b> 场 · 首次 '
+      + fmtDateKey(runs[runs.length - 1].ts) + ' · 最近 ' + fmtDateKey(runs[0].ts)
+      + (pages > 1 ? ' · 下表第 ' + pg + '/' + pages + ' 页' : '') + '</p>';
+
+    // 按军团拆开：各军团参与了几个角色、多少场
+    var cs = {}, csOrder = [];
+    runs.forEach(function(r) {
+      var seen = {};
+      r.names.forEach(function(n) {
+        if (!chars[n]) return;
+        var c = chars[n].corp;
+        if (!cs[c]) { cs[c] = { chars: {}, runs: 0 }; csOrder.push(c); }
+        cs[c].chars[n] = 1;
+        if (!seen[c]) { seen[c] = 1; cs[c].runs++; }
+      });
+    });
+    csOrder.sort(function(a, b) {
+      var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
+      if (ha !== hb) return ha - hb;
+      return cs[b].runs - cs[a].runs;
+    });
+    html += '<div style="margin:0 0 10px">' + csOrder.map(function(c) {
+      return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(c) ? ' home' : '') + '">'
+        + esc(c) + '</span><span class="corp-cnt">×' + Object.keys(cs[c].chars).length + ' 角色</span>'
+        + '<span class="corp-cnt">' + cs[c].runs + ' 场</span></div>';
+    }).join('') + '</div>';
+
+    html += hours.map(function(v, i) { return v ? _barRow(_pad2(i) + ':00', v, maxH, false) : ''; }).join('');
+    html += '<div class="tbl-wrap"><table class="ship-tbl"><thead><tr>'
+      + '<th>时间</th><th>出场的角色（含军团）</th><th class="num">本场人数</th></tr></thead><tbody>'
+      + pageRuns.map(function(r) {
+          // 出场的角色按军团分行，跨军团时一眼能看出这场用了哪些团的号
+          var byCorp = {}, order = [];
+          r.names.forEach(function(n) {
+            if (!chars[n]) return;
+            var c = chars[n].corp;
+            if (!byCorp[c]) { byCorp[c] = []; order.push(c); }
+            byCorp[c].push(n);
+          });
+          order.sort(function(a, b) {
+            var ha = _isHomeCorp(a) ? 0 : 1, hb = _isHomeCorp(b) ? 0 : 1;
+            if (ha !== hb) return ha - hb;                     // 本方军团在前
+            if (byCorp[b].length !== byCorp[a].length) return byCorp[b].length - byCorp[a].length;
+            return a < b ? -1 : 1;
+          });
+          var cell = order.map(function(c) {
+            // 军团后面标这一场该团上了几个号，不用数胶囊
+            return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(c) ? ' home' : '') + '">'
+              + esc(c) + '</span><span class="corp-cnt">×' + byCorp[c].length + '</span><span class="pgrid">'
+              + byCorp[c].slice().sort(function(x, y) { return x < y ? -1 : 1; }).map(function(n) {
+                  return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+                }).join('')
+              + '</span></div>';
+          }).join('');
+          return '<tr><td>' + fmtDateTime(r.ts) + '</td><td>' + cell
+            + '</td><td class="num">' + r.names.length + '</td></tr>';
+        }).join('')
+      + '</tbody></table></div>';
+
+    // 翻页控件。只有一页时整块不画。
+    if (pages > 1) {
+      html += '<div class="pgrid" style="margin:8px 0 0">'
+        + (pg > 1 ? '<span class="pchip" onclick="raidTtlPage(\'' + k + '\',-1)">← 上一页</span>' : '')
+        + '<span class="pchip" style="cursor:default">第 ' + pg + ' / ' + pages + ' 页</span>'
+        + (pg < pages ? '<span class="pchip" onclick="raidTtlPage(\'' + k + '\',1)">下一页 →</span>' : '')
+        + '</div>';
+    }
+    html += '</div>';
+  });
+
+  body.innerHTML = html;
+}
+
 
 // ---- 共用：名称 / 类型解析 ----
 // 下面这些原本属于 KB 统计页，会战报告也在用，所以留在共享区。
