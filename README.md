@@ -172,11 +172,13 @@ location ~ \.php$ {
 
 ### 旧站后端还在跑，别当死文件清掉
 
-`api/check.php`（授权校验）、`api/upload.php`（数据上报）、`admin/`、`data/auth_system.db` 是**在运行的**旧站授权后端，不是残留：`licenses` 表里有到 2027-12-31 的有效授权，`app_data` 表里有客户上传的账号记录，客户端 UA 是 `TradeCrossApp`，走的是**明文 HTTP 到 80 端口**（日志里 865 次 `POST /api/upload.php` 全是 `HTTP/1.1`，最近一次 2026-09-16）。所以：
+`api/check.php`（授权校验）、`api/upload.php`（数据上报）、`admin/`、`data/auth_system.db` 是**在运行的**旧站授权后端，不是残留：`licenses` 表里有到 2027-12-31 的有效授权，客户端 UA 是 `TradeCrossApp`，走的是**明文 HTTP 到 80 端口**（日志里 865 次 `POST /api/upload.php` 全是 `HTTP/1.1`，最近一次 2026-09-16）。所以：
 
 - `tradecross.com.conf` 的 `:80` 块不能删，它同时是那些客户端的入口；
 - `api/` / `data/` / `config.php` / `db.php` / `functions.php` 不能按「旧站残留」清理；
 - 要下线得先让客户端改地址，否则当场 404。
+
+> `app_data` 表里原来存着 41 条客户上报的经纪商账号密码（**明文**），2026-09-23 已 `DELETE` + `VACUUM` 清空（不 VACUUM 的话明文还留在 SQLite 的空闲页里）。表结构保留，`api/upload.php` 照旧写入。
 
 `tradecross.com` 这个域名已不在我们手上（NS 指向 ns1/ns2.afternic.com，A 记录是停靠页），所以 vhost 里不再写它，`:80` 块用 `server_name _;` 兜底。注意 `_` 只是兜底不是白名单：`Host` 随便填什么都会落到这个块，包括 `tradecross.com`。
 
