@@ -1,0 +1,13 @@
+# 仓库内统一 LF：服务器是 Linux，本地已有文件也是 LF，
+# 只有 api.php 是 CRLF（曾导致线上/本地 MD5 不一致）。
+* text=auto eol=lf
+
+# 二进制资源不做换行转换
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
