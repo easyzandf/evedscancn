@@ -3,6 +3,10 @@
 
 v3: filled vivid-blue disc (no empty space, no huge dark area), white radar
 rings, large white ship, orange sweep wedge + leading edge + red blip.
+
+v4: drop the 128 and 256 frames from the .ico. They were ~55KB of a 68KB file
+and nothing uses them: tabs and taskbars pick 16/32/48, and the 256px case is
+already covered by favicon.png via <link rel="icon" sizes="256x256">.
 """
 import math
 from PIL import Image, ImageDraw
@@ -69,7 +73,7 @@ def main():
     img = img.resize((256, 256), Image.LANCZOS)
     img.save('favicon.png')
     img.save('favicon.ico', format='ICO',
-             sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+             sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64)])
     bg = Image.new('RGB', (180, 180), (22, 33, 62))
     s = img.resize((160, 160), Image.LANCZOS)
     bg.paste(s, (10, 10), s)
