@@ -43,6 +43,16 @@ define('KB_MAX_AGE', 604800);   // 超过 7 天没被碰过的行清掉
 // 所以别设太小，否则刚存进去就被淘汰、下次又得重新问 ESI。
 define('KB_MAX_ROWS', 5000);
 
+// /universe/names/ 的「二分补救」预算（见 kbNamesSalvage）。三个上限都是必需项：
+//   请求数   —— 300 个 ID 里混了 1 个无效的，大约要 2×log2(300)≈18 次才能定位到它；
+//               给 14 次够捞回绝大多数，剩下的放弃也不影响已经拿到的那部分。
+//   墙钟     —— PHP max_execution_time 是 30s，而上游单次最多要 12s，不设会超时 500。
+//   错误配额 —— ESI 的 X-Esi-Error-Limit-Remain 是 100 次/60s，404 也算错；超了它会按
+//               出口 IP 封禁。本站只有一个出口，打爆就等于掐死所有用户，所以留够余量。
+define('KB_SALVAGE_MAX_REQ', 14);
+define('KB_SALVAGE_BUDGET', 8.0);
+define('KB_ESI_ERR_FLOOR', 25);
+
 $ESI = 'https://esi.evetech.net/latest';
 // zKillboard 要求带可识别的 UA（写明用途和站点），别用默认的 PHP UA
 $UA = 'EVE-DScan-CN/1.0 (+https://dscan.dpdns.org/)';
@@ -128,7 +138,11 @@ function httpJson($url) {
     return is_array($r) ? $r : null;
 }
 
-function httpJsonPost($url, $data) {
+// 和 httpJson 一样返回解码后的数组，但额外把 HTTP 状态码和 ESI 的错误配额余量用出参
+// 带出来 —— 光看返回值分不清「上游 404，说这批输入里有无效 ID」和「上游挂了」：
+// 前者的错误体 {"error":".."} 本身也是合法 JSON，解码出来同样是个数组。
+// $status 为 0 表示连响应都没拿到（网络失败/超时）。
+function httpJsonPost($url, $data, &$status = null, &$errRemain = null) {
     global $UA;
     $ctx = stream_context_create(['http' => [
         'method'        => 'POST',
@@ -138,9 +152,73 @@ function httpJsonPost($url, $data) {
         'content'       => json_encode($data),
     ]]);
     $d = @file_get_contents($url, false, $ctx);
+
+    // $http_response_header 是 file_get_contents 在当前作用域里填的魔法变量。
+    // 跳转链会有多条状态行，循环里后面的覆盖前面的，正是想要的。
+    $status    = 0;
+    $errRemain = -1;
+    if (isset($http_response_header)) {
+        foreach ($http_response_header as $h) {
+            if (preg_match('#^HTTP/\S+\s+(\d{3})#', $h, $m))              $status    = (int)$m[1];
+            elseif (preg_match('#^X-Esi-Error-Limit-Remain:\s*(\d+)#i', $h, $m)) $errRemain = (int)$m[1];
+        }
+    }
+
     if ($d === false || $d === '') return null;
     $r = json_decode($d, true);
     return is_array($r) ? $r : null;
+}
+
+// /universe/names/ 是「全有或全无」：一批里只要有 1 个无效 ID（删号、解散的军团/联盟），
+// 上游就 404 并且一个都不返回 —— 同一批里合法的名字也跟着丢。调用方一批最多 300 个，
+// 一份大点的会战报告要切成十几批，所以一个坏 ID 就能让整屏名字变成 #1234567。
+//
+// 这里二分定位：把一批劈成两半分别重问，没坏 ID 的那半直接收下，有坏 ID 的那半继续劈，
+// 劈到单条还 404 就是它本身无效，记进负缓存（下次直接跳过，不再问上游）。
+//
+// 只在整批 404 时被调用，所以稳态下零成本；上游真出问题（420/5xx/超时）立刻止损，
+// 拿不到的部分返回空，不会比不补救更差。
+function kbNamesSalvage($pdo, array $ids, array &$out) {
+    global $ESI;
+
+    // 整批刚在调用方那边 404 过。别原样再问一遍 —— 同样的请求必然还是 404，
+    // 白花一次配额；单条的话它就已经确定无效了。
+    if (count($ids) === 1) {
+        cachePut($pdo, 'nm:' . $ids[0], ['bad' => 1]);
+        return;
+    }
+
+    $deadline = microtime(true) + KB_SALVAGE_BUDGET;
+    $budget   = KB_SALVAGE_MAX_REQ;
+    $half     = intdiv(count($ids), 2);
+    $stack    = [array_slice($ids, 0, $half), array_slice($ids, $half)];
+
+    while ($stack && $budget > 0 && microtime(true) < $deadline) {
+        $part = array_pop($stack);
+        $budget--;
+
+        $st = 0; $remain = -1;
+        $r = httpJsonPost("$ESI/universe/names/?datasource=tranquility", $part, $st, $remain);
+
+        if ($st === 200 && is_array($r)) {
+            foreach ($r as $e) {
+                if (!isset($e['id'], $e['name'])) continue;
+                $out[(int)$e['id']] = (string)$e['name'];
+                cachePut($pdo, 'nm:' . (int)$e['id'], ['name' => (string)$e['name']]);
+            }
+            continue;
+        }
+        if ($st !== 404) break;                              // 上游真出问题，止损
+        if ($remain >= 0 && $remain < KB_ESI_ERR_FLOOR) break;   // 错误配额快用完，别再花
+
+        if (count($part) === 1) {                            // 单条也 404 -> 确定无效
+            cachePut($pdo, 'nm:' . $part[0], ['bad' => 1]);
+            continue;
+        }
+        $half = intdiv(count($part), 2);
+        $stack[] = array_slice($part, 0, $half);
+        $stack[] = array_slice($part, $half);
+    }
 }
 
 // 并行抓多个上游。击杀/损失列表一页 200 条、700KB+，串行拉会明显变慢；
@@ -278,19 +356,29 @@ if ($action === 'names') {
     $miss = [];
     foreach ($want as $x) {
         $c = cacheGet($pdo, 'nm:' . $x, KB_NAME_TTL);
-        if ($c !== null && isset($c['name'])) $out[$x] = $c['name'];
-        else $miss[] = $x;
+        if ($c === null)           $miss[] = $x;   // 没缓存过，得问上游
+        elseif (isset($c['name'])) $out[$x] = $c['name'];
+        elseif (empty($c['bad']))  $miss[] = $x;   // 老结构，照旧重取
+        // $c['bad'] 为真：已经确认上游不认这个 ID，跳过，别再花错误配额
     }
     if ($miss) {
-        $r = httpJsonPost("$ESI/universe/names/?datasource=tranquility", $miss);
-        if (is_array($r)) {
+        $st = 0;
+        $r  = httpJsonPost("$ESI/universe/names/?datasource=tranquility", $miss, $st);
+        if ($st === 404) {
+            // 上游的 404 意思是「这批里有无效 ID」，是输入问题不是网关故障，所以不能报 502。
+            // 注意判断顺序：404 的错误体 {"error":".."} 解码出来也是个数组，
+            // 若先看内容，那段 {"error":..} 里没有 id/name 就会走到「上游没给东西」的岔路上去。
+            kbNamesSalvage($pdo, $miss, $out);
+        } elseif (is_array($r)) {
             foreach ($r as $e) {
                 if (!isset($e['id'], $e['name'])) continue;
                 $out[(int)$e['id']] = (string)$e['name'];
                 cachePut($pdo, 'nm:' . (int)$e['id'], ['name' => (string)$e['name']]);
             }
+        } elseif (!$out) {
+            // 一个都没解出来，而且上游连可解析的响应都没给 —— 这回是真的拿不到
+            fail('upstream unavailable', 502);
         }
-        if ($miss && count($out) < count($want) && !$out) fail('upstream unavailable', 502);
         cachePrune($pdo);
     }
     // 键是数字，JSON 里会变成字符串，前端按字符串取即可
