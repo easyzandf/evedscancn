@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EVE 舰船中文 D-Scan</title>
-<link rel="icon" type="image/x-icon" href="favicon.ico">
-<link rel="icon" type="image/png" sizes="256x256" href="favicon.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/x-icon" href="favicon.ico?v=4fc5508d">
+<link rel="icon" type="image/png" sizes="256x256" href="favicon.png?v=bdef655e">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=65e185fc">
 <!-- Montserrat, loaded without blocking.
      media="print" + onload: a render-blocking stylesheet would stall first paint
      until the request times out wherever fonts.googleapis.com is unreachable
@@ -1086,7 +1086,7 @@
 <body>
 
 <div class="topbar">
-  <div class="title"><img src="favicon.png" alt="" class="logo">EVE 舰船中文 D-Scan</div>
+  <div class="title"><img src="favicon.png?v=bdef655e" alt="" class="logo">EVE 舰船中文 D-Scan</div>
   <div class="nav">
     <a href="#" class="on" data-pg="scan"><i data-lucide="radar"></i>D-Scan 解析</a>
     <a href="#" data-pg="browse"><i data-lucide="ship"></i>舰船浏览器</a>
@@ -1489,9 +1489,9 @@
 </div>
 
 <!-- 自托管：截图功能不能依赖境外 CDN，见 vendor/ 目录 -->
-<script src="vendor/html2canvas.min.js"></script>
-<script src="ships-data.js"></script>
-<script src="traits-data.js"></script>
+<script src="vendor/html2canvas.min.js?v=d7530aa0"></script>
+<script src="ships-data.js?v=2f4527d0"></script>
+<script src="traits-data.js?v=f59d22bf"></script>
 <script>
 // 图标路径取自 lucide（ISC 许可，https://lucide.dev）。
 // HTML 属性由 renderIcons() 补齐，没有引入运行时依赖。
@@ -2358,7 +2358,7 @@ function loadItems(cb) {
   if (_itemsReady) { if (cb) cb(); return; }
   if (window.ITEMS_DATA) { buildItemIndex(); _itemsReady = true; if (cb) cb(); return; }
   var s = document.createElement('script');
-  s.src = 'items-data.js';
+  s.src = 'items-data.js?v=6f4a04b1';
   s.onload = function() { buildItemIndex(); _itemsReady = true; if (cb) cb(); };
   s.onerror = function() { if (cb) cb(); };   // dict missing -> fall back to raw-name matching
   document.head.appendChild(s);
