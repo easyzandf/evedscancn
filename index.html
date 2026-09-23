@@ -851,7 +851,8 @@
   .raid-mini:hover { color: var(--text); border-color: var(--brand); }
 
   .raid-main { flex: 1; min-width: 0; }
-  .raid-input { height: 165px; }
+  /* 选择器要带 textarea.scanbox，否则被更具体的 textarea.scanbox 高度覆盖 */
+  textarea.scanbox.raid-input { height: 165px; }
   .raid-tabs { display: flex; gap: 6px; margin: 20px 0 12px; }
   .raid-tab {
     background: none; border: 1px solid var(--border); color: var(--muted);
