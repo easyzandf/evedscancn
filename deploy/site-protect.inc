@@ -1,9 +1,10 @@
-# 站点目录被多个 vhost 共用 —— dscan-dpdns / evedscancn / tradecross.com / smartforum
-# 的 root 全指向 /www/sites/tradecross.com/index —— 所以这几条拦截只能写一份共享片段，
+# 站点目录被多个 vhost 共用 —— dscan-dpdns / evedscancn / tradecross.com（它的 :80 块
+# 是全站 default_server，对所有没匹配上的 Host 生效）的 root 全指向
+# /www/sites/tradecross.com/index —— 所以这几条拦截只能写一份共享片段，
 # 由每个 vhost include 进来。
 #
 # 为什么不能各写一份：已经翻过一次车。第一次只加固了自己那两个域名，旧站域名和
-# smartforum 依然能把 data/auth_system.db（旧站 SQLite 认证库，61KB）整个下载走。
+# 另一个 vhost 依然能把 data/auth_system.db（旧站 SQLite 授权库，61KB）整个下载走。
 # 以后再添 vhost，记得把这一行也带上：
 #     include /usr/local/openresty/nginx/conf/conf.d/site-protect.inc;
 #
@@ -38,7 +39,7 @@ location = /phpinfo.php {
 
 # 服务端数据目录：SQLite 库和日志只由 PHP 从文件系统读写，浏览器永远不该直接取。
 # 按目录拦而不是只按扩展名，是为了把 .db-wal / .db-shm / 以后新增的文件一并挡掉。
-# （旧站的 data/ 里只有 auth_system.db，且只有 config.php 在服务端引用它。）
+# （data/ 里是旧站的授权库 licenses / app_data，只被 config.php 在服务端引用。）
 location ^~ /data/      { deny all; }
 location ^~ /kb_data/   { deny all; }
 location ^~ /raid_data/ { deny all; }

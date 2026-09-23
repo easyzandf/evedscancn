@@ -166,7 +166,19 @@ location ~ \.php$ {
 - **数据文件**（js/css/图片）带 `expires 7d`。它们的变化靠 `?v=<内容哈希>` 表达，所以缓存再久也不会拿到旧内容 —— 前提是发布前跑过 `stamp_assets.py`。
 - 完整配置见 `deploy/dscan-dpdns.conf`。同一站点有两个入口域名（`dscan.dpdns.org`、`www.evedscancn.cc.cd`），两份 vhost 都要改，不然「发布后看不到新版」只在一个域名上复现。
 
-站点目录与旧站共用，所以别把 `deploy/` 里的东西硬编码成单站专用。目录里躺着 `data/auth_system.db`（旧站的 SQLite 认证库）、`index.php.bak`、`phpinfo.php`，拦截规则不能只写进 D-Scan 那两个 vhost —— `tradecross.com.conf`、`smartforum.conf` 的 `root` 指向同一目录，用它们的域名访问一样能把库整份下载走（实测过）。所以规则统一放在 `deploy/site-protect.inc`，5 个 vhost 各 include 一行，**新增 vhost 时记得带上那一行**。
+站点目录与旧站共用，所以别把 `deploy/` 里的东西硬编码成单站专用。`dscan-dpdns.conf`、`evedscancn.conf`、`tradecross.com.conf`（它的 `:80` 块是全站 `default_server`）的 `root` 全指向同一目录，拦截规则不能只写进 D-Scan 那两个 vhost —— 从另一个 Host 访问一样能把 `data/auth_system.db` 整份下载走（实测过）。所以规则统一放在 `deploy/site-protect.inc`，每个 vhost include 一行，**新增 vhost 时记得带上那一行**。
+
+`index.php.bak` / `phpinfo.php` / `test.html` / 旧站的 `README.md` 已经移出站点目录，副本在 `/home/admin/dscan-backups/<TS>-oldsite-tidy/files/`。
+
+### 旧站后端还在跑，别当死文件清掉
+
+`api/check.php`（授权校验）、`api/upload.php`（数据上报）、`admin/`、`data/auth_system.db` 是**在运行的**旧站授权后端，不是残留：`licenses` 表里有到 2027-12-31 的有效授权，`app_data` 表里有客户上传的账号记录，客户端 UA 是 `TradeCrossApp`，走的是**明文 HTTP 到 80 端口**（日志里 865 次 `POST /api/upload.php` 全是 `HTTP/1.1`，最近一次 2026-09-16）。所以：
+
+- `tradecross.com.conf` 的 `:80` 块不能删，它同时是那些客户端的入口；
+- `api/` / `data/` / `config.php` / `db.php` / `functions.php` 不能按「旧站残留」清理；
+- 要下线得先让客户端改地址，否则当场 404。
+
+`tradecross.com` 这个域名已不在我们手上（NS 指向 ns1/ns2.afternic.com，A 记录是停靠页），所以 vhost 里不再写它，`:80` 块用 `server_name _;` 兜底。注意 `_` 只是兜底不是白名单：`Host` 随便填什么都会落到这个块，包括 `tradecross.com`。
 
 片段后缀必须是 `.inc`：`nginx.conf` 里有 `include conf.d/*.conf`，改成 `.conf` 会被当顶层配置再加载一次，`location` 出现在 http 层会让 `openresty -t` 直接报错、所有站点起不来。片段内部顺序也有讲究 —— nginx 的正则 location 首个匹配生效，隐藏文件那条必须排最前，否则 `/js/.foo.js` 会命中静态资源规则被当普通文件发出去。
 
