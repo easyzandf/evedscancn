@@ -721,6 +721,8 @@
   .browbar select { margin-left: 0; }
   .browbar .cnt { color: var(--dim); font-size: 12px; margin-left: auto; white-space: nowrap; }
   .browser-tbl { table-layout: fixed; min-width: 720px; }
+  /* 上面的 .tbl-wrap table.ship-tbl 权重更高，这里要显式把浏览器的 720px 拿回来 */
+  .tbl-wrap table.browser-tbl { min-width: 720px; }
   .browser-tbl th:hover { color: var(--brand-2); }
   .browser-tbl .arrow { font-size: 10px; margin-left: 3px; }
 
@@ -1141,6 +1143,7 @@
       </select>
       <span class="cnt" id="browCnt"></span>
     </div>
+    <div class="tbl-wrap">
     <table class="ship-tbl browser-tbl" id="browTbl">
       <thead>
         <tr>
@@ -1154,6 +1157,7 @@
       </thead>
       <tbody id="browBody"></tbody>
     </table>
+    </div>
   </div>
 
   <!-- Buy list page -->
