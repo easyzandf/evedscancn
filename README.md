@@ -116,6 +116,8 @@ eve-dscan-cn/
 ├── kb_data/              # KB 缓存目录（kb.db，需 777 可写，勿提交）
 ├── favicon.ico / favicon.png / apple-touch-icon.png  # 站点图标
 ├── make_icon.py          # 图标生成脚本
+├── stamp_assets.py       # 把数据文件的内容哈希写进 index.html 的 ?v=（发布前必跑）
+├── deploy/               # nginx vhost 配置的版本化副本（线上生效的那份，改完要同步）
 ├── fetch_attrs.py        # 从 ESI 拉取舰船属性
 ├── fetch_missing.py      # 从 ESI 补全缺失舰船（108 艘）
 ├── fetch_traits.py       # 从 everef 拉取船体加成
@@ -130,7 +132,13 @@ eve-dscan-cn/
 纯静态 + PHP 缓存 API。部署到任意支持 PHP 的 Nginx/Apache 服务器：
 
 ```bash
-# 文件放到站点目录
+# 1) 改过任何数据文件（ships-data / traits-data / items-data / html2canvas / 图标）
+#    之后先更新 index.html 里的版本号。它们都带长缓存（见下），URL 不变的话
+#    老访客会一直用旧文件。
+python stamp_assets.py --check     # 只检查：有差异就退出 1 并列出
+python stamp_assets.py             # 实际改写 index.html
+
+# 2) 文件放到站点目录
 cp index.html ships-data.js traits-data.js items-data.js \
    api.php esi.php raid.php kb.php /www/sites/yoursite/
 mkdir -p cache raid_data kb_data && chmod 777 cache raid_data kb_data
@@ -146,6 +154,14 @@ location ~ \.php$ {
     fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
 }
 ```
+
+### 缓存策略
+
+- **HTML 入口**（`/`、`/index.html`）带 `Cache-Control: no-cache`，每次回源校验。不带它浏览器会走启发式缓存（可复用时长约等于文件距上次修改时间的 10%），文件躺得越久窗口越大，发布后用户可能长时间看不到新版。
+- **数据文件**（js/css/图片）带 `expires 7d`。它们的变化靠 `?v=<内容哈希>` 表达，所以缓存再久也不会拿到旧内容 —— 前提是发布前跑过 `stamp_assets.py`。
+- 完整配置见 `deploy/dscan-dpdns.conf`。同一站点有两个入口域名（`dscan.dpdns.org`、`www.evedscancn.cc.cd`），两份 vhost 都要改，不然「发布后看不到新版」只在一个域名上复现。
+
+站点目录与旧站共用，所以别把 `deploy/` 里的东西硬编码成单站专用；另外 vhost 里挡了几类文件（`.bak` 源码备份、`phpinfo.php`、隐藏文件），顺序不能乱 —— nginx 的正则 location 是首个匹配生效，静态资源那条必须排在 deny 之后。
 
 ## 数据来源
 
@@ -183,6 +199,19 @@ GET ?action=names&ids=1,2,3                    # 批量 ID -> 名（角色/军�
 GET ?action=types&ids=72872,71478              # 批量 typeID -> 中文名
 GET ?action=systems&ids=30003850,30045352      # 批量星系 ID -> 官方中文名
 ```
+
+### 批量取名：上游是「全有或全无」
+
+ESI 的 `/universe/names/` 在**请求里只要有一个无效 ID**（删号、解散的军团/联盟）时，会 404 并且**一个结果都不返回**：`{"error":"Ensure all IDs are valid before resolving."}`。
+
+`?action=names` 一批最多 300 个，而一份大点的会战报告要切成十几批，所以早期版本里**一个坏 ID 就能让整整 300 个名字全部变成 `#1234567`**，而且失败不写缓存、每次刷新都会重演。
+
+现在的处理：
+
+- **先看 HTTP 状态码，再看内容。** 404 的错误体 `{"error":..}` 本身就是合法 JSON，解码出来也是个数组，先看内容会把它当成「上游没给东西」而误报 502。
+- **404 触发二分补救**：把那一批劈成两半分别重问，没坏 ID 的那半直接收下，有坏 ID 的那半继续劈；劈到单条还 404 就能确定它本身无效，记进**负缓存**（7 天，下次直接跳过、不再问上游）。
+- **三重预算**：额外请求≤14 次、墙钟≤8 秒（PHP `max_execution_time` 是 30s）、且 ESI 的 `X-Esi-Error-Limit-Remain` 低于 25 就放弃。最后一条不是保守：404 也计入 ESI 的 **100 次/60s 错误配额**，超了它按出口 IP 封禁 —— 本站只有一个出口，打爆等于掐死所有人的会战报告。
+- 拿不到的部分就留空，**不会比不补救更差**；`502` 从此只在「上游真的不可达」时出现。
 
 ### 缓存策略：stale-while-revalidate
 
