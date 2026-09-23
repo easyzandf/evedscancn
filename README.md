@@ -117,7 +117,8 @@ eve-dscan-cn/
 ├── favicon.ico / favicon.png / apple-touch-icon.png  # 站点图标
 ├── make_icon.py          # 图标生成脚本
 ├── stamp_assets.py       # 把数据文件的内容哈希写进 index.html 的 ?v=（发布前必跑）
-├── deploy/               # nginx vhost 配置的版本化副本（线上生效的那份，改完要同步）
+├── deploy/               # nginx 配置的版本化副本（线上生效的那份，改完要同步）
+│   └── site-protect.inc  # 拦截源码备份 / 本地库 / phpinfo 的共享片段，见「部署」
 ├── fetch_attrs.py        # 从 ESI 拉取舰船属性
 ├── fetch_missing.py      # 从 ESI 补全缺失舰船（108 艘）
 ├── fetch_traits.py       # 从 everef 拉取船体加成
@@ -142,6 +143,10 @@ python stamp_assets.py             # 实际改写 index.html
 cp index.html ships-data.js traits-data.js items-data.js \
    api.php esi.php raid.php kb.php /www/sites/yoursite/
 mkdir -p cache raid_data kb_data && chmod 777 cache raid_data kb_data
+
+# 3) nginx 配置。site-protect.inc 必须和 vhost 一起放，缺了它 vhost 会 openresty -t 失败。
+cp deploy/*.conf deploy/site-protect.inc /path/to/conf.d/
+openresty -t && openresty -s reload
 ```
 
 > `raid_data/` 必须可写，否则 PHP-FPM 建不了 SQLite 库，记录接口会 500。
@@ -161,7 +166,11 @@ location ~ \.php$ {
 - **数据文件**（js/css/图片）带 `expires 7d`。它们的变化靠 `?v=<内容哈希>` 表达，所以缓存再久也不会拿到旧内容 —— 前提是发布前跑过 `stamp_assets.py`。
 - 完整配置见 `deploy/dscan-dpdns.conf`。同一站点有两个入口域名（`dscan.dpdns.org`、`www.evedscancn.cc.cd`），两份 vhost 都要改，不然「发布后看不到新版」只在一个域名上复现。
 
-站点目录与旧站共用，所以别把 `deploy/` 里的东西硬编码成单站专用；另外 vhost 里挡了几类文件（`.bak` 源码备份、`phpinfo.php`、隐藏文件），顺序不能乱 —— nginx 的正则 location 是首个匹配生效，静态资源那条必须排在 deny 之后。
+站点目录与旧站共用，所以别把 `deploy/` 里的东西硬编码成单站专用。目录里躺着 `data/auth_system.db`（旧站的 SQLite 认证库）、`index.php.bak`、`phpinfo.php`，拦截规则不能只写进 D-Scan 那两个 vhost —— `tradecross.com.conf`、`smartforum.conf` 的 `root` 指向同一目录，用它们的域名访问一样能把库整份下载走（实测过）。所以规则统一放在 `deploy/site-protect.inc`，5 个 vhost 各 include 一行，**新增 vhost 时记得带上那一行**。
+
+片段后缀必须是 `.inc`：`nginx.conf` 里有 `include conf.d/*.conf`，改成 `.conf` 会被当顶层配置再加载一次，`location` 出现在 http 层会让 `openresty -t` 直接报错、所有站点起不来。片段内部顺序也有讲究 —— nginx 的正则 location 首个匹配生效，隐藏文件那条必须排最前，否则 `/js/.foo.js` 会命中静态资源规则被当普通文件发出去。
+
+`cache/` 和 `esi_cache/` 不在这套拦截里：它们是 `api.php` / `esi.php` 的默认缓存目录，会被 PHP 以静态文件方式直接返回，挡掉会连带把接口打坏。
 
 ## 数据来源
 
