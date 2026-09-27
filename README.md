@@ -6,8 +6,6 @@
 
 **https://dscan.dpdns.org/**
 
-> 旧域名 `www.evedscancn.cc.cd` 因 `cc.cd` 后缀在国内被网络阻断，已停用，请使用上方新域名。
-
 ## 功能
 
 - **D-Scan 解析** — 粘贴 EVE 扫描结果（本地/舰队/D-Scan 均可），自动识别中/英文舰船名，按作战功能分组（后勤/特种/火力/运输）。精确到 typeID 识别，玩家自定义船名不会误判
@@ -165,9 +163,9 @@ location ~ \.php$ {
 
 - **HTML 入口**（`/`、`/index.html`）带 `Cache-Control: no-cache`，每次回源校验。不带它浏览器会走启发式缓存（可复用时长约等于文件距上次修改时间的 10%），文件躺得越久窗口越大，发布后用户可能长时间看不到新版。
 - **数据文件**（js/css/图片）带 `expires 7d`。它们的变化靠 `?v=<内容哈希>` 表达，所以缓存再久也不会拿到旧内容 —— 前提是发布前跑过 `stamp_assets.py`。
-- 完整配置见 `deploy/dscan-dpdns.conf`。同一站点有两个入口域名（`dscan.dpdns.org`、`www.evedscancn.cc.cd`），两份 vhost 都要改，不然「发布后看不到新版」只在一个域名上复现。
+- 完整配置见 `deploy/dscan-dpdns.conf`。主站入口为 `dscan.dpdns.org`，修改缓存或安全规则时要同步检查其他共用同一站点目录的 vhost。
 
-站点目录以前和旧站 tradecross.com 共用，现在旧站已下线，但目录名和 vhost 名还叫 `tradecross.com`，所以别把 `deploy/` 里的东西硬编码成单站专用。`dscan-dpdns.conf`、`evedscancn.conf`、`tradecross.com.conf` 的 `root` 全指向同一目录，拦截规则不能只写进 D-Scan 那两个 vhost —— 从另一个 Host 访问一样能把库整份下载走（实测过）。所以规则统一放在 `deploy/site-protect.inc`，每个 vhost include 一行，**新增 vhost 时记得带上那一行**。
+站点目录以前和旧站 tradecross.com 共用，现在旧站已下线，但目录名和 vhost 名还叫 `tradecross.com`，所以别把 `deploy/` 里的东西硬编码成单站专用。`dscan-dpdns.conf`、`tradecross.com.conf` 的 `root` 全指向同一目录，拦截规则不能只写进 D-Scan vhost —— 从另一个 Host 访问一样能把库整份下载走（实测过）。所以规则统一放在 `deploy/site-protect.inc`，每个 vhost include 一行，**新增 vhost 时记得带上那一行**。
 
 ### 旧站（tradecross.com）残留的处理记录
 
@@ -184,7 +182,7 @@ location ~ \.php$ {
 
 `tradecross.com` 域名已不在我们手上（NS 指向 ns1/ns2.afternic.com，A 记录是停靠页）。`tradecross.com.conf` 现在只剩两件事：`:80` 的 `default_server`（除 ACME 挑战路径外一律 444，`Host` 填什么都一样），和 `www.tradecross.cc.cd` 的 443 入口 —— 后者是另一个域名，证书每天 3 点由 `/etc/cron.d/certbot-tradecross` 续期，现在指向 D-Scan 静态页。
 
-> `default_server` 里的 ACME 段不能删：certbot 的 webroot 是 `.../openresty/root`（容器里 `/usr/share/nginx/html`），`www.tradecross.cc.cd` 的续期靠它回挑战文件。`evedscancn.conf` 的 `:80` 块原来只有 `return 301`，certbot 跟到 https 之后落在站点目录里（那儿没有 `.well-known`），2026-10-30 到期那个证书本来续不上，已补上同样的一段。
+> `default_server` 里的 ACME 段不能删：certbot 的 webroot 是 `.../openresty/root`（容器里 `/usr/share/nginx/html`），`www.tradecross.cc.cd` 的续期靠它回挑战文件。
 
 片段后缀必须是 `.inc`：`nginx.conf` 里有 `include conf.d/*.conf`，改成 `.conf` 会被当顶层配置再加载一次，`location` 出现在 http 层会让 `openresty -t` 直接报错、所有站点起不来。片段内部顺序也有讲究 —— nginx 的正则 location 首个匹配生效，隐藏文件那条必须排最前，否则 `/js/.foo.js` 会命中静态资源规则被当普通文件发出去。
 

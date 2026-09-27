@@ -1,10 +1,10 @@
-# 站点目录被多个 vhost 共用 —— dscan-dpdns / evedscancn / tradecross.com（它的 :80 块
+# 站点目录被多个 vhost 共用 —— dscan-dpdns / tradecross.com（它的 :80 块
 # 是全站 default_server，对所有没匹配上的 Host 生效）的 root 全指向
 # /www/sites/tradecross.com/index —— 所以这几条拦截只能写一份共享片段，
 # 由每个 vhost include 进来。
 #
-# 为什么不能各写一份：已经翻过一次车。第一次只加固了自己那两个域名，旧站域名和
-# 另一个 vhost 依然能把 data/auth_system.db（旧站 SQLite 授权库，61KB）整个下载走。
+# 为什么不能各写一份：已经翻过一次车。第一次只加固了部分入口，另一个 vhost
+# 依然能把 data/auth_system.db（旧站 SQLite 授权库，61KB）整个下载走。
 # 以后再添 vhost，记得把这一行也带上：
 #     include /usr/local/openresty/nginx/conf/conf.d/site-protect.inc;
 #
