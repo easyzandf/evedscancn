@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>EVE 舰船中文 D-Scan</title>
 <link rel="icon" type="image/x-icon" href="favicon.ico?v=4fc5508d">
 <link rel="icon" type="image/png" sizes="256x256" href="favicon.png?v=bdef655e">
@@ -1081,6 +1081,71 @@
     .raid-list { max-height: 240px; }
     .bar-row .bar-lbl { flex: 0 0 92px; }
   }
+
+  /* iPhone landscape: keep navigation and the raid workspace usable in 874x402. */
+  @media (orientation: landscape) and (max-height: 500px) and (max-width: 950px) {
+    .topbar {
+      gap: 10px;
+      padding: max(8px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+               8px max(12px, env(safe-area-inset-left));
+    }
+    .topbar .title {
+      flex: 0 0 auto;
+      gap: 8px;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .topbar .title .logo { width: 26px; height: 26px; }
+    .topbar .nav {
+      flex: 1 1 auto;
+      min-width: 0;
+      margin-left: 0;
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: none;
+    }
+    .topbar .nav::-webkit-scrollbar { display: none; }
+    .topbar .nav a {
+      flex: 0 0 auto;
+      gap: 5px;
+      padding: 6px 5px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .topbar .tog {
+      flex: 0 0 auto;
+      padding: 7px 9px;
+    }
+    .topbar .tog .to-txt { display: none; }
+    .wrap {
+      padding: 10px max(14px, env(safe-area-inset-right))
+               max(18px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    }
+    .page-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin: 2px 0 10px;
+    }
+    .page-head .eyebrow { display: none; }
+    .page-head h1 { flex: 0 0 auto; font-size: 18px; }
+    .page-head p {
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .raid-cols { gap: 10px; }
+    .raid-side { flex-basis: 224px; }
+    .raid-list { max-height: 250px; }
+    .raid-main .lbl { margin: 6px 0 5px; }
+    textarea.scanbox.raid-input { height: 72px; }
+    .raid-main .btnbar { margin-top: 6px; }
+    .raid-main .btnbar .btn { padding: 6px 16px; font-size: 13px; }
+    .raid-tabs { margin: 8px 0 6px; }
+    .raid-tab { padding: 5px 15px; font-size: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -1349,6 +1414,7 @@
         <li><b>本方军团固定为 PLA-F 与 P.L.A</b>；其他军团（以及查不到军团的）一律归为<b>敌对</b></li>
         <li><b>所有统计只算本方</b>：出场排行、小号分布、玩家-角色对照、各项卡片都只含这两个军团；敌对只标注一个总角色数，不进入任何榜单</li>
         <li>本场名单分「本方 / 敌对」两大块，敌对块标红，一眼看出对面来了多少</li>
+        <li>本场详情的本方概览按当前日志全部记录去重统计角色与玩家，并分别列出 PLA-F / P.L.A 的角色数；下面仍只列出本场实际出场角色</li>
       </ul>
 
       <ol class="doc-steps">
@@ -2989,9 +3055,45 @@ function _raidPersonKey(name, data) {
   return t ? 't:' + t : 'n:' + String(name).toLowerCase();
 }
 
+// 当前日志出现过的全部角色，用来统计本方军团的累计角色数。
+function _raidLogNames(k) {
+  var seen = {}, out = [];
+  _log[k].recs.forEach(function(r) {
+    r.names.forEach(function(n) {
+      var key = String(n).toLowerCase();
+      if (seen[key]) return;
+      seen[key] = 1;
+      out.push(n);
+    });
+  });
+  return out;
+}
+
+function raidKnownHomeTotals(results) {
+  var chars = {}, players = {}, corps = {};
+  results.forEach(function(e) {
+    var d = e.data;
+    var corp = d ? (d.corp_ticker || d.corp_name || '?') : '';
+    if (!_isHomeCorp(corp)) return;
+    chars[e.name.toLowerCase()] = 1;
+    players[_raidPersonKey(e.name, d)] = 1;
+    if (!corps[corp]) corps[corp] = { chars: {} };
+    corps[corp].chars[e.name.toLowerCase()] = 1;
+  });
+  var corpTotals = {};
+  LOG_HOME_CORPS.forEach(function(corp) {
+    corpTotals[corp] = corps[corp] ? Object.keys(corps[corp].chars).length : 0;
+  });
+  return {
+    chars: Object.keys(chars).length,
+    players: Object.keys(players).length,
+    corps: corpTotals
+  };
+}
+
 // 本场名单：本方/敌对 → 玩家（头衔）→ 军团 → 角色。
 // 一个玩家的块里列出他各个军团的号和对应小计，跨军团的小号不会被拆到别处。
-function raidPersonGroupHtml(results, names) {
+function raidPersonGroupHtml(results, names, knownHome) {
   var info = {};
   results.forEach(function(e) { info[e.name.toLowerCase()] = e.data; });
 
@@ -3052,15 +3154,24 @@ function raidPersonGroupHtml(results, names) {
   }
 
   var homeChars = sumChars(homeP), foeChars = sumChars(foeP);
+  var totalHomeChars = knownHome && knownHome.chars ? knownHome.chars : homeChars;
+  var totalHomePlayers = knownHome && knownHome.players ? knownHome.players : homeP.length;
+  var corpTotals = knownHome && knownHome.corps ? knownHome.corps : null;
+  var homeCorpSummary = LOG_HOME_CORPS.map(function(corp) {
+    var n = corpTotals ? (corpTotals[corp] || 0) : '?';
+    return esc(corp) + ' <b>' + n + '</b> 角色';
+  }).join(' / ');
 
-  var html = '<p class="raid-note">本方（' + esc(LOG_HOME_CORPS.join(' / ')) + '）<b>' + homeChars
-    + '</b> 角色 · <b>' + homeP.length + '</b> 个玩家'
+  var html = '<p class="raid-note" title="本方角色数按当前日志内全部记录的去重角色统计">'
+    + '本方（' + homeCorpSummary + '）共 <b>' + totalHomeChars
+    + '</b> 角色 · <b>' + totalHomePlayers + '</b> 个玩家'
     + (foeChars ? '　·　敌对方 <b>' + foeChars + '</b> 角色' : '')
     + '</p>';
 
   html += '<div class="grp-block"><div class="grp-head"><b>本方</b>'
-    + ' <span>' + esc(LOG_HOME_CORPS.join(' / ')) + '</span>'
-    + '<em>' + homeChars + ' 角色 / ' + homeP.length + ' 玩家</em></div>'
+    + ' <span>' + homeCorpSummary + '</span>'
+    + '<em>共 ' + totalHomeChars + ' 角色 / ' + totalHomePlayers + ' 玩家'
+    + ' · 本场 ' + homeChars + ' 角色 / ' + homeP.length + ' 玩家</em></div>'
     + (homeP.length ? homeP.map(personBlock).join('')
                     : '<div class="grp-corp" style="color:var(--dim);font-size:12px">本场没有本方军团的人</div>')
     + '</div>';
@@ -3137,8 +3248,13 @@ function raidRenderDetail(k) {
     + '<p style="color:var(--dim);font-size:12px">点任意角色名查看其个人出战统计</p>'
     + '</div></div>';
 
-  raidLookupNames(r.names, function(results) {
+  raidLookupNames(_raidLogNames(k), function(allResults) {
     if (gen !== _log[k].dGen) return;                 // 已切到别的记录，丢弃
+    var byName = {};
+    allResults.forEach(function(e) { byName[e.name.toLowerCase()] = e; });
+    var results = r.names.map(function(n) {
+      return byName[n.toLowerCase()] || { name: n, data: null };
+    });
     // 顺手把这条记录的「玩家数」算出来缓存到本地，供左侧列表显示
     var ps = {}, any = false;
     results.forEach(function(e) {
@@ -3157,7 +3273,7 @@ function raidRenderDetail(k) {
       box.innerHTML = '无法查询军团/联盟（后端不可用或 ESI 查询失败），可展开下方「全部名单」查看。';
       return;
     }
-    box.innerHTML = raidPersonGroupHtml(results, r.names);
+    box.innerHTML = raidPersonGroupHtml(results, r.names, raidKnownHomeTotals(allResults));
   });
 }
 
