@@ -1,5 +1,5 @@
 <?php
-// ESI proxy: character name -> corp + alliance info
+// ESI proxy: character name/ID -> corp + alliance + militia faction info
 // Caches all ESI responses to avoid rate limits
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -50,24 +50,35 @@ function esiPost($url, $data, $key, $ttl = 86400) {
 }
 
 // POST /esi.php  {"names":["A","B",...]}  -> {"results":{"A":{...}|null, ...}}
+// POST /esi.php  {"ids":[123,456]}        -> {"results":{"123":{...}|null, ...}}
 //
 // 批量版：浏览器发一次请求即可解析几十上百个角色，避免几十个并发小请求把
 // PHP-FPM 的进程池占满（那样实际会被串行化，首屏要等一两分钟）。
-// 名字->ID 用一次 /universe/ids/；角色详情用 curl_multi 并发拉；军团/联盟按
-// ID 去重后再拉（30 人本通常只有几个军团，很便宜）。
+// 名字->ID 用一次 /universe/ids/；角色详情用 curl_multi 并发拉；军团/联盟/
+// 国民卫队按 ID 去重后再拉（30 人本通常只有几个军团/阵营，很便宜）。
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $body = json_decode(file_get_contents('php://input'), true);
-    $names = (isset($body['names']) && is_array($body['names'])) ? $body['names'] : [];
+    $bodyNames = (isset($body['names']) && is_array($body['names'])) ? $body['names'] : [];
+    $bodyIds = (isset($body['ids']) && is_array($body['ids'])) ? $body['ids'] : [];
+
     $names = array_values(array_unique(array_filter(array_map(function($n) {
         return is_string($n) ? trim($n) : '';
-    }, $names), function($n) { return strlen($n) >= 2 && strlen($n) < 64; })));
-    $names = array_slice($names, 0, 300);
+    }, $bodyNames), function($n) { return strlen($n) >= 2 && strlen($n) < 64 && !ctype_digit($n); })));
+    $ids = array_values(array_unique(array_filter(array_map(function($v) {
+        $v = trim((string)$v);
+        return ctype_digit($v) ? $v : '';
+    }, array_merge($bodyIds, $bodyNames)), function($v) { return $v !== '' && strlen($v) <= 20; })));
+    $keys = array_slice(array_values(array_unique(array_merge($names, $ids))), 0, 300);
 
     $out = [];        // name -> result|null
     $idOf = [];       // name -> character id
     $needIds = [];
 
-    foreach ($names as $n) {
+    foreach ($keys as $n) {
+        if (ctype_digit($n)) {
+            $idOf[$n] = (int)$n;
+            continue;
+        }
         $f = $cacheDir . '/s_' . md5(strtolower($n)) . '.json';
         if (file_exists($f)) {
             $sd = json_decode(file_get_contents($f), true);
@@ -139,25 +150,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // 军团 / 联盟（去重后逐个，走已有缓存）
+    // 军团 / 联盟 / 国民卫队（去重后逐个，走已有缓存）
     $orgs = [];
     $orgIds = [];
+    $needsFactions = false;
     foreach ($charData as $c) {
         if (!empty($c['corporation_id'])) $orgIds['cr_' . $c['corporation_id']] = ['cr', $c['corporation_id']];
         if (!empty($c['alliance_id'])) $orgIds['al_' . $c['alliance_id']] = ['al', $c['alliance_id']];
+        if (!empty($c['faction_id'])) $needsFactions = true;
     }
     foreach ($orgIds as $key => $pair) {
         $orgs[$key] = esiGet($pair[0] === 'cr' ? "$esiBase/corporations/{$pair[1]}/" : "$esiBase/alliances/{$pair[1]}/",
                             $key, 86400);
     }
+    $factions = [];
+    if ($needsFactions) {
+        $list = esiGet("$esiBase/universe/factions/?language=zh", 'factions_zh', 86400);
+        if (is_array($list)) {
+            foreach ($list as $faction) {
+                if (!empty($faction['faction_id'])) $factions[(int)$faction['faction_id']] = $faction;
+            }
+        }
+    }
 
-    foreach ($names as $n) {
+    foreach ($keys as $n) {
         if (array_key_exists($n, $out)) continue;
         $id = isset($idOf[$n]) ? $idOf[$n] : null;
         $c = $id && isset($charData[$id]) ? $charData[$id] : null;
         if (!$c) { $out[$n] = null; continue; }
         $corp = !empty($c['corporation_id']) ? $orgs['cr_' . $c['corporation_id']] : null;
         $alliance = !empty($c['alliance_id']) ? $orgs['al_' . $c['alliance_id']] : null;
+        $factionId = !empty($c['faction_id']) ? (int)$c['faction_id'] : 0;
+        $faction = isset($factions[$factionId]) ? $factions[$factionId] : null;
         $out[$n] = [
             'name'            => isset($c['name']) ? $c['name'] : $n,
             'title'           => isset($c['title']) ? $c['title'] : '',
@@ -167,6 +191,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'alliance_id'     => isset($c['alliance_id']) ? $c['alliance_id'] : 0,
             'alliance_name'   => isset($alliance['name']) ? $alliance['name'] : '',
             'alliance_ticker' => isset($alliance['ticker']) ? $alliance['ticker'] : '',
+            'faction_id'      => $factionId,
+            'faction_name'    => isset($faction['name']) ? $faction['name'] : '',
         ];
     }
 
@@ -174,17 +200,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// GET /esi.php?name=CharacterName -> full character + corp + alliance info
-if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['name'])) {
-    $name = trim($_GET['name']);
-    if (strlen($name) < 2) { echo '{}'; exit; }
+// GET /esi.php?name=CharacterName 或 ?id=123 -> character + org + militia info
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && (isset($_GET['name']) || isset($_GET['id']))) {
+    $name = isset($_GET['name']) ? trim($_GET['name']) : '';
+    $charId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    if (!$charId) {
+        if (strlen($name) < 2) { echo '{}'; exit; }
 
-    // Step 1: resolve name to ID via /universe/ids/
-    $searchKey = 's_' . md5(strtolower($name));
-    $search = esiPost("$esiBase/universe/ids/", [$name], $searchKey, 86400);
-    if (!$search || empty($search['characters'])) { echo '{}'; exit; }
-
-    $charId = $search['characters'][0]['id'];
+        // Step 1: resolve name to ID via /universe/ids/
+        $searchKey = 's_' . md5(strtolower($name));
+        $search = esiPost("$esiBase/universe/ids/", [$name], $searchKey, 86400);
+        if (!$search || empty($search['characters'])) { echo '{}'; exit; }
+        $charId = $search['characters'][0]['id'];
+    }
 
     // Step 2: character details
     // cache key bumped to c2_ so entries cached before `title` was passed through get refreshed
@@ -194,12 +222,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['name'])) {
     $corpId = $char['corporation_id'] ?? 0;
     $allianceId = $char['alliance_id'] ?? 0;
 
-    // Step 3: corp & alliance
+    // Step 3: corp, alliance, militia faction
     $corp = $corpId ? esiGet("$esiBase/corporations/$corpId/", "cr_$corpId", 86400) : null;
     $alliance = $allianceId ? esiGet("$esiBase/alliances/$allianceId/", "al_$allianceId", 86400) : null;
+    $factionId = $char['faction_id'] ?? 0;
+    $faction = null;
+    if ($factionId) {
+        $factions = esiGet("$esiBase/universe/factions/?language=zh", 'factions_zh', 86400);
+        if (is_array($factions)) {
+            foreach ($factions as $item) {
+                if (isset($item['faction_id']) && (int)$item['faction_id'] === (int)$factionId) {
+                    $faction = $item;
+                    break;
+                }
+            }
+        }
+    }
 
     echo json_encode([
-        'name'            => $char['name'] ?? $name,
+        'name'            => $char['name'] ?? ($name !== '' ? $name : (string)$charId),
         // 军团头衔：公开端点 /characters/{id}/ 就带这个字段，无需 SSO 授权
         'title'           => $char['title'] ?? '',
         'corp_id'         => $corpId,
@@ -207,7 +248,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['name'])) {
         'corp_ticker'     => $corp['ticker'] ?? '',
         'alliance_id'     => $allianceId,
         'alliance_name'   => $alliance['name'] ?? '',
-        'alliance_ticker' => $alliance['ticker'] ?? ''
+        'alliance_ticker' => $alliance['ticker'] ?? '',
+        'faction_id'      => (int)$factionId,
+        'faction_name'    => $faction['name'] ?? ''
     ]);
     exit;
 }

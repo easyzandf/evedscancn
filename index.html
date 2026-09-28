@@ -939,6 +939,11 @@
     font-variant-numeric: tabular-nums;
   }
   .corp-tag.home { color: var(--brand-2); font-weight: 600; }
+  .faction-tag {
+    display: inline-block; flex: 0 0 auto; font-size: 10px; line-height: 1.5;
+    color: var(--brand-2); border: 1px solid currentColor; border-radius: 20px;
+    padding: 0 7px; white-space: nowrap;
+  }
   /* 军团后面的「×N 角色 / N 场」：做成小胶囊，跟角色胶囊同一套语言，一眼能扫到 */
   .corp-cnt {
     flex: 0 0 auto; font-size: 11px; color: var(--muted);
@@ -1386,12 +1391,12 @@
 
       <h2>功能一览</h2>
       <ul>
-        <li><b>D-Scan 解析</b> — 粘贴 EVE 扫描结果（本地 / 舰队 / D-Scan），自动识别中英文舰船名并按作战功能分组；精确到 typeID，玩家自定义船名不会误判</li>
+        <li><b>D-Scan 解析</b> — 粘贴 EVE 扫描结果（本地 / 舰队 / D-Scan），自动识别中英文舰船名并按作战功能分组；角色名或角色 ID 会查询国民卫队阵营</li>
         <li><b>ECM 建议</b> — 扫描结果与浏览器中按舰船势力推荐 ECM 干扰（雷达 / 引力 / 磁力 / 光雷达 / 多谱式）</li>
         <li><b>舰船浏览器</b> — 浏览全部 531 艘舰船的中文数据，支持搜索 / 分类 / 科技等级 / 排序，每行附 ECM 建议；点船名查看详情</li>
         <li><b>舰船详情弹窗</b> — 空船属性（质量 / 槽位 / HP / 电容 / 无人机等）+ 船体加成（中文 traits）</li>
         <li><b>装备购买 Buy List</b> — 粘贴资产 + 配装 → 扣除已有 → 生成需购买清单（资产 / 配装中英文混用均可）</li>
-        <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名按时间存档；点记录复现名单，点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
+        <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名或角色 ID 按时间存档；名单标注国民卫队；点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
         <li><b>ESI 查询</b> — 粘贴角色名列表，自动查询军团 / 联盟 / 头衔</li>
         <li><b>会战报告</b> — 把击杀流水自动切成一场场会战，每场给出双方对比（人数 / 损失 / 击毁 / 效率 + <b>联盟构成</b>）、舰船编成、累计损失曲线、<b>时间轴</b>、<b>参战名单</b>；星系可多选筛选，且筛选会重算整份报告</li>
         <li><b>分享链接</b> — 每次解析生成独立短码，发给队友即看同结果 · <b>一键截图</b> 结果存剪贴板 · <b>亮 / 暗主题</b></li>
@@ -1753,6 +1758,8 @@ function doScan(silent) {
     // Extract character name
     var cols = lines[i].split('\t');
     if (cols.length >= 2) {
+      var firstCol = cols[0].trim();
+      if (!ship && /^\d{4,20}$/.test(firstCol)) charNames.push(firstCol);
       // Tab format: col[1] might be "shipName - characterName"
       var desc = cols[1].trim();
       var dashIdx = desc.lastIndexOf(' - ');
@@ -1764,10 +1771,10 @@ function doScan(silent) {
         }
       }
     } else if (!ship) {
-      // Plain text line (no tabs, not a ship): treat as character name
+      // Plain text line (no tabs, not a ship): treat as character name or ID
       var line = lines[i].trim();
-      // Filter: 3+ chars, no tabs, no *, not purely numeric, not a typeID
-      if (line.length >= 3 && line.length < 50 && !/\t/.test(line) && !/[*]/.test(line) && !/^\d{4,}$/.test(line)) {
+      // Character IDs are accepted too; ship typeIDs were already handled by matchShip.
+      if (line.length >= 3 && line.length < 50 && !/\t/.test(line) && !/[*]/.test(line)) {
         charNames.push(line);
       }
     }
@@ -1794,7 +1801,7 @@ function doScan(silent) {
     document.getElementById('resultSum').innerHTML = '（共 ' + charNames.length + ' 个角色名）'
       + ' <button class="btn-clr" onclick="copyLink()" style="font-size:12px;padding:2px 10px;margin-left:10px;">复制分享链接</button>'
       + ' <button class="btn-clr" onclick="screenshotResult()" style="font-size:12px;padding:2px 10px;margin-left:4px;">截图复制</button>';
-    document.getElementById('resultBody').innerHTML = '<div id="esi-summary" class="summary-box"><b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
+    document.getElementById('resultBody').innerHTML = '<div id="esi-summary" class="summary-box"><b>军团/联盟/国民卫队：</b><span id="esi-summary-content">查询中...</span></div>';
     document.getElementById('resultArea').classList.remove('hidden');
     doEsiLookups(charNames, gen);
     return;
@@ -1824,7 +1831,7 @@ function doScan(silent) {
 
   // Alliance/Corp summary placeholder (filled by ESI lookup)
   var esiHTML = '<div id="esi-summary" class="summary-box" style="display:none">'
-    + '<b>军团/联盟：</b><span id="esi-summary-content">查询中...</span></div>';
+    + '<b>军团/联盟/国民卫队：</b><span id="esi-summary-content">查询中...</span></div>';
 
   // ECM summary
   var ecmCounts = {};
@@ -1938,12 +1945,34 @@ var _esiCache = {};
 function doEsiLookups(names, gen) {
   // Take all names (no dedup, keep original order)
   var lookup = names.slice(0, 200);
-  var pending = lookup.length;
-  if (!pending) return;
-  var esiResults = [];
+  if (!lookup.length) return;
 
   // Ignore everything from a superseded scan (user scanned again / cleared).
   function stale() { return gen !== _scanGen; }
+
+  function finish() {
+    if (stale()) return;
+    showEsiSummary(lookup.map(function(name) {
+      return { name: name, data: _esiCache[name] || null };
+    }), gen);
+  }
+
+  function fallback() {
+    var pending = 0;
+    lookup.forEach(function(name) {
+      if (_esiCache[name]) return;
+      pending++;
+      var url = /^\d{4,20}$/.test(name)
+        ? 'esi.php?id=' + encodeURIComponent(name)
+        : 'esi.php?name=' + encodeURIComponent(name);
+      _fetch('GET', url, null, function(res) {
+        if (stale()) return;
+        _esiCache[name] = (res && res.name) ? res : null;
+        if (--pending === 0) finish();
+      });
+    });
+    if (!pending) finish();
+  }
 
   // Probe: check if esi.php is available (not on static hosting like GitHub Pages)
   _fetch('GET', 'esi.php?name=probe', null, function(probe) {
@@ -1956,21 +1985,17 @@ function doEsiLookups(names, gen) {
       return;
     }
 
-    lookup.forEach(function(name) {
+    var need = lookup.filter(function(name) { return !_esiCache[name]; });
+    if (!need.length) { finish(); return; }
+
+    _fetch('POST', 'esi.php', JSON.stringify({ names: need }), function(res) {
       if (stale()) return;
-      if (_esiCache[name]) {
-        esiResults.push({ name: name, data: _esiCache[name] });
-        pending--;
-        if (!pending) showEsiSummary(esiResults, gen);
-        return;
-      }
-      _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
-        if (stale()) return;
-        if (res && res.name) _esiCache[name] = res; else _esiCache[name] = null;
-        esiResults.push({ name: name, data: _esiCache[name] });
-        pending--;
-        if (!pending) showEsiSummary(esiResults, gen);
+      if (!res || !res.results) { fallback(); return; }
+      need.forEach(function(name) {
+        var data = Object.prototype.hasOwnProperty.call(res.results, name) ? res.results[name] : null;
+        _esiCache[name] = (data && data.name) ? data : null;
       });
+      finish();
     });
   });
 }
@@ -1979,13 +2004,20 @@ function showEsiSummary(results, gen) {
   if (gen !== _scanGen) return;   // belongs to a superseded scan
   var alliances = {}; // key=ticker → { name, corps: { ticker → { name, members: [] } } }
   var noAlliance = {}; // corp ticker → { name, members: [] }
+  var factions = {};   // faction_id → { id, name, members: [] }
   var total = 0;
 
   results.forEach(function(entry) {
     var r = entry.data;
     if (!r) return;
     total++;
-    var charName = entry.name;
+    var charName = charDisplayName(entry.name, r);
+
+    if (r.faction_id) {
+      var fk = String(r.faction_id);
+      if (!factions[fk]) factions[fk] = { id: r.faction_id, name: r.faction_name || ('阵营 #' + r.faction_id), members: [] };
+      factions[fk].members.push(charName);
+    }
 
     if (r.alliance_ticker) {
       var ak = r.alliance_ticker;
@@ -2006,6 +2038,23 @@ function showEsiSummary(results, gen) {
   el.style.display = 'block';
 
   var html = '';
+
+  var fList = Object.keys(factions).sort(function(a, b) {
+    return factions[b].members.length - factions[a].members.length || (factions[a].name < factions[b].name ? -1 : 1);
+  });
+  if (fList.length) {
+    html += '<details open style="margin-bottom:6px">'
+      + '<summary style="cursor:pointer;color:#f0ad4e;font-weight:bold">国民卫队</summary>';
+    fList.forEach(function(fk) {
+      var f = factions[fk];
+      html += '<div style="margin-left:16px;padding:2px 0">'
+        + factionBadge(f)
+        + ' <span style="color:#888;font-size:11px">×' + f.members.length + '</span>'
+        + ' <span style="color:#666;font-size:11px">' + esc(f.members.join(', ')) + '</span>'
+        + '</div>';
+    });
+    html += '</details>';
+  }
 
   var aList = Object.keys(alliances).sort(function(a, b) {
     var ta = 0, tb = 0;
@@ -2528,6 +2577,29 @@ function esc(s) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 }
+
+var FACTION_COLORS = {
+  500001: '#6fa8dc',
+  500002: '#d99058',
+  500003: '#d8b45a',
+  500004: '#6fae6f',
+  500010: '#d16a6a',
+  500011: '#c47ad6'
+};
+
+function factionBadge(d) {
+  var id = d && (d.faction_id || d.id);
+  if (!id) return '';
+  var name = d.faction_name || d.name || ('阵营 #' + id);
+  var color = FACTION_COLORS[id] || 'var(--brand-2)';
+  return '<span class="faction-tag" style="color:' + color + '" title="' + esc(name) + '">'
+    + esc(name) + '</span>';
+}
+
+function charDisplayName(name, data) {
+  return data && data.name ? data.name : name;
+}
+
 // strip tabs/newlines from names before writing Multi-Buy TSV
 function _sanName(s) {
   return String(s == null ? '' : s).replace(/[\t\r\n]+/g, ' ');
@@ -2814,16 +2886,20 @@ function parseNameList(raw) {
     var name = '';
     var cols = line.split('\t');
     if (cols.length >= 2) {
+      if (/^\d{4,20}$/.test(cols[0].trim())) {
+        name = cols[0].trim();
+      }
       // tab 行：第 2 列可能是 "船名 - 角色名"
-      var desc = cols[1].trim();
-      var i = desc.lastIndexOf(' - ');
-      name = (i > 0) ? desc.substring(i + 3).trim() : '';
+      if (!name) {
+        var desc = cols[1].trim();
+        var i = desc.lastIndexOf(' - ');
+        name = (i > 0) ? desc.substring(i + 3).trim() : '';
+      }
       if (!name) return;
-      if (/^[A-Z]?\d/.test(name)) return;                       // 排除 T2 / V2 之类
+      if (!/^\d{4,20}$/.test(name) && /^[A-Z]?\d/.test(name)) return;  // 排除 T2 / V2 之类
     } else {
       name = line.trim();
       if (!name) return;
-      if (/^\d{4,}$/.test(name)) return;                        // 排除 typeID
     }
     if (name.length < 3 || name.length >= 50) return;
     if (name.indexOf('*') !== -1) return;
@@ -3089,7 +3165,8 @@ function raidPersonGroupHtml(results, names) {
 
   function personBlock(pk) {
     var p = persons[pk];
-    var label = p.title ? _shortTitle(p.title) : (p.chars === 1 ? p.first : '（无头衔）');
+    var firstData = info[p.first.toLowerCase()] || null;
+    var label = p.title ? _shortTitle(p.title) : (p.chars === 1 ? charDisplayName(p.first, firstData) : '（无头衔）');
     // 有头衔 -> 点开「玩家面板」（含 30人本 + 战斗 两边数据）
     // 无头衔的单号 -> 直接点开该角色；多号无头衔没法区分，做成纯文本
     var lbl = p.title
@@ -3109,10 +3186,13 @@ function raidPersonGroupHtml(results, names) {
     });
     return head + p.corpOrder.map(function(corp) {
       var list = p.corps[corp].slice().sort(function(x, y) { return x < y ? -1 : 1; });
+      var faction = info[list[0].toLowerCase()] || null;
       return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(corp) ? ' home' : '') + '">'
-        + esc(corp) + '</span><span class="corp-cnt">×' + list.length + '</span><span class="pgrid">'
+        + esc(corp) + '</span><span class="corp-cnt">×' + list.length + '</span>'
+        + factionBadge(faction) + '<span class="pgrid">'
         + list.map(function(n) {
-            return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+            var d = info[n.toLowerCase()] || null;
+            return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(charDisplayName(n, d)) + '</span>';
           }).join('') + '</span></div>';
     }).join('');
   }
@@ -3277,7 +3357,9 @@ function raidRankGroupedHtml(K, results, agg) {
     var ck = meta.ticker || meta.name || '?';
     if (!corps[ck]) corps[ck] = {
       ticker: meta.ticker || '', name: meta.name || '',
-      allianceTicker: meta.allianceTicker || '', rows: [], persons: {}
+      allianceTicker: meta.allianceTicker || '',
+      faction_id: meta.factionId || 0, faction_name: meta.factionName || '',
+      rows: [], persons: {}
     };
     return corps[ck];
   }
@@ -3294,7 +3376,10 @@ function raidRankGroupedHtml(K, results, agg) {
       return;
     }
     if (!_isHomeCorp(d.corp_ticker || d.corp_name || '?')) return;   // 敌对不进统计
-    var box = bucket({ ticker: d.corp_ticker, name: d.corp_name, allianceTicker: d.alliance_ticker });
+    var box = bucket({
+      ticker: d.corp_ticker, name: d.corp_name, allianceTicker: d.alliance_ticker,
+      factionId: d.faction_id, factionName: d.faction_name
+    });
     box.rows.push(row);
     box.persons[pkey] = 1;
   });
@@ -3355,6 +3440,7 @@ function raidRankGroupedHtml(K, results, agg) {
     var rows = orderRows(c);
     return '<div class="grp-block"><div class="grp-head"><b>' + esc(c.label || c.ticker || c.name || '?') + '</b>'
       + ' <span>' + esc(c.label ? '' : (c.name || '')) + (c.allianceTicker ? ' · ' + esc(c.allianceTicker) : '') + '</span>'
+      + factionBadge(c)
       + '<em>' + c.rows.length + ' 角色 / ' + runsOf(c) + ' 人次</em></div>'
       + '<div class="tbl-wrap"><table class="ship-tbl rank-tbl"><thead><tr>'
       + '<th>角色名</th><th>头衔</th><th class="num">场次</th><th class="barcell"></th>'
@@ -3391,8 +3477,11 @@ function raidDistributionHtml(K, results, agg) {
     var pk = _raidPersonKey(p.name, d);
     if (!persons[pk]) persons[pk] = { key: pk, title: _cleanTitle(d && d.title), chars: [], runs: 0 };
     persons[pk].chars.push({
-      name: p.name,
+      key: p.name,
+      name: charDisplayName(p.name, d),
       corp: d ? (d.corp_ticker || d.corp_name || '?') : '?',
+      faction_id: d ? (d.faction_id || 0) : 0,
+      faction_name: d ? (d.faction_name || '') : '',
       known: !!d
     });
   });
@@ -3473,9 +3562,10 @@ function raidDistributionHtml(K, results, agg) {
               return order.map(function(corp) {
                 var list = byCorp[corp].slice().sort(function(x, y) { return x.name < y.name ? -1 : 1; });
                 return '<div class="corp-line"><span class="corp-tag' + (isHome(corp) ? ' home' : '') + '">'
-                  + esc(corp) + '</span><span class="corp-cnt">×' + list.length + '</span><span class="pgrid">'
+                  + esc(corp) + '</span><span class="corp-cnt">×' + list.length + '</span>'
+                  + factionBadge(list[0]) + '<span class="pgrid">'
                   + list.map(function(c) {
-                      return '<span class="pchip" data-pname="' + esc(c.name) + '">' + esc(c.name) + '</span>';
+                      return '<span class="pchip" data-pname="' + esc(c.key) + '">' + esc(c.name) + '</span>';
                     }).join('')
                   + '</span></div>';
               }).join('');
@@ -3663,7 +3753,10 @@ function raidShowPerson(K, name) {
   m.classList.add('show');
 
   // 顺带查 ESI（失败就静默隐藏）
-  _fetch('GET', 'esi.php?name=' + encodeURIComponent(name), null, function(res) {
+  var personUrl = /^\d{4,20}$/.test(name)
+    ? 'esi.php?id=' + encodeURIComponent(name)
+    : 'esi.php?name=' + encodeURIComponent(name);
+  _fetch('GET', personUrl, null, function(res) {
     var box = document.getElementById('personEsi');
     if (!box) return;
     if (res && res.name) {
@@ -3671,6 +3764,7 @@ function raidShowPerson(K, name) {
       if (res.alliance_name) parts.push('<b>' + esc(res.alliance_ticker || '') + '</b> ' + esc(res.alliance_name));
       if (res.corp_name) parts.push('<b>' + esc(res.corp_ticker || '') + '</b> ' + esc(res.corp_name));
       var inner = '<b>军团/联盟：</b>' + (parts.length ? parts.join(' · ') : '无');
+      if (res.faction_name) inner += '<div style="margin-top:7px"><b>国民卫队：</b> ' + factionBadge(res) + '</div>';
       if (res.title) {
         inner += '<div style="margin-top:7px"><span class="pchip" style="cursor:default">'
           + esc(_shortTitle(res.title)) + '</span></div>';
@@ -3713,7 +3807,12 @@ function raidShowTitle(K, title) {
     candidates.forEach(function(n) {
       var d = _esiCache[n];
       if (d && _cleanTitle(d.title) === title) {
-        chars[n] = { name: n, corp: d.corp_ticker || d.corp_name || '?' };
+        chars[n] = {
+          name: charDisplayName(n, d),
+          corp: d.corp_ticker || d.corp_name || '?',
+          faction_id: d.faction_id || 0,
+          faction_name: d.faction_name || ''
+        };
       }
     });
     if (!Object.keys(chars).length) {
@@ -3763,10 +3862,12 @@ function raidPaintTitle() {
   var html = '<h3 style="color:var(--brand);font-size:14px;font-weight:normal;margin:0 0 8px">'
     + '名下角色（' + Object.keys(chars).length + ' 个）</h3>';
   html += corpOrder.map(function(corp) {
+    var firstChar = chars[byCorp[corp][0]];
     return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(corp) ? ' home' : '') + '">'
       + esc(corp) + '</span><span class="corp-cnt">×' + byCorp[corp].length + ' 角色</span>'
+      + factionBadge(firstChar)
       + '<span class="pgrid">' + byCorp[corp].map(function(n) {
-          return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(n) + '</span>';
+          return '<span class="pchip" data-pname="' + esc(n) + '">' + esc(chars[n].name) + '</span>';
         }).join('') + '</span></div>';
   }).join('');
 
@@ -3812,8 +3913,10 @@ function raidPaintTitle() {
       return cs[b].runs - cs[a].runs;
     });
     html += '<div style="margin:0 0 10px">' + csOrder.map(function(c) {
+      var firstChar = chars[Object.keys(cs[c].chars)[0]];
       return '<div class="corp-line"><span class="corp-tag' + (_isHomeCorp(c) ? ' home' : '') + '">'
         + esc(c) + '</span><span class="corp-cnt">×' + Object.keys(cs[c].chars).length + ' 角色</span>'
+        + factionBadge(firstChar)
         + '<span class="corp-cnt">' + cs[c].runs + ' 场</span></div>';
     }).join('') + '</div>';
 
