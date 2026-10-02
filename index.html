@@ -375,9 +375,11 @@
   }
 
   /* buy list page */
-  .buy-cols { display: flex; gap: 14px; }
-  .buy-cols .col { flex: 1; min-width: 0; }
+  .buy-cols { display: flex; gap: 14px; align-items: stretch; }
+  .buy-cols .col { display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .buy-cols textarea.scanbox { height: 230px; }
+  .buy-cols #assetInput { flex: 1 1 auto; min-height: 230px; }
+  .buy-cols textarea.scanbox.buy-fit { height: 176px; }
   .lbl { color: #999; font-size: 12px; margin: 14px 0 6px; }
   .buy-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
   .buy-bar label { color: #ccc; font-size: 14px; }
@@ -1240,17 +1242,20 @@
           placeholder="在此粘贴 EVE 资产列表，中英文均可&#10;&#10;中文客户端示例（资产窗口复制）：&#10;125mm磁轨炮 II&#9;3&#10;1600mm钢附甲板 II&#9;7&#10;帝国海军多频晶体 M&#9;34855&#10;&#10;英文客户端示例：&#10;125mm Railgun II&#9;3&#10;Warrior II&#9;35"></textarea>
       </div>
       <div class="col">
-        <div class="lbl">② 粘贴<strong>配装</strong>（EFT 格式：游戏内复制 / Pyfa / EVE Workbench，中英文均可）</div>
-        <textarea class="scanbox" id="fitInput"
-          placeholder="在此粘贴配装，例如：&#10;[Prophecy Navy Issue, My Fit]&#10;Damage Control II&#10;Multispectrum Energized Membrane II&#10;Heavy Beam Laser II&#10;Medium Trimark Armor Pump I&#10;Warrior II x5&#10;Imperial Navy Multifrequency M x10"></textarea>
+        <div class="lbl">② 粘贴<strong>当前舰船配装</strong>（可选；船上可拆下的装备会当作已有）</div>
+        <textarea class="scanbox buy-fit" id="currentFitInput"
+          placeholder="把当前舰船的装配复制到这里，例如：&#10;[Ferox, Current Fit]&#10;Damage Control II&#10;Heavy Missile Launcher II x4&#10;Large Shield Extender II"></textarea>
+        <div class="lbl">③ 粘贴<strong>想切换的新配装</strong>（EFT 格式：游戏内复制 / Pyfa / EVE Workbench，中英文均可）</div>
+        <textarea class="scanbox buy-fit" id="fitInput"
+          placeholder="把要切换到的装配复制到这里，例如：&#10;[Ferox, New Fit]&#10;Damage Control II&#10;Heavy Missile Launcher II x7&#10;Large Shield Extender II&#10;Warp Disruptor II"></textarea>
       </div>
     </div>
 
     <div class="buy-bar">
-      <label>③ 要装 <input type="number" id="fitCount" value="1" min="1"> 艘</label>
+      <label>④ 新配装要装 <input type="number" id="fitCount" value="1" min="1"> 艘</label>
       <button class="btn btn-go" onclick="computeBuyList()">计算购买清单</button>
       <button class="btn btn-clr" onclick="clearBuy()">清空</button>
-      <span class="hint2">需要 = 单船配装 × 艘数 − 已有资产；弹药/无人机按配装里 xN 计算</span>
+      <span class="hint2">需购买 = 新配装需求 − 当前配装可复用 − 已有资产；弹药/无人机按 xN 计算</span>
     </div>
 
     <div class="result-wrap hidden" id="buyResult"></div>
@@ -1395,7 +1400,7 @@
         <li><b>ECM 建议</b> — 扫描结果与浏览器中按舰船势力推荐 ECM 干扰（雷达 / 引力 / 磁力 / 光雷达 / 多谱式）</li>
         <li><b>舰船浏览器</b> — 浏览全部 531 艘舰船的中文数据，支持搜索 / 分类 / 科技等级 / 排序，每行附 ECM 建议；点船名查看详情</li>
         <li><b>舰船详情弹窗</b> — 空船属性（质量 / 槽位 / HP / 电容 / 无人机等）+ 船体加成（中文 traits）</li>
-        <li><b>装备购买 Buy List</b> — 粘贴资产 + 配装 → 扣除已有 → 生成需购买清单（资产 / 配装中英文混用均可）</li>
+        <li><b>装备购买 Buy List</b> — 粘贴现有资产、当前舰船配装和新配装 → 扣除可复用装备 → 生成切换方案所需的购买清单</li>
         <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名或角色 ID 按时间存档；名单标注国民卫队；点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
         <li><b>ESI 查询</b> — 粘贴角色名列表，自动查询军团 / 联盟 / 头衔</li>
         <li><b>会战报告</b> — 把击杀流水自动切成一场场会战，每场给出双方对比（人数 / 损失 / 击毁 / 效率 + <b>联盟构成</b>）、舰船编成、累计损失曲线、<b>时间轴</b>、<b>参战名单</b>；星系可多选筛选，且筛选会重算整份报告</li>
@@ -1405,11 +1410,12 @@
       <h2>装备购买怎么用</h2>
       <ol class="doc-steps">
         <li>游戏内 <b>资产 / 机库窗口</b> 全选 → 复制 → 粘贴到「装备购买」①（支持中英文，可多段 / 多角色拼一起）</li>
-        <li>复制一套 <b>配装</b>（游戏内复制 / Pyfa / EVE Workbench，中英文模块名都行）→ 粘贴到②</li>
-        <li>在 ③ 填要装的<b>艘数</b> → 点「计算购买清单」</li>
+        <li>复制当前舰船的装配 → 粘贴到②；不填则只按机库资产抵扣</li>
+        <li>复制想切换到的<b>新配装</b>（游戏内复制 / Pyfa / EVE Workbench）→ 粘贴到③</li>
+        <li>在④填要装的<b>艘数</b> → 点「计算购买清单」</li>
         <li>结果按需购买数排序（装备、弹药、无人机、船体都会算）；点「复制购买清单(Multi-Buy)」回游戏批量购买直接粘贴，或点「截图复制」存图</li>
       </ol>
-      <p style="color:#777;font-size:12px">原理：通过 typeID 物品词典把中文资产与英文配装统一归并；需要量 = 单船配装 × 艘数，需购买 = 需要 − 已有。弹药 / 无人机按配装里的 xN 计算，船体单独抵扣。</p>
+      <p style="color:#777;font-size:12px">原理：通过 typeID 物品词典把中文物品统一归并；需购买 = 新配装需求 − 当前舰船可拆下复用 − 机库已有。同一船型的当前舰船会自动抵扣一艘目标船体；弹药 / 无人机按新配装里的 xN 计算。</p>
 
       <h2>30人本 / 战斗记录怎么用</h2>
       <p>「30人本」与「战斗」是<b>两个独立的记录页</b>：同一套界面和统计，但记录、同步码、服务器数据三者完全分开，互不影响。下面以 30人本 为例，战斗页操作完全相同。</p>
@@ -2565,10 +2571,13 @@ function parseFit(text) {
 function computeBuyList() {
   var assetText = document.getElementById('assetInput').value;
   var fitText = document.getElementById('fitInput').value;
+  var currentFitText = document.getElementById('currentFitInput').value;
   var count = parseInt(document.getElementById('fitCount').value, 10) || 1;
-  if (!fitText.trim()) { alert('请先在②粘贴配装（EFT 格式）'); return; }
+  if (!fitText.trim()) { alert('请先在③粘贴想切换的新配装（EFT 格式）'); return; }
   if (count < 1) count = 1;
-  loadItems(function() { renderBuy(parseAssets(assetText), parseFit(fitText), count); });
+  loadItems(function() {
+    renderBuy(parseAssets(assetText), parseFit(fitText), count, parseFit(currentFitText));
+  });
 }
 
 // escape user-derived text before inserting into HTML (XSS hardening)
@@ -2605,7 +2614,17 @@ function _sanName(s) {
   return String(s == null ? '' : s).replace(/[\t\r\n]+/g, ' ');
 }
 
-function renderBuy(assets, fit, count) {
+function renderBuy(assets, fit, count, currentFit) {
+  currentFit = currentFit || { ship: '', modules: {} };
+  function addCount(map, key, qty) { map[key] = (map[key] || 0) + qty; }
+  function itemKey(name) {
+    var id = lookupItemId(name);
+    return { id: id || null, key: id ? id : ('r' + name.trim().toLowerCase()) };
+  }
+  function shipKey(name) {
+    var sh = lookupShip(name);
+    return sh ? ('s:' + (sh.en || sh.cn || '').trim().toLowerCase()) : ('r:' + String(name || '').trim().toLowerCase());
+  }
   // 1) owned: resolvable items by typeID, ships by en, others by raw lower name
   var owned = {}, rawOwned = {}, ownedShips = {};
   assets.forEach(function(a) {
@@ -2617,7 +2636,14 @@ function renderBuy(assets, fit, count) {
     rawOwned[kr] = (rawOwned[kr] || 0) + a.qty;
   });
 
-  // 2) needed from fit modules
+  // 2) 当前舰船装配：按 1 艘计算，装备可拆下用于新配装
+  var currentOwned = {}, currentRaw = {};
+  Object.keys(currentFit.modules).forEach(function(name) {
+    var k = itemKey(name);
+    addCount(k.id ? currentOwned : currentRaw, k.key, currentFit.modules[name]);
+  });
+
+  // 3) needed from target fit modules
   var needMap = {};   // key -> { id, name, per }
   Object.keys(fit.modules).forEach(function(name) {
     var per = fit.modules[name];
@@ -2627,21 +2653,32 @@ function renderBuy(assets, fit, count) {
     needMap[key].per += per;
   });
 
-  // 3) rows
+  // 4) rows
   var rows = [];
   Object.keys(needMap).forEach(function(key) {
     var e = needMap[key];
     var need = e.per * count;
-    var have = e.id ? (owned[e.id] || 0) : (rawOwned[key] || 0);
-    rows.push({ id: e.id, name: e.name, per: e.per, need: need, have: have, buy: Math.max(0, need - have) });
+    var currentHave = e.id ? (currentOwned[e.id] || 0) : (currentRaw[key] || 0);
+    var assetHave = e.id ? (owned[e.id] || 0) : (rawOwned[key] || 0);
+    var have = currentHave + assetHave;
+    rows.push({
+      id: e.id, name: e.name, per: e.per, need: need,
+      currentHave: currentHave, assetHave: assetHave, have: have,
+      buy: Math.max(0, need - have)
+    });
   });
 
   // hull row (ship in fit header vs ships owned)
   var hull = null;
   if (fit.ship) {
     var sh = lookupShip(fit.ship);
-    var haveH = sh ? (ownedShips[(sh.en || '').toLowerCase()] || 0) : 0;
-    hull = { ship: fit.ship, known: sh || null, have: haveH, buy: Math.max(0, count - haveH) };
+    var assetHull = sh ? (ownedShips[(sh.en || '').toLowerCase()] || 0) : 0;
+    var currentHull = (currentFit.ship && shipKey(currentFit.ship) === shipKey(fit.ship)) ? 1 : 0;
+    var haveH = currentHull + assetHull;
+    hull = {
+      ship: fit.ship, known: sh || null, currentHave: currentHull,
+      assetHave: assetHull, have: haveH, buy: Math.max(0, count - haveH)
+    };
   }
 
   // sort: need-to-buy first, then by name
@@ -2650,24 +2687,27 @@ function renderBuy(assets, fit, count) {
     return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
   });
 
-  // 4) render
+  // 5) render
   var el = document.getElementById('buyResult');
   el.classList.remove('hidden');
   var html = '<h3>购买清单 <span id="buySum"></span></h3>';
   var buyTotal = 0, buyKinds = 0;
   rows.forEach(function(r) { if (r.buy > 0) { buyTotal += r.buy; buyKinds++; } });
-  html += '<p style="color:#888;font-size:12px;margin:0 0 10px">配装船型：'
-    + (hull ? '<b style="color:#f0ad4e">' + (hull.known ? esc(hull.known.cn + ' ' + hull.known.en) : esc(hull.ship)) + '</b>'
-             : '<i>未识别</i>')
-    + ' × ' + count + ' 艘</p>';
+  var hullLabel = hull ? (hull.known ? esc(hull.known.cn + ' ' + hull.known.en) : esc(hull.ship)) : '<i>未识别</i>';
+  html += '<p style="color:#888;font-size:12px;margin:0 0 10px">目标配装船型：'
+    + '<b style="color:#f0ad4e">' + hullLabel + '</b> × ' + count + ' 艘'
+    + (currentFit.ship ? '　当前舰船：<b style="color:#888">' + esc(currentFit.ship) + '</b>' : '')
+    + '</p>';
 
   html += '<table class="ship-tbl"><thead><tr>'
-    + '<th style="width:44%">装备</th><th>单船×' + count + '</th><th>已有</th><th>需购买</th></tr></thead><tbody>';
+    + '<th style="width:38%">装备</th><th>目标需求</th><th>当前配装可复用</th><th>资产已有</th><th>需购买</th></tr></thead><tbody>';
 
   if (hull) {
     var cls = hull.buy > 0 ? 'qty-buy' : 'qty-zero';
     html += '<tr><td>' + (hull.known ? esc(hull.known.cn) + ' <span class="en">' + esc(hull.known.en) + '</span>' : esc(hull.ship))
-      + '</td><td>' + count + '</td><td class="qty-have">' + hull.have + '</td>'
+      + '</td><td class="qty-need">' + count + '</td>'
+      + '<td class="qty-have">' + hull.currentHave + '</td>'
+      + '<td class="qty-have">' + hull.assetHave + '</td>'
       + '<td class="' + cls + '">' + (hull.buy > 0 ? hull.buy : '已有') + '</td></tr>';
   }
 
@@ -2681,14 +2721,18 @@ function renderBuy(assets, fit, count) {
     var cls = r.buy > 0 ? 'qty-buy' : 'qty-zero';
     html += '<tr><td>' + esc(zhTxt) + (enTxt ? ' <span class="en">' + esc(enTxt) + '</span>' : '') + '</td>'
       + '<td class="qty-need">' + r.need + '</td>'
-      + '<td class="qty-have">' + r.have + '</td>'
+      + '<td class="qty-have">' + r.currentHave + '</td>'
+      + '<td class="qty-have">' + r.assetHave + '</td>'
       + '<td class="' + cls + '">' + (r.buy > 0 ? r.buy : '已有') + '</td></tr>';
   });
   html += '</tbody></table>';
 
   var covCount = rows.filter(function(r) { return r.have >= r.need; }).length;
+  var reuseKinds = rows.filter(function(r) { return r.currentHave > 0; }).length;
+  var reuseUnits = rows.reduce(function(n, r) { return n + Math.min(r.currentHave, r.need); }, 0);
   html += '<p style="color:#666;font-size:12px">共需购买 <b style="color:#ff7a7a">' + buyKinds + ' 种 / ' + buyTotal
-    + ' 件</b>；已有 ' + assets.length + ' 条资产记录，其中 ' + covCount + ' 种装备已够用（不需买）。'
+    + ' 件</b>；当前配装可复用 <b>' + reuseKinds + ' 种 / ' + reuseUnits + ' 件</b>，机库已有 ' + assets.length
+    + ' 条资产记录，其中 ' + covCount + ' 种装备已够用（不需买）。'
     + (hull && hull.buy > 0 ? ' 另需购买 <b style="color:#ff7a7a">' + hull.buy + ' 艘</b>船体。' : ' 船体数量已足够。')
     + '</p>';
   html += '<div class="btnbar">'
@@ -2761,6 +2805,7 @@ function screenshotBuy(btn) {
 
 function clearBuy() {
   document.getElementById('assetInput').value = '';
+  document.getElementById('currentFitInput').value = '';
   document.getElementById('fitInput').value = '';
   document.getElementById('fitCount').value = '1';
   var el = document.getElementById('buyResult');
