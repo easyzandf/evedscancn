@@ -1410,6 +1410,7 @@
       <h2>装备购买怎么用</h2>
       <ol class="doc-steps">
         <li>游戏内 <b>资产 / 机库窗口</b> 全选 → 复制 → 粘贴到「装备购买」①（支持中英文，可多段 / 多角色拼一起）</li>
+        <li>资产支持制表符或空格分隔；「名称 数量」「数量 名称」「名称 xN」都能识别</li>
         <li>复制当前舰船的装配 → 粘贴到②；不填则只按机库资产抵扣</li>
         <li>复制想切换到的<b>新配装</b>（游戏内复制 / Pyfa / EVE Workbench）→ 粘贴到③</li>
         <li>在④填要装的<b>艘数</b> → 点「计算购买清单」</li>
@@ -2512,28 +2513,67 @@ function lookupShip(name) {
   return _shipEn[n.toLowerCase()] || _shipZh[n] || null;
 }
 
-// -- parse pasted assets (game asset/hangar copy): name / qty among tab columns --
+// -- parse pasted assets: 支持制表符、"名称 数量"、"数量 名称"、"名称 xN" --
+function _assetName(name) {
+  var n = String(name || '').trim().replace(/\*+$/, '').trim();
+  if (!n) return '';
+  return (lookupItemId(n) || lookupShip(n)) ? n : '';
+}
+function _assetQty(v) {
+  var n = String(v || '').replace(/[,' ]/g, '');
+  return /^\d+$/.test(n) ? parseInt(n, 10) : 0;
+}
 function parseAssets(text) {
   var out = [];
-  (text || '').split(/\r?\n/).forEach(function(line) {
-    if (!line || !line.trim()) return;
-    var cells = line.split('\t').map(function(c) { return c.trim(); });
-    var name = null;
-    for (var i = 0; i < cells.length; i++) {
-      var c = cells[i];
-      if (!c) continue;
-      if (/^[\d,.]+$/.test(c)) continue;                              // pure number = qty column
-      if (/^\d+(\.\d+)?\s*(m3|m|km|au|mm)\s*$/i.test(c)) continue;    // volume / distance
-      name = c;
-      break;
+  (text || '').split(/\r?\n/).forEach(function(raw) {
+    var line = raw.trim();
+    if (!line) return;
+
+    if (line.indexOf('\t') !== -1) {
+      var cells = line.split('\t').map(function(c) { return c.trim(); });
+      var nameIdx = -1, name = '';
+      for (var i = 0; i < cells.length; i++) {
+        var known = _assetName(cells[i]);
+        if (known) { nameIdx = i; name = known; break; }
+      }
+      if (!name) {
+        for (var k = 0; k < cells.length; k++) {
+          var c = cells[k];
+          if (!c || /^[\d,.]+$/.test(c)) continue;
+          if (/^\d+(\.\d+)?\s*(m3|m|km|au|mm)\s*$/i.test(c)) continue;
+          nameIdx = k; name = c; break;
+        }
+      }
+      if (!name) return;
+      var qty = 1;
+      for (var j = 0; j < cells.length; j++) {
+        if (j === nameIdx) continue;
+        var q = _assetQty(cells[j]);
+        if (q > 0) { qty = q; break; }
+      }
+      out.push({ name: name.replace(/\*+$/, '').trim(), qty: Math.max(1, qty) });
+      return;
     }
-    if (!name) return;
-    var qty = 1;
-    for (var j = 0; j < cells.length; j++) {
-      var c2 = cells[j].replace(/[,' ]/g, '');   // strip 1,000 / 1'000 separators
-      if (/^\d+$/.test(c2)) { qty = parseInt(c2, 10); break; }
+
+    var xm = line.match(/^(.*?)\s+[xX]\s*([\d,]+)\s*$/);
+    if (xm && _assetName(xm[1])) { out.push({ name: _assetName(xm[1]), qty: Math.max(1, _assetQty(xm[2])) }); return; }
+
+    var whole = _assetName(line);
+    if (whole) { out.push({ name: whole, qty: 1 }); return; }
+
+    var tail = line.match(/^(.*?)[\s,]+([\d,]+)\s*$/);
+    if (tail && _assetName(tail[1])) {
+      out.push({ name: _assetName(tail[1]), qty: Math.max(1, _assetQty(tail[2])) });
+      return;
     }
-    out.push({ name: name.replace(/\*+$/, '').trim(), qty: Math.max(1, qty) });
+
+    var head = line.match(/^([\d,]+)[\s,]+(.+)$/);
+    if (head && _assetName(head[2])) {
+      out.push({ name: _assetName(head[2]), qty: Math.max(1, _assetQty(head[1])) });
+      return;
+    }
+
+    out.push({ name: line.replace(/\*+$/, '').trim(), qty: 1 });
   });
   return out;
 }
