@@ -1387,7 +1387,7 @@
       <label class="lp-lpinput lp-g"><span class="lp-dot"></span>盖伦特 LP <input type="number" id="lpAmtG" min="0" step="1000" placeholder="0" oninput="lpSetLp('G', this.value)"></label>
       <span class="lp-fee">
         <label>销售税 <input type="number" id="lpFeeSales" value="7.5" min="0" max="100" step="0.1" oninput="lpSetFee('sales', this.value)">%</label>
-        <label>中介费 <input type="number" id="lpFeeBroker" value="3" min="0" max="100" step="0.1" oninput="lpSetFee('broker', this.value)">%</label>
+        <label>中介费 <input type="number" id="lpFeeBroker" value="2.4" min="0" max="100" step="0.1" oninput="lpSetFee('broker', this.value)">%</label>
         <label>安全税 <input type="number" id="lpFeeSafe" value="0" min="0" max="100" step="0.1" oninput="lpSetFee('safe', this.value)">%</label>
       </span>
       <button class="btn btn-go" onclick="lpReload(true)"><i data-lucide="search"></i>刷新行情</button>
@@ -5107,6 +5107,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=8ea4a20e"></script>
+<script src="lp.js?v=232569c9"></script>
 </body>
 </html>
