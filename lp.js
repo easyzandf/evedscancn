@@ -91,6 +91,8 @@
     noReq: false,
     expanded: {},
     rows: [],
+    bookBusy: {},
+    bookMeta: {},
     pricesAt: 0
   };
 
@@ -153,6 +155,12 @@
     if (d < 3600) return Math.floor(d / 60) + ' 分钟前';
     if (d < 86400) return Math.floor(d / 3600) + ' 小时前';
     return Math.floor(d / 86400) + ' 天前';
+  }
+
+  function clock(ms) {
+    var d = new Date(ms);
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
   }
 
   function apiGet(url, cb) {
@@ -856,7 +864,7 @@
     return '<tr class="lp-detail-row"><td colspan="9">'
       + '<div class="lp-detail">'
       + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button>'
-        + '<button type="button" class="lp-copy-btn lp-book-refresh" data-lp-bookrefresh="' + o.type_id + '" title="重新拉取这个物品在 ' + escHtml(stationLabel()) + ' 的买卖前五（绕过 15 分钟缓存）">' + LP_REFRESH_ICON + ' 刷新挂单前五</button></div>'
+        + '<button type="button" class="lp-copy-btn lp-book-refresh" data-lp-bookrefresh="' + o.type_id + '" title="重新拉取这个物品在 ' + escHtml(stationLabel()) + ' 的买卖前五（绕过 15 分钟缓存，约 1 秒）">' + LP_REFRESH_ICON + '<span class="lp-book-refresh-label">刷新挂单前五</span></button></div>'
       + contractBlockHtml(r)
       + '<div data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
       + '</div></td></tr>';
@@ -892,15 +900,24 @@
 
   function detailHtml(typeId) {
     var b = _lp.books[typeId];
-    if (!b) return '<div class="lp-detail-msg">正在拉取挂单前五…</div>';
+    var meta = bookMetaHtml(typeId);
+    if (!b) return meta + '<div class="lp-detail-msg">正在拉取挂单前五…</div>';
     if (b.error) {
-      return '<div class="lp-detail-msg">挂单拉取失败 '
+      return meta + '<div class="lp-detail-msg">挂单拉取失败 '
         + '<a href="#" onclick="lpReloadBook(' + typeId + ');return false">重试</a></div>';
     }
-    return '<div class="lp-book-cols">'
+    return meta + '<div class="lp-book-cols">'
       + bookHtml('收购单前五（价格从高到低）', b.buy, b.stations)
       + bookHtml('出售单前五（价格从低到高）', b.sell, b.stations)
       + '</div>';
+  }
+
+  // ESI 全区订单簿单次要 0.8 秒上下，把抓取时间和耗时摆出来，方便判断刷新到底有没有生效
+  function bookMetaHtml(typeId) {
+    var m = _lp.bookMeta[typeId];
+    if (!m) return '';
+    return '<div class="lp-detail-msg lp-book-meta">挂单拉取于 ' + clock(m.at)
+      + (m.ms ? ' · 用时 ' + (m.ms / 1000).toFixed(1) + 's' : '') + '</div>';
   }
 
   function bookHtml(title, list, stations) {
@@ -959,27 +976,62 @@
     loadBook(typeId, true);
   }
 
-  // 展开面板里按物品强刷站内买卖前五
+  function bookCells(typeId) {
+    return document.querySelectorAll('[data-lp-det="' + typeId + '"]');
+  }
+
+  function paintBook(typeId) {
+    var cells = bookCells(typeId);
+    for (var i = 0; i < cells.length; i++) {
+      cells[i].classList.remove('lp-refreshing');
+      cells[i].innerHTML = detailHtml(typeId);
+    }
+  }
+
+  function bookBtnText(btn, text) {
+    var span = btn.querySelector ? btn.querySelector('.lp-book-refresh-label') : null;
+    if (span) span.textContent = text;
+    else btn.textContent = text;
+  }
+
+  // 展开面板里按物品强刷站内买卖前五。
+  // ESI 全区订单簿本身就要 0.8 秒上下，前端能做的是：点击立刻给反馈，重复点击不叠加请求。
   function refreshBook(typeId, btn) {
-    if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); }
-    var cells = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
+    if (_lp.bookBusy[typeId]) return;
+    _lp.bookBusy[typeId] = 1;
+    var t0 = Date.now();
+    if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); bookBtnText(btn, '刷新中… 0.0s'); }
+    var cells = bookCells(typeId);
     for (var i = 0; i < cells.length; i++) cells[i].classList.add('lp-refreshing');
+    var timer = setInterval(function () {
+      if (btn) bookBtnText(btn, '刷新中… ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
+    }, 100);
     apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + '&force=1', function (res) {
-      if (btn) { btn.disabled = false; btn.classList.remove('lp-spin'); }
-      _lp.books[typeId] = (res && (res.buy || res.sell)) ? res : { error: 1 };
-      var cells2 = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
-      for (var j = 0; j < cells2.length; j++) {
-        cells2[j].classList.remove('lp-refreshing');
-        cells2[j].innerHTML = detailHtml(typeId);
+      clearInterval(timer);
+      delete _lp.bookBusy[typeId];
+      var ms = Date.now() - t0;
+      var ok = !!(res && (res.buy || res.sell));
+      _lp.books[typeId] = ok ? res : { error: 1 };
+      if (ok) _lp.bookMeta[typeId] = { at: res.cachedAt ? res.cachedAt * 1000 : Date.now(), ms: ms };
+      paintBook(typeId);
+      if (btn) {
+        btn.classList.remove('lp-spin');
+        btn.disabled = false;
+        bookBtnText(btn, ok ? ('已更新 · ' + (ms / 1000).toFixed(1) + 's') : '刷新失败，点这里重试');
+        setTimeout(function () { bookBtnText(btn, '刷新挂单前五'); }, 2400);
       }
     });
   }
 
   function loadBook(typeId, force) {
+    if (_lp.bookBusy[typeId]) return;
+    _lp.bookBusy[typeId] = 1;
     apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + (force ? '&force=1' : ''), function (res) {
-      _lp.books[typeId] = (res && (res.buy || res.sell)) ? res : { error: 1 };
-      var cells = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
-      for (var i = 0; i < cells.length; i++) cells[i].innerHTML = detailHtml(typeId);
+      delete _lp.bookBusy[typeId];
+      var ok = !!(res && (res.buy || res.sell));
+      _lp.books[typeId] = ok ? res : { error: 1 };
+      if (ok && res.cachedAt) _lp.bookMeta[typeId] = { at: res.cachedAt * 1000, ms: 0 };
+      paintBook(typeId);
     });
   }
 
@@ -989,6 +1041,8 @@
     _lp.region = id;
     _lp.prices = {};
     _lp.books = {};
+    _lp.bookBusy = {};
+    _lp.bookMeta = {};
     _lp.depth = {};
     _lp.depthRegion = 0;
     _lp.contracts = {};
@@ -1009,6 +1063,8 @@
     _lp.region = st.region;
     _lp.prices = {};
     _lp.books = {};
+    _lp.bookBusy = {};
+    _lp.bookMeta = {};
     _lp.depth = {};
     _lp.depthRegion = 0;
     _lp.contracts = {};
