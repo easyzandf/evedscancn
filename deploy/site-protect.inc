@@ -42,4 +42,5 @@ location = /phpinfo.php {
 # （data/ 里是旧站的授权库 licenses / app_data，只被 config.php 在服务端引用。）
 location ^~ /data/      { deny all; }
 location ^~ /kb_data/   { deny all; }
+location ^~ /lp_data/   { deny all; }
 location ^~ /raid_data/ { deny all; }

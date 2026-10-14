@@ -26,6 +26,7 @@ ASSETS = [
     'vendor/html2canvas.min.js',
     'apple-touch-icon.png',
     'items-data.js',
+    'lp.js',
     'ships-data.js',
     'traits-data.js',
     'favicon.ico',

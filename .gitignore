@@ -20,3 +20,7 @@ raid.db
 # KB 统计缓存库（服务器本地数据）
 kb_data/
 kb.db
+
+# LP 兑换缓存库（服务器本地数据）
+lp_data/
+lp.db

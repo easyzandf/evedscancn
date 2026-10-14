@@ -13,6 +13,7 @@
 - **舰船浏览器** — 浏览全部 531 艘舰船的中文数据，支持搜索/分类/科技等级/排序筛选，每行附 **ECM 建议**；点击船名查看详情
 - **舰船详情弹窗** — 空船属性（质量/槽位/HP/电容/无人机等）+ 船体加成（中文 traits）
 - **装备购买（Buy List）** — 粘贴**现有资产**、**当前舰船配装**和**想切换的新配装**，自动扣除当前可拆下装备与机库已有，生成真正需要补购的清单；一键复制 Multi-Buy 格式回游戏批量购买
+- **LP 兑换** — 对比加达里 / 盖伦特国民卫队 LP 商店，按欧服市场最高收购价前五与最低出售价前五算“每点 LP 收益”，列出两个卫队各自最划算的兑换物
 - **30人本记录** — 粘贴本场角色名或角色 ID，按当前时间存档；名单按 **头衔 → 军团 → 角色** 展开并标注国民卫队；点角色名看个人出战统计，点头衔看该玩家名下所有号及两个日志的参与数据；跨场分析出场次数 / 小号分布 / 时段 / 日期分布，支持筛选
 - **战斗记录** — 与「30人本」同一套功能（存档 / 复现 / 个人统计 / 分析），但**数据完全独立**：各自的 localStorage、各自的同步码、各自在服务器上的记录
 - **本方 / 敌对** — 本方军团固定为 PLA-F、P.L.A，其余一律归敌对；**统计只算本方**，敌对只标注总数
@@ -109,12 +110,15 @@ eve-dscan-cn/
 ├── ships-data.js         # 舰船数据 531 艘（CCP SDE + ESI）
 ├── traits-data.js        # 船体加成中文数据 517 艘（everef ref-data）
 ├── items-data.js         # 物品中英文词典 5976 种（装备购买用，懒加载）
+├── lp.js                 # LP 兑换页面逻辑（懒加载，页面切换时首次加载数据）
 ├── api.php               # 缓存 API（POST 保存 / GET 加载分享链接）
 ├── esi.php               # ESI 代理（单个查询 + 批量查询）
 ├── raid.php              # 记录 API：30人本 & 战斗 共用（SQLite，见下方接口）
 ├── raid_data/            # SQLite 数据目录（raid.db，需 777 可写，勿提交）
 ├── kb.php                # 会战报告 API：代理 zKillboard / ESI（SQLite 缓存，见下方接口）
 ├── kb_data/              # KB 缓存目录（kb.db，需 777 可写，勿提交）
+├── lp.php                # LP 兑换 API：国民卫队 LP 商店报价 + 欧服市场行情（SQLite 缓存）
+├── lp_data/              # LP 缓存目录（lp.db，需 777 可写，勿提交）
 ├── favicon.ico / favicon.png / apple-touch-icon.png  # 站点图标
 ├── make_icon.py          # 图标生成脚本
 ├── stamp_assets.py       # 把数据文件的内容哈希写进 index.html 的 ?v=（发布前必跑）
@@ -142,8 +146,8 @@ python stamp_assets.py             # 实际改写 index.html
 
 # 2) 文件放到站点目录
 cp index.html ships-data.js traits-data.js items-data.js \
-   api.php esi.php raid.php kb.php /www/sites/yoursite/
-mkdir -p cache raid_data kb_data && chmod 777 cache raid_data kb_data
+   lp.js api.php esi.php raid.php kb.php lp.php /www/sites/yoursite/
+mkdir -p cache raid_data kb_data lp_data && chmod 777 cache raid_data kb_data lp_data
 
 # 3) nginx 配置。site-protect.inc 必须和 vhost 一起放，缺了它 vhost 会 openresty -t 失败。
 cp deploy/*.conf deploy/site-protect.inc /path/to/conf.d/
@@ -295,6 +299,21 @@ SQLite 表 `kb_cache(k, fetched_at, payload)`，一个键一行，全部带 `KB_
 - ⚠️ 同样需要可写目录：`sudo mkdir -p <站点>/kb_data && sudo chmod 777 <站点>/kb_data`
 
 > 不要把「自定义时间窗统计」做成实时请求：`pastSeconds` 上限就是 7 天，更长的窗口要自己分页求和，实测单页 1.3~8.5s 且会偶发失败，得配后台预热任务才行。
+
+## LP 兑换 API（`lp.php`）
+
+LP 商店报价来自 ESI `/loyalty/stores/{corp}/offers/`，市场行情优先打 fuzzwork 聚合、失败退回 ESI 订单簿；服务端只做代理 + SQLite 缓存（`lp_data/lp.db`）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `?action=offers&corp=1000180` | 加达里国民卫队 LP 商店报价（24h 缓存） |
+| GET | `?action=offers&corp=1000181` | 盖伦特国民卫队 LP 商店报价（24h 缓存） |
+| GET | `?action=aggregate&region=10000002&ids=1,2,3` | 批量取最高收购价 / 最低出售价（15min 缓存） |
+| GET | `?action=book&region=10000002&type_id=16068` | 单个物品买卖挂单前五（15min 缓存，前端展开行时才拉） |
+
+- `corp` 走白名单（1000180 = State Protectorate，1000181 = Federal Defense Union），`region` 也走白名单（Jita / Amarr / Dodixie / Rens / Hek）。
+- 主表只用最高收购价 / 最低出售价算 ISK/LP，两个值都不计手续费和税；挂单前五按需拉取，只显示价格、数量、最小成交量和地点。
+- ⚠️ 同样需要可写目录：`sudo mkdir -p <站点>/lp_data && sudo chmod 777 <站点>/lp_data`
 
 ### 舰船/装备中文名从哪来
 
