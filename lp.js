@@ -394,10 +394,13 @@
         // 吃满前五收单：次数受深度限制，输入 LP 后再受 LP 限制
         var dep = _lp.depth[o.type_id] || null;
         var ctr = _lp.contracts[o.type_id] || [];
-        var contractPerLp = null;
+        var contractPerLp = null, contractGrossPerLp = null, contractProfit = null, totalContract = null;
         if (ctr.length && o.lp_cost > 0) {
           var cRev = num(ctr[0].unit) * o.quantity;
-          contractPerLp = (cRev * (1 - fSales) - cost) / o.lp_cost;
+          contractProfit = cRev * (1 - fSales) - cost;
+          contractPerLp = contractProfit / o.lp_cost;
+          contractGrossPerLp = cRev / o.lp_cost;
+          totalContract = times > 0 ? times * contractProfit : null;
         }
         var depLoaded = Object.prototype.hasOwnProperty.call(_lp.depth, o.type_id);
         var depQty = 0, depTimes = 0, depUse = 0, depProfit = null;
@@ -441,6 +444,9 @@
           depProfit: depProfit,
           contracts: ctr,
           contractPerLp: contractPerLp,
+          contractGrossPerLp: contractGrossPerLp,
+          contractProfit: contractProfit,
+          totalContract: totalContract,
           times: times,
           totalNow: profitNow === null ? null : times * profitNow,
           totalList: profitList === null ? null : times * profitList
@@ -503,7 +509,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价，净收益扣『销售税』；挂卖 = 挂最低出售价，净收益扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建，按销售税口径折算 ISK/LP）。费率默认：销售税 7.5%、中介费 2.4%、安全税 0，顶部输入框可随时修改，改完所有数字实时重算。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
+    html += '<p class="lp-note">秒卖 = 卖给最高收购价，净收益扣『销售税』；挂卖 = 挂最低出售价，净收益扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建）。市场没有挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。费率默认：销售税 7.5%、中介费 2.4%、安全税 0，顶部输入框可随时修改，改完所有数字实时重算。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
     renderBody(html);
   }
 
@@ -574,9 +580,23 @@
       : '—';
 
     var amt = num(_lp.lp[r.store.key]);
+    var totalVal = r.totalNow !== null ? r.totalNow : r.totalContract;
     var totalCell = amt > 0
-      ? (r.totalNow === null ? '—' : '<div class="lp-val lp-strong">' + iskShort(r.totalNow) + '</div><div class="lp-sub">' + iskN(r.times) + ' 次</div>')
+      ? (totalVal === null ? '—' : '<div class="lp-val lp-strong">' + iskShort(totalVal) + '</div><div class="lp-sub">' + iskN(r.times) + ' 次</div>')
       : '<span class="lp-muted">填 LP</span>';
+
+    // 秒卖：优先用市场最高收购价；只有合同价的物品（BPC）回退到合同口径
+    var nowCell = (r.profitNow !== null)
+      ? '<div class="lp-val lp-strong">净 ' + perLp(r.perLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
+        + '<div class="lp-sub">毛 ' + perLp(r.grossPerLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
+        + '<div class="lp-sub' + (num(r.profitNow) < 0 ? ' lp-sub-neg' : '') + '">单次 ' + iskShort(r.profitNow) + '</div>'
+      : (r.contractPerLp !== null
+        ? '<div class="lp-val lp-strong"><span class="lp-contract-tag">合同</span>' + perLp(r.contractPerLp) + ' <span class="lp-unit">ISK/LP</span></div>'
+          + '<div class="lp-sub">毛 ' + perLp(r.contractGrossPerLp) + ' <span class="lp-unit">ISK/LP</span></div>'
+          + '<div class="lp-sub' + (num(r.contractProfit) < 0 ? ' lp-sub-neg' : '') + '">单次 ' + iskShort(r.contractProfit) + '</div>'
+        : '<div class="lp-val">净 — <span class="lp-unit">ISK/LP</span></div>'
+          + '<div class="lp-sub">毛 — <span class="lp-unit">ISK/LP</span></div>'
+          + '<div class="lp-sub">单次 —</div>');
 
     var depthTitle = r.depUse < r.depTimes
       ? '前五收单最多可吃 ' + iskN(r.depTimes) + ' 次，这里受你输入的 LP 限制'
@@ -604,11 +624,7 @@
         + '<div><span class="lp-k">换得</span>x' + iskN(o.quantity) + '</div>'
         + (r.contracts.length ? '<div class="lp-contract"><span class="lp-k">合同</span>' + iskShort(r.contracts[0].unit) + '</div>' : '')
       + '</td>'
-      + '<td class="num lp-c-gain">'
-        + '<div class="lp-val lp-strong">净 ' + perLp(r.perLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
-        + '<div class="lp-sub">毛 ' + perLp(r.grossPerLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
-        + '<div class="lp-sub' + (num(r.profitNow) < 0 ? ' lp-sub-neg' : '') + '">单次 ' + (r.profitNow === null ? '—' : iskShort(r.profitNow)) + '</div>'
-      + '</td>'
+      + '<td class="num lp-c-gain">' + nowCell + '</td>'
       + '<td class="num lp-c-gain">'
         + '<div class="lp-val">净 ' + perLp(r.perLpList) + ' <span class="lp-unit">ISK/LP</span></div>'
         + '<div class="lp-sub">毛 ' + perLp(r.grossPerLpList) + ' <span class="lp-unit">ISK/LP</span></div>'
