@@ -92,7 +92,7 @@
     expanded: {},
     rows: [],
     page: 1,
-    pageSize: 100,
+    pageSize: 20,
     bookBusy: {},
     matBusy: {},
     bookMeta: {},
@@ -819,11 +819,10 @@
   // 分页条：每页条数可选 + 首页/上一页/下一页/末页
   function pagerHtml(total, pages) {
     var size = _lp.pageSize;
-    var sizes = [50, 100, 200, 500];
+    var sizes = [10, 20, 30, 50];
     var opts = sizes.map(function (n) {
       return '<option value="' + n + '"' + (size === n ? ' selected' : '') + '>' + n + '</option>';
     }).join('');
-    opts += '<option value="0"' + (size === 0 ? ' selected' : '') + '>全部</option>';
 
     var html = '<div class="lp-pager">'
       + '<label>每页 <select id="lpPageSize" onchange="lpSetPageSize(this.value)">' + opts + '</select> 条</label>';
@@ -1189,7 +1188,7 @@
 
   function lpSetPageSize(v) {
     var n = parseInt(v, 10);
-    if (!isFinite(n) || n < 0) n = 100;
+    if (!isFinite(n) || n <= 0) n = 20;
     _lp.pageSize = n > 0 ? n : 0;
     _lp.page = 1;
     render();
