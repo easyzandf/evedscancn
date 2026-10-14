@@ -256,7 +256,7 @@ function lpBookSummary(array $book) {
 // 用 ESI 订单簿给一批 type 落缓存（fuzzwork 挂了时的兜底）
 function lpPrimePrices($pdo, $region, array $ids) {
     $out = [];
-    foreach (array_chunk($ids, 12) as $chunk) {
+    foreach (array_chunk($ids, 60) as $chunk) {
         foreach (lpOrdersFor($region, $chunk) as $t => $orders) {
             if ($orders === null) continue;
             $book = lpTrimBook($orders);
@@ -376,6 +376,37 @@ if ($action === 'aggregate') {
         'missing'  => $missing,
         'cachedAt' => $r['at'],
     ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ---- 批量收单深度：只要前五买单，用于「把前五收单全部吃掉」的次数与收益 ----
+if ($action === 'depths') {
+    $region = isset($_GET['region']) ? (int)$_GET['region'] : 0;
+    if (!in_array($region, $LP_REGIONS, true)) lpFail('unknown region');
+
+    $want = [];
+    foreach (explode(',', isset($_GET['ids']) ? (string)$_GET['ids'] : '') as $x) {
+        $x = (int)trim($x);
+        if ($x > 0) $want[$x] = true;
+        if (count($want) >= 60) break;
+    }
+    if (!$want) lpFail('invalid ids');
+
+    $pdo = lpDb($dataDir);
+    $out = []; $miss = [];
+    foreach (array_keys($want) as $id) {
+        $b = $force ? null : lpCacheGet($pdo, 'bk:' . $region . ':' . $id, LP_PRICE_TTL);
+        if ($b !== null) $out[$id] = ['buy' => $b['buy'], 'bv' => $b['bv'], 'bc' => $b['bc']];
+        else $miss[] = $id;
+    }
+    if ($miss) {
+        lpPrimePrices($pdo, $region, $miss);
+        foreach ($miss as $id) {
+            $b = lpCacheGet($pdo, 'bk:' . $region . ':' . $id, LP_PRICE_TTL);
+            if ($b !== null) $out[$id] = ['buy' => $b['buy'], 'bv' => $b['bv'], 'bc' => $b['bc']];
+        }
+    }
+    echo json_encode(['region' => $region, 'depths' => $out, 'cachedAt' => time()], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

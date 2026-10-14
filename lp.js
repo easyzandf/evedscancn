@@ -33,6 +33,9 @@
     prices: {},
     esiNames: {},
     books: {},
+    depth: {},
+    depthLoading: false,
+    depthRegion: 0,
     lp: { C: '', G: '' },
     faction: 'all',
     sort: 'now',
@@ -244,6 +247,44 @@
     _lp.inited = true;
     setHint('');
     render();
+    if (_lp.depthRegion !== _lp.region) loadDepths(!!_lp.forceDepth);
+    _lp.forceDepth = false;
+  }
+
+  // 前五收单深度：整表约 500 个 type，服务端逐 type 缓存 15 分钟，首次拉完后面秒开
+  function loadDepths(force) {
+    if (_lp.depthLoading) return;
+    _lp.depthLoading = true;
+    var uniq = {};
+    eachOffer(function (st, o) { if (o.type_id) uniq[o.type_id] = 1; });
+    var list = Object.keys(uniq);
+    if (!list.length) {
+      _lp.depthLoading = false;
+      _lp.depthRegion = _lp.region;
+      return;
+    }
+    var chunks = [];
+    for (var i = 0; i < list.length; i += 60) chunks.push(list.slice(i, i + 60));
+    var done = 0, idx = 0;
+    var next = function () {
+      if (idx >= chunks.length) {
+        _lp.depthLoading = false;
+        _lp.depthRegion = _lp.region;
+        setHint('');
+        render();
+        return;
+      }
+      setHint('正在拉取收单深度… ' + done + ' / ' + list.length);
+      apiGet('lp.php?action=depths&region=' + _lp.region + '&ids=' + chunks[idx].join(',') + (force ? '&force=1' : ''), function (res) {
+        if (res && res.depths) {
+          Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
+        }
+        done += chunks[idx].length;
+        idx++;
+        next();
+      });
+    };
+    next();
   }
 
   // -- 计算 --
@@ -277,6 +318,25 @@
         var amt = num(_lp.lp[st.key]);
         var times = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
 
+        // 吃满前五收单：次数受深度限制，输入 LP 后再受 LP 限制
+        var dep = _lp.depth[o.type_id] || null;
+        var depLoaded = Object.prototype.hasOwnProperty.call(_lp.depth, o.type_id);
+        var depQty = 0, depTimes = 0, depUse = 0, depProfit = null;
+        if (dep && dep.buy && dep.buy.length) {
+          for (var di = 0; di < dep.buy.length; di++) depQty += num(dep.buy[di].v);
+          depTimes = Math.floor(depQty / o.quantity);
+          if (depTimes > 0) {
+            depUse = amt > 0 ? Math.min(depTimes, Math.floor(amt / o.lp_cost)) : depTimes;
+            var depUnits = depUse * o.quantity, depRev = 0, depRem = depUnits;
+            for (var dj = 0; dj < dep.buy.length && depRem > 0; dj++) {
+              var depTake = Math.min(num(dep.buy[dj].v), depRem);
+              depRev += depTake * num(dep.buy[dj].p);
+              depRem -= depTake;
+            }
+            depProfit = depRev - depUse * cost;
+          }
+        }
+
         rows.push({
           store: st,
           offer: o,
@@ -295,6 +355,11 @@
           perLpList: profitList === null ? null : profitList / o.lp_cost,
           grossPerLpNow: revNow === null ? null : revNow / o.lp_cost,
           grossPerLpList: revList === null ? null : revList / o.lp_cost,
+          depLoaded: depLoaded,
+          depQty: depQty,
+          depTimes: depTimes,
+          depUse: depUse,
+          depProfit: depProfit,
           times: times,
           totalNow: profitNow === null ? null : times * profitNow,
           totalList: profitList === null ? null : times * profitList
@@ -355,7 +420,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；净 ISK/LP = (卖出收入 − ISK 成本 − 材料成本) ÷ LP，毛 ISK/LP = 卖出收入 ÷ LP（不扣成本）；均未计手续费和税，取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情 15 分钟缓存，点行展开挂单前五。</p>';
+    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；净 ISK/LP = (卖出收入 − ISK 成本 − 材料成本) ÷ LP，毛 ISK/LP = 卖出收入 ÷ LP（不扣成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（填了 LP 就取深度与 LP 中更小的一方）；均未计手续费和税，取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存，点行展开挂单前五。</p>';
     renderBody(html);
   }
 
@@ -399,6 +464,7 @@
       + '<th class="num lp-th-market">市场 / 产出</th>'
       + '<th class="num lp-th-gain">秒卖收益</th>'
       + '<th class="num lp-th-gain">挂卖收益</th>'
+      + '<th class="num lp-th-depth">前五秒卖</th>'
       + '<th class="num lp-th-total">可兑总收益</th>'
       + '</tr></thead>';
     return '<table class="ship-tbl lp-tbl">' + head + '<tbody>'
@@ -428,6 +494,16 @@
       ? (r.totalNow === null ? '—' : '<div class="lp-val lp-strong">' + iskShort(r.totalNow) + '</div><div class="lp-sub">' + iskN(r.times) + ' 次</div>')
       : '<span class="lp-muted">填 LP</span>';
 
+    var depthTitle = r.depUse < r.depTimes
+      ? '前五收单最多可吃 ' + iskN(r.depTimes) + ' 次，这里受你输入的 LP 限制'
+      : '前五收单合计 ' + iskN(r.depQty) + ' 个，可吃满 ' + iskN(r.depTimes) + ' 次';
+    var depthCell = !r.depLoaded
+      ? '<span class="lp-muted">…</span>'
+      : (!r.depTimes
+        ? '<span class="lp-muted">—</span>'
+        : '<div class="lp-val" title="' + escHtml(depthTitle) + '">' + iskN(r.depUse) + ' 次</div>'
+          + '<div class="lp-sub' + (num(r.depProfit) < 0 ? ' lp-sub-neg' : '') + '">' + (r.depProfit === null ? '—' : iskShort(r.depProfit)) + '</div>');
+
     var html = '<tr class="' + cls + '" data-lp-key="' + escHtml(key) + '" data-lp-type="' + o.type_id + '">'
       + '<td class="lp-c-item"><div class="lp-name">'
         + '<span class="lp-tag lp-tag-' + r.store.key.toLowerCase() + '">' + r.store.key + '</span>'
@@ -453,11 +529,12 @@
         + '<div class="lp-sub">毛 ' + perLp(r.grossPerLpList) + ' <span class="lp-unit">ISK/LP</span></div>'
         + '<div class="lp-sub">单次 ' + (r.profitList === null ? '—' : iskShort(r.profitList)) + '</div>'
       + '</td>'
+      + '<td class="num lp-c-depth">' + depthCell + '</td>'
       + '<td class="num lp-c-total">' + totalCell + '</td>'
       + '</tr>';
 
     if (open) {
-      html += '<tr class="lp-detail-row"><td colspan="6">'
+      html += '<tr class="lp-detail-row"><td colspan="7">'
         + '<div class="lp-detail" data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
         + '</td></tr>';
     }
@@ -521,6 +598,8 @@
     if (_lp.loading) return;
     if (!Object.keys(_lp.offers).length) { start(force); return; }
     _lp.loading = true;
+    if (force) { _lp.depth = {}; _lp.depthRegion = 0; }
+    _lp.forceDepth = !!force;
     loadPrices(force);
   }
 
@@ -545,6 +624,8 @@
     _lp.region = id;
     _lp.prices = {};
     _lp.books = {};
+    _lp.depth = {};
+    _lp.depthRegion = 0;
     _lp.pricesAt = 0;
     lpReload(false);
   }

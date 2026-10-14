@@ -309,10 +309,12 @@ LP 商店报价来自 ESI `/loyalty/stores/{corp}/offers/`，市场行情优先�
 | GET | `?action=offers&corp=1000180` | 加达里国民卫队 LP 商店报价（24h 缓存） |
 | GET | `?action=offers&corp=1000181` | 盖伦特国民卫队 LP 商店报价（24h 缓存） |
 | GET | `?action=aggregate&region=10000002&ids=1,2,3` | 批量取最高收购价 / 最低出售价（15min 缓存） |
+| GET | `?action=depths&region=10000002&ids=1,2,3` | 批量取前五收单深度（15min 缓存，用于算「吃满前五」的次数与收益） |
 | GET | `?action=book&region=10000002&type_id=16068` | 单个物品买卖挂单前五（15min 缓存，前端展开行时才拉） |
 
 - `corp` 走白名单（1000180 = State Protectorate，1000181 = Federal Defense Union），`region` 也走白名单（Jita / Amarr / Dodixie / Rens / Hek）。
 - 主表只用最高收购价 / 最低出售价算 ISK/LP，两个值都不计手续费和税；挂单前五按需拉取，只显示价格、数量、最小成交量和地点。
+- 主表的「前五秒卖」按前五收单从高到低吃掉这些量，给出可兑换次数与净收益（填了 LP 就取深度与 LP 中更小的一方）；深度数据需要逐 type 拉订单簿，服务端缓存 15 分钟。
 - ⚠️ 同样需要可写目录：`sudo mkdir -p <站点>/lp_data && sudo chmod 777 <站点>/lp_data`
 
 ### 舰船/装备中文名从哪来
