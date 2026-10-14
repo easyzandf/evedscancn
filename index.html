@@ -739,6 +739,9 @@
     padding: 7px 10px; font-size: 13px; border-radius: var(--radius);
   }
   .lp-bar input[type=number] { width: 140px; }
+  .lp-fee { display: inline-flex; align-items: center; gap: 8px; padding: 3px 9px; border: 1px solid var(--border); border-radius: var(--radius); }
+  .lp-fee label { gap: 4px; }
+  .lp-bar .lp-fee input[type=number] { width: 58px; padding: 4px 6px; text-align: right; }
   .lp-bar input[type=text] { width: 190px; }
   .lp-lpinput { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
   .lp-lpinput .lp-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
@@ -1382,6 +1385,11 @@
       <label>市场 <select id="lpRegion" onchange="lpSetRegion(this.value)"></select></label>
       <label class="lp-lpinput lp-c"><span class="lp-dot"></span>加达里 LP <input type="number" id="lpAmtC" min="0" step="1000" placeholder="0" oninput="lpSetLp('C', this.value)"></label>
       <label class="lp-lpinput lp-g"><span class="lp-dot"></span>盖伦特 LP <input type="number" id="lpAmtG" min="0" step="1000" placeholder="0" oninput="lpSetLp('G', this.value)"></label>
+      <span class="lp-fee">
+        <label>销售税 <input type="number" id="lpFeeSales" value="7.5" min="0" max="100" step="0.1" oninput="lpSetFee('sales', this.value)">%</label>
+        <label>中介费 <input type="number" id="lpFeeBroker" value="3" min="0" max="100" step="0.1" oninput="lpSetFee('broker', this.value)">%</label>
+        <label>安全税 <input type="number" id="lpFeeSafe" value="0" min="0" max="100" step="0.1" oninput="lpSetFee('safe', this.value)">%</label>
+      </span>
       <button class="btn btn-go" onclick="lpReload(true)"><i data-lucide="search"></i>刷新行情</button>
       <span class="hint" id="lpHint"></span>
     </div>
@@ -5099,6 +5107,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=e5f50b1f"></script>
+<script src="lp.js?v=8ea4a20e"></script>
 </body>
 </html>

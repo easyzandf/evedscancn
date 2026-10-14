@@ -26,6 +26,8 @@
 
   // 销售税：0 技能基础 7.5%（Accounting 每级再降 11%，满级 3.37%）
   var LP_TAX = 0.075;
+  // 默认费率：销售税 0 技能 7.5%、中介费 0 技能 3%、安全税 0；页面上的输入框可改
+  var LP_FEE_DEFAULT = { sales: 7.5, broker: 3, safe: 0 };
 
   var _lp = {
     inited: false,
@@ -43,6 +45,7 @@
     contractsLoading: false,
     contractsRegion: 0,
     lp: { C: '', G: '' },
+    fee: { sales: LP_FEE_DEFAULT.sales, broker: LP_FEE_DEFAULT.broker, safe: LP_FEE_DEFAULT.safe },
     faction: 'all',
     sort: 'now',
     q: '',
@@ -377,11 +380,13 @@
         });
 
         var cost = num(o.isk_cost) + matCost;
+        // 秒卖（吃收单）只扣销售税；挂卖还要再扣中介费和安全税
+        var fSales = num(_lp.fee.sales) / 100;
+        var fList = fSales + num(_lp.fee.broker) / 100 + num(_lp.fee.safe) / 100;
         var revNow = buy > 0 ? buy * o.quantity : null;
         var revList = sell > 0 ? sell * o.quantity : null;
-        // 卖出收入先扣 0 技能销售税，再扣 ISK 与材料成本
-        var profitNow = revNow === null ? null : revNow * (1 - LP_TAX) - cost;
-        var profitList = revList === null ? null : revList * (1 - LP_TAX) - cost;
+        var profitNow = revNow === null ? null : revNow * (1 - fSales) - cost;
+        var profitList = revList === null ? null : revList * (1 - fList) - cost;
 
         var amt = num(_lp.lp[st.key]);
         var times = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
@@ -392,7 +397,7 @@
         var contractPerLp = null;
         if (ctr.length && o.lp_cost > 0) {
           var cRev = num(ctr[0].unit) * o.quantity;
-          contractPerLp = (cRev * (1 - LP_TAX) - cost) / o.lp_cost;
+          contractPerLp = (cRev * (1 - fSales) - cost) / o.lp_cost;
         }
         var depLoaded = Object.prototype.hasOwnProperty.call(_lp.depth, o.type_id);
         var depQty = 0, depTimes = 0, depUse = 0, depProfit = null;
@@ -407,7 +412,7 @@
               depRev += depTake * num(dep.buy[dj].p);
               depRem -= depTake;
             }
-            depProfit = depRev * (1 - LP_TAX) - depUse * cost;
+            depProfit = depRev * (1 - fSales) - depUse * cost;
           }
         }
 
@@ -498,7 +503,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；净 ISK/LP = (卖出收入 × (1 − 7.5% 销售税) − ISK 成本 − 材料成本) ÷ LP，毛 ISK/LP = 卖出收入 ÷ LP（不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（同样扣 7.5% 销售税，填了 LP 就取深度与 LP 中更小的一方）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建），点行展开可看合同明细与合同口径 ISK/LP。销售税按 0 技能基础 7.5% 计，未计中介费。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
+    html += '<p class="lp-note">秒卖 = 卖给最高收购价，净收益扣『销售税』；挂卖 = 挂最低出售价，净收益扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建，按销售税口径折算 ISK/LP）。费率默认 0 技能：销售税 7.5%、中介费 3%、安全税 0，顶部输入框可随时修改，改完所有数字实时重算。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
     renderBody(html);
   }
 
@@ -644,10 +649,10 @@
     html += '</tbody></table>';
     var c0 = list[0];
     var rev = num(c0.unit) * r.offer.quantity;
-    var profit = rev * (1 - LP_TAX) - r.cost;
+    var profit = rev * (1 - num(_lp.fee.sales) / 100) - r.cost;
     var per = r.offer.lp_cost > 0 ? profit / r.offer.lp_cost : null;
     html += '<div class="lp-detail-msg">按最低合同单价：毛收入 ' + iskShort(rev)
-      + '，扣 7.5% 销售税与 ISK/材料成本后净收益 ' + iskShort(profit)
+      + '，扣 ' + num(_lp.fee.sales) + '% 销售税与 ISK/材料成本后净收益 ' + iskShort(profit)
       + '，折合 <b>' + perLp(per) + ' ISK/LP</b></div>';
     return html + '</div>';
   }
@@ -748,6 +753,14 @@
     scheduleRender();
   }
 
+  // 费率输入（销售税 / 中介费 / 安全税，单位 %）
+  function lpSetFee(k, v) {
+    if (!_lp.fee || !Object.prototype.hasOwnProperty.call(_lp.fee, k)) return;
+    var n = parseFloat(v);
+    _lp.fee[k] = (isFinite(n) && n >= 0) ? n : 0;
+    scheduleRender();
+  }
+
   function lpSetFaction(v) {
     _lp.faction = v;
     var box = $('lpFaction');
@@ -801,6 +814,7 @@
   window.lpReloadBook = lpReloadBook;
   window.lpSetRegion = lpSetRegion;
   window.lpSetLp = lpSetLp;
+  window.lpSetFee = lpSetFee;
   window.lpSetFaction = lpSetFaction;
   window.lpSetSort = lpSetSort;
   window.lpSetSearch = lpSetSearch;
