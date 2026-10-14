@@ -91,6 +91,8 @@
     noReq: false,
     expanded: {},
     rows: [],
+    page: 1,
+    pageSize: 100,
     bookBusy: {},
     matBusy: {},
     bookMeta: {},
@@ -273,125 +275,36 @@
       clearInterval(tick);
       delete _lp.matBusy[key];
       if (!res || !res.depths) { setHint('材料价格刷新失败，请重试'); return; }
-      Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
-      patchMaterialRows(ids, function (n) {
-        setHint('已刷新「' + nm + '」的材料价格 · 共更新 ' + n + ' 行');
-        setTimeout(function () { setHint(''); }, 3500);
-      });
+      var n = applyMaterialDepths(ids, res.depths);
+      setHint('已刷新「' + nm + '」的材料价格 · 共更新 ' + n + ' 行');
+      setTimeout(function () { setHint(''); }, 3500);
     });
   }
 
-  // 这些 type 的行情变了：找出用到它们的报价（含自己），只重算这几行
-  function patchMaterialRows(typeIds, done) {
+  // 这些 type 的行情变了：写入 depth、统计受影响条数，然后重绘当前这一页。
+  // 分页之后每页只有几十到几百行，重绘一页很便宜，不需要再做行级局部替换。
+  function applyMaterialDepths(typeIds, depths) {
+    Object.keys(depths).forEach(function (k) { _lp.depth[k] = depths[k]; });
+
     var hit = {};
     typeIds.forEach(function (t) { hit[String(t)] = 1; });
 
-    var keys = {};
-    var offerTypeHit = false;   // 刷新的是“物品本身”的行情时买卖价会变，可能影响筛选，交给整表重绘
+    var n = 0;
     LP_STORES.forEach(function (st) {
       (_lp.offers[st.key] || []).forEach(function (o) {
         if (!o.lp_cost || o.lp_cost <= 0) return;
         var used = !!hit[String(o.type_id)];
-        if (used) offerTypeHit = true;
         if (!used) {
           (o.required_items || []).forEach(function (ri) { if (hit[String(ri.type_id)]) used = true; });
         }
-        if (used) keys[st.key + ':' + o.offer_id] = 1;
+        if (used) n++;
       });
     });
 
-    if (offerTypeHit) { render(); done(Object.keys(keys).length); return; }
-
-    var fresh = computeRows(keys);
-    if (!fresh.length || !_lp.rows.length) { render(); done(fresh.length); return; }
-
-    var byKey = {};
-    fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
-    _lp.rows = _lp.rows.map(function (r) {
-      var k = rowKey(r);
-      return byKey[k] || r;
-    });
-
-    repaintRows(keys, function () {
-      var sw = document.querySelector('#lpBody .lp-sumwrap');
-      if (sw) sw.innerHTML = summaryHtml(_lp.rows);
-      done(fresh.length);
-    });
+    render();
+    return n;
   }
 
-  // 原地换掉受影响的行。rowHtml 对展开中的行本来就会连明细行一起输出，
-  // 所以先把旧明细行摘掉再整行替换，否则会出现两条明细。
-  // 分批（每批 6 行）并主动让出主线程：单次任务被压到很短，浏览器不会判定页面无响应。
-  function repaintRows(keys, done) {
-    var tbody = document.querySelector('#lpBody table.lp-tbl tbody');
-    if (!tbody) { done(); return; }
-
-    var index = {};
-    _lp.rows.forEach(function (r) { index[rowKey(r)] = r; });
-
-    var targets = [];
-    var trs = tbody.querySelectorAll('tr.lp-row');
-    for (var i = 0; i < trs.length; i++) {
-      var key = trs[i].getAttribute('data-lp-key');
-      if (keys[key] && index[key]) targets.push(trs[i]);
-    }
-    if (!targets.length) { done(); return; }
-
-    var at = 0;
-    (function chunk() {
-      var end = Math.min(at + 6, targets.length);
-      for (; at < end; at++) {
-        var tr = targets[at];
-        var r = index[tr.getAttribute('data-lp-key')];
-        if (!r) continue;
-        var nx = tr.nextElementSibling;
-        if (nx && nx.classList.contains('lp-detail-row')) nx.parentNode.removeChild(nx);
-        tr.outerHTML = rowHtml(r);
-      }
-      if (at < targets.length) { setTimeout(chunk, 0); return; }
-      reorderRows(keys);
-      done();
-    })();
-  }
-
-  // 只有受影响的行会位移；其余行的相对顺序不变，所以一次倒序扫描就够了
-  function reorderRows(keys) {
-    var tbody = document.querySelector('#lpBody table.lp-tbl tbody');
-    if (!tbody) return;
-    var index = {};
-    _lp.rows.forEach(function (r) { index[rowKey(r)] = r; });
-
-    var trs = tbody.querySelectorAll('tr.lp-row');
-    var visible = [];
-    var units = {};
-    for (var i = 0; i < trs.length; i++) {
-      var k = trs[i].getAttribute('data-lp-key');
-      var r = index[k];
-      if (!r) continue;
-      var nx = trs[i].nextElementSibling;
-      visible.push(r);
-      units[k] = { main: trs[i], detail: (nx && nx.classList.contains('lp-detail-row')) ? nx : null };
-    }
-    if (visible.length < 2) return;
-
-    var desired = sortRows(visible.slice());
-    var ref = null;
-    for (var j = desired.length - 1; j >= 0; j--) {
-      var key = rowKey(desired[j]);
-      var u = units[key];
-      if (!u) continue;
-      var tail = u.detail || u.main;
-      if (keys[key] && tail.nextElementSibling !== ref) {
-        if (u.detail) {
-          tbody.insertBefore(u.main, ref);
-          tbody.insertBefore(u.detail, ref);
-        } else {
-          tbody.insertBefore(u.main, ref);
-        }
-      }
-      ref = u.main;
-    }
-  }
 
   // -- 名称 --
   function localName(id) {
@@ -834,8 +747,16 @@
     var cnt = $('lpCnt');
     if (cnt) cnt.textContent = rows.length + ' / ' + all.length + ' 条';
 
+    // 分页：只渲染当前页。行数降下来之后，排版 + 绘制的开销跟着成比例下降
+    var size = _lp.pageSize;
+    var pages = size > 0 ? Math.max(1, Math.ceil(rows.length / size)) : 1;
+    if (_lp.page > pages) _lp.page = pages;
+    if (_lp.page < 1) _lp.page = 1;
+    var view = size > 0 ? rows.slice((_lp.page - 1) * size, _lp.page * size) : rows;
+
     var html = '<div class="lp-sumwrap">' + summaryHtml(all) + '</div>';
-    html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
+    html += '<div class="tbl-wrap">' + tableHtml(view) + '</div>';
+    html += pagerHtml(rows.length, pages);
     html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站；站内订单簿没加载完之前不显示价格，避免混入全区价。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按你输入的 LP 折算。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 1.8%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情与前五深度 15 分钟缓存；站内订单簿首次加载需要十几秒。</p>';
     renderBody(html);
   }
@@ -893,6 +814,32 @@
       + '</tr></thead>';
     return '<table class="ship-tbl lp-tbl">' + head + '<tbody>'
       + rows.map(rowHtml).join('') + '</tbody></table>';
+  }
+
+  // 分页条：每页条数可选 + 首页/上一页/下一页/末页
+  function pagerHtml(total, pages) {
+    var size = _lp.pageSize;
+    var sizes = [50, 100, 200, 500];
+    var opts = sizes.map(function (n) {
+      return '<option value="' + n + '"' + (size === n ? ' selected' : '') + '>' + n + '</option>';
+    }).join('');
+    opts += '<option value="0"' + (size === 0 ? ' selected' : '') + '>全部</option>';
+
+    var html = '<div class="lp-pager">'
+      + '<label>每页 <select id="lpPageSize" onchange="lpSetPageSize(this.value)">' + opts + '</select> 条</label>';
+    if (size > 0 && pages > 1) {
+      var prevOff = _lp.page <= 1 ? 'disabled ' : '';
+      var nextOff = _lp.page >= pages ? 'disabled ' : '';
+      html += '<span class="lp-page-btns">'
+        + '<button type="button" ' + prevOff + 'onclick="lpSetPage(1)">首页</button>'
+        + '<button type="button" ' + prevOff + 'onclick="lpSetPage(' + (_lp.page - 1) + ')">上一页</button>'
+        + '<span class="lp-page-cur">第 <b>' + _lp.page + '</b> / ' + pages + ' 页</span>'
+        + '<button type="button" ' + nextOff + 'onclick="lpSetPage(' + (_lp.page + 1) + ')">下一页</button>'
+        + '<button type="button" ' + nextOff + 'onclick="lpSetPage(' + pages + ')">末页</button>'
+        + '</span>';
+    }
+    html += '<span class="lp-page-info">共 <b>' + total + '</b> 条</span></div>';
+    return html;
   }
 
   function matTitle(r) {
@@ -1227,6 +1174,7 @@
 
   function lpSetFaction(v) {
     _lp.faction = v;
+    _lp.page = 1;
     var box = $('lpFaction');
     if (box) {
       Array.prototype.forEach.call(box.querySelectorAll('button'), function (b) {
@@ -1236,13 +1184,34 @@
     render();
   }
 
-  function lpSetSort(v) { _lp.sort = v; _lp.sortDir = LP_SORT_DIR[v] || 'desc'; render(); }
-  function lpSetSearch(v) { _lp.q = v || ''; scheduleRender(); }
+  function lpSetSort(v) { _lp.sort = v; _lp.sortDir = LP_SORT_DIR[v] || 'desc'; _lp.page = 1; render(); }
+  function lpSetSearch(v) { _lp.q = v || ''; _lp.page = 1; scheduleRender(); }
+
+  function lpSetPageSize(v) {
+    var n = parseInt(v, 10);
+    if (!isFinite(n) || n < 0) n = 100;
+    _lp.pageSize = n > 0 ? n : 0;
+    _lp.page = 1;
+    render();
+  }
+
+  // 翻页：重绘后回到表格顶部（顶栏吸顶，要把它让出来）
+  function lpSetPage(p) {
+    var n = parseInt(p, 10);
+    if (!isFinite(n) || n < 1 || n === _lp.page) return;
+    _lp.page = n;
+    render();
+    var wrap = document.querySelector('#lpBody .tbl-wrap');
+    if (!wrap) return;
+    var top = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--lp-sticky-top'), 10) || 56;
+    window.scrollTo(0, Math.max(0, wrap.getBoundingClientRect().top + window.pageYOffset - top - 8));
+  }
   function lpSetFlag(k, on) {
     if (k === 'onlyMarket') _lp.onlyMarket = !!on;
     if (k === 'onlyContract') _lp.onlyContract = !!on;
     if (k === 'hideBp') _lp.hideBp = !!on;
     if (k === 'noReq') _lp.noReq = !!on;
+    _lp.page = 1;
     render();
   }
 
@@ -1324,6 +1293,8 @@
   window.lpSetSort = lpSetSort;
   window.lpSetSearch = lpSetSearch;
   window.lpSetFlag = lpSetFlag;
+  window.lpSetPage = lpSetPage;
+  window.lpSetPageSize = lpSetPageSize;
   window.addEventListener('resize', syncStickyTop);
   // 顶栏高度会随字体加载/换行变化，用 ResizeObserver 持续同步吸顶偏移
   (function watchTopbar() {
