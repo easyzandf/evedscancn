@@ -1538,9 +1538,9 @@
         <input type="text" id="brInput" placeholder="军团 / 联盟 / 角色（留空则用本方联盟）"
                onkeydown="if(event.key==='Enter')brLoad()">
         <select id="brDays" onchange="brLoad()">
-          <option value="1">最近 24 小时</option>
+          <option value="1" selected>最近 24 小时</option>
           <option value="3">最近 3 天</option>
-          <option value="7" selected>最近 7 天</option>
+          <option value="7">最近 7 天</option>
         </select>
         <button class="btn btn-go" onclick="brLoad()"><i data-lucide="search"></i>分析</button>
         <button class="btn btn-clr" onclick="brLoad(true)"
@@ -1624,7 +1624,7 @@
 
       <h2>会战报告怎么用</h2>
       <ol class="doc-steps">
-        <li>点导航栏「<b>会战报告</b>」→ 默认分析本方联盟近 7 天。也可以输入其他军团 / 联盟 / 角色的名称或缩写（<code>PLA-F</code> 这类 ticker 也行），直接粘贴 zKillboard 链接同样可以</li>
+        <li>点导航栏「<b>会战报告</b>」→ 默认分析本方联盟近 24 小时。也可以输入其他军团 / 联盟 / 角色的名称或缩写（<code>PLA-F</code> 这类 ticker 也行），直接粘贴 zKillboard 链接同样可以</li>
         <li>列表里每一条就是一场会战（时间 / 时长 / 星系 / 双方击毁与被毁 / 效率），<b>点任意一场</b>看报告</li>
         <li>报告自上而下：<b>双方对比卡片</b>（含联盟构成）→ <b>累计损失曲线</b> → <b>时间轴</b> → <b>舰船编成</b> → <b>参战名单</b></li>
         <li>右上角有<b>两张截图</b>：上半（总览 → 时间轴）和下半（编成 · 名单），因为整份报告太长，一张截不全也看不清</li>
