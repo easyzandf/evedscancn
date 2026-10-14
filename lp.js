@@ -654,8 +654,8 @@
       if (key === 'sell') return r.sell > 0 ? r.sell : null;
       if (key === 'buy') return r.buy > 0 ? r.buy : null;
       if (key === 'depth') return r.depProfit;
-      if (key === 'vol') return r.volTotal;
-      if (key === 'h48') return r.hVol;
+      if (key === 'vol') return r.volTotal > 0 ? r.volTotal : null;
+      if (key === 'h48') return r.hVol > 0 ? r.hVol : null;
       return r.perLpNow;
     }
     rows.sort(function (a, b) {
