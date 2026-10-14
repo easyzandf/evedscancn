@@ -92,6 +92,7 @@
     expanded: {},
     rows: [],
     bookBusy: {},
+    matBusy: {},
     bookMeta: {},
     pricesAt: 0
   };
@@ -253,26 +254,35 @@
     copyText(lines.join('\n'), function () { flashCopied(el, '已复制!'); });
   }
 
-  // 刷新这条报价用到的材料行情（只刷这几个 type，绕过 15 分钟缓存）
-  // 回来后只重算/重画用到这些材料的行：整表 758 行重建实测 ~300ms（脚本 70 + 布局 120 + 样式 50 + 绘制 60）
+  // 刷新这条报价用到的材料行情（只刷这几个 type，绕过 15 分钟缓存）。
+  // 关键：等待期间不碰表格里的任何 DOM——758 行的表，格子里改一个字都会引发整表重排 + 重绘，
+  // 弱机器上就是“浏览器无响应”。进度只写在表格外的 #lpHint。
   function refreshMaterials(key, btn) {
     var o = findOffer(key);
     if (!o || !o.required_items || !o.required_items.length) return;
+    if (_lp.matBusy[key]) return;
+    _lp.matBusy[key] = 1;
     var ids = o.required_items.map(function (ri) { return ri.type_id; });
-    if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); }
-    setHint('正在刷新「' + typeName(o.type_id) + '」的材料价格…');
+    var nm = typeName(o.type_id);
+    var t0 = Date.now();
+    setHint('正在刷新「' + nm + '」的材料价格…');
+    var tick = setInterval(function () {
+      setHint('正在刷新「' + nm + '」的材料价格… ' + Math.round((Date.now() - t0) / 1000) + 's');
+    }, 1000);
     apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station + '&ids=' + ids.join(',') + '&force=1', function (res) {
-      if (btn) { btn.disabled = false; btn.classList.remove('lp-spin'); }
+      clearInterval(tick);
+      delete _lp.matBusy[key];
       if (!res || !res.depths) { setHint('材料价格刷新失败，请重试'); return; }
       Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
-      var n = patchMaterialRows(ids);
-      setHint('已刷新「' + typeName(o.type_id) + '」的材料价格 · 共更新 ' + n + ' 行');
-      setTimeout(function () { setHint(''); }, 3500);
+      patchMaterialRows(ids, function (n) {
+        setHint('已刷新「' + nm + '」的材料价格 · 共更新 ' + n + ' 行');
+        setTimeout(function () { setHint(''); }, 3500);
+      });
     });
   }
 
   // 这些 type 的行情变了：找出用到它们的报价（含自己），只重算这几行
-  function patchMaterialRows(typeIds) {
+  function patchMaterialRows(typeIds, done) {
     var hit = {};
     typeIds.forEach(function (t) { hit[String(t)] = 1; });
 
@@ -290,10 +300,10 @@
       });
     });
 
-    if (offerTypeHit) { render(); return Object.keys(keys).length; }
+    if (offerTypeHit) { render(); done(Object.keys(keys).length); return; }
 
     var fresh = computeRows(keys);
-    if (!fresh.length || !_lp.rows.length) { render(); return fresh.length; }
+    if (!fresh.length || !_lp.rows.length) { render(); done(fresh.length); return; }
 
     var byKey = {};
     fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
@@ -302,28 +312,46 @@
       return byKey[k] || r;
     });
 
-    repaintRows(keys);
-    var sw = document.querySelector('#lpBody .lp-sumwrap');
-    if (sw) sw.innerHTML = summaryHtml(_lp.rows);
-    return fresh.length;
+    repaintRows(keys, function () {
+      var sw = document.querySelector('#lpBody .lp-sumwrap');
+      if (sw) sw.innerHTML = summaryHtml(_lp.rows);
+      done(fresh.length);
+    });
   }
 
   // 原地换掉受影响的行。rowHtml 对展开中的行本来就会连明细行一起输出，
   // 所以先把旧明细行摘掉再整行替换，否则会出现两条明细。
-  function repaintRows(keys) {
+  // 分批（每批 6 行）并主动让出主线程：单次任务被压到很短，浏览器不会判定页面无响应。
+  function repaintRows(keys, done) {
     var tbody = document.querySelector('#lpBody table.lp-tbl tbody');
-    if (!tbody) return;
+    if (!tbody) { done(); return; }
+
+    var index = {};
+    _lp.rows.forEach(function (r) { index[rowKey(r)] = r; });
+
+    var targets = [];
     var trs = tbody.querySelectorAll('tr.lp-row');
     for (var i = 0; i < trs.length; i++) {
-      var k = trs[i].getAttribute('data-lp-key');
-      if (!keys[k]) continue;
-      var r = findRowByKey(k);
-      if (!r) continue;
-      var nx = trs[i].nextElementSibling;
-      if (nx && nx.classList.contains('lp-detail-row')) nx.parentNode.removeChild(nx);
-      trs[i].outerHTML = rowHtml(r);
+      var key = trs[i].getAttribute('data-lp-key');
+      if (keys[key] && index[key]) targets.push(trs[i]);
     }
-    reorderRows(keys);
+    if (!targets.length) { done(); return; }
+
+    var at = 0;
+    (function chunk() {
+      var end = Math.min(at + 6, targets.length);
+      for (; at < end; at++) {
+        var tr = targets[at];
+        var r = index[tr.getAttribute('data-lp-key')];
+        if (!r) continue;
+        var nx = tr.nextElementSibling;
+        if (nx && nx.classList.contains('lp-detail-row')) nx.parentNode.removeChild(nx);
+        tr.outerHTML = rowHtml(r);
+      }
+      if (at < targets.length) { setTimeout(chunk, 0); return; }
+      reorderRows(keys);
+      done();
+    })();
   }
 
   // 只有受影响的行会位移；其余行的相对顺序不变，所以一次倒序扫描就够了
@@ -1096,19 +1124,20 @@
   }
 
   // 展开面板里按物品强刷站内买卖前五。
-  // ESI 全区订单簿本身就要 0.8 秒上下，前端能做的是：点击立刻给反馈，重复点击不叠加请求。
+  // 等待期间只动表格外的 #lpHint：758 行的表，格子里改一个字都要整表重排 + 重绘，
+  // 弱机器上会直接卡成“浏览器无响应”。旋转图标和变暗效果也一并去掉。
   function refreshBook(typeId, btn) {
     if (_lp.bookBusy[typeId]) return;
     _lp.bookBusy[typeId] = 1;
     var t0 = Date.now();
     var nm = typeName(typeId);
-    if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); bookBtnText(btn, '刷新中…'); }
-    var cells = bookCells(typeId);
-    for (var i = 0; i < cells.length; i++) cells[i].classList.add('lp-refreshing');
-    // 整个等待期间不要再动 DOM：表格有 758 行，在格子里改一次文字要整表重排 ~5ms，
-    // 工具栏再改一次又要重排 ~10ms。每秒十几次足以把弱机器拖卡，所以只报开始和结果。
-    setHint('正在刷新「' + nm + '」挂单前五…（约 1 秒）');
+    if (btn) bookBtnText(btn, '刷新中…');
+    setHint('正在刷新「' + nm + '」挂单前五…');
+    var tick = setInterval(function () {
+      setHint('正在刷新「' + nm + '」挂单前五… ' + Math.round((Date.now() - t0) / 1000) + 's');
+    }, 1000);
     apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + '&force=1', function (res) {
+      clearInterval(tick);
       delete _lp.bookBusy[typeId];
       var ms = Date.now() - t0;
       var ok = !!(res && (res.buy || res.sell));
@@ -1116,8 +1145,6 @@
       if (ok) _lp.bookMeta[typeId] = { at: res.cachedAt ? res.cachedAt * 1000 : Date.now(), ms: ms };
       paintBook(typeId);
       if (btn) {
-        btn.classList.remove('lp-spin');
-        btn.disabled = false;
         bookBtnText(btn, ok ? '已更新' : '刷新失败，点这里重试');
         setTimeout(function () { bookBtnText(btn, '刷新挂单前五'); }, 2400);
       }
@@ -1145,6 +1172,7 @@
     _lp.prices = {};
     _lp.books = {};
     _lp.bookBusy = {};
+    _lp.matBusy = {};
     _lp.bookMeta = {};
     _lp.depth = {};
     _lp.depthRegion = 0;
@@ -1167,6 +1195,7 @@
     _lp.prices = {};
     _lp.books = {};
     _lp.bookBusy = {};
+    _lp.matBusy = {};
     _lp.bookMeta = {};
     _lp.depth = {};
     _lp.depthRegion = 0;
