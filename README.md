@@ -313,7 +313,7 @@ LP 商店报价来自 ESI `/loyalty/stores/{corp}/offers/`，市场行情优先�
 | GET | `?action=book&region=10000002&type_id=16068` | 单个物品买卖挂单前五（15min 缓存，前端展开行时才拉） |
 
 - `corp` 走白名单（1000180 = State Protectorate，1000181 = Federal Defense Union），`region` 也走白名单（Jita / Amarr / Dodixie / Rens / Hek）。
-- 主表只用最高收购价 / 最低出售价算 ISK/LP，两个值都不计手续费和税；挂单前五按需拉取，只显示价格、数量、最小成交量和地点。
+- 主表只用最高收购价 / 最低出售价算 ISK/LP；净收益按 0 技能销售税 7.5% 扣减（Accounting 每级再降 11%，满级 3.37%），未计中介费。挂单前五按需拉取，只显示价格、数量、最小成交量和地点。
 - 主表的「前五秒卖」按前五收单从高到低吃掉这些量，给出可兑换次数与净收益（填了 LP 就取深度与 LP 中更小的一方）；深度数据需要逐 type 拉订单簿，服务端缓存 15 分钟。
 - ⚠️ 同样需要可写目录：`sudo mkdir -p <站点>/lp_data && sudo chmod 777 <站点>/lp_data`
 

@@ -24,6 +24,9 @@
     { id: 10000042, label: 'Hek / Metropolis' }
   ];
 
+  // 销售税：0 技能基础 7.5%（Accounting 每级再降 11%，满级 3.37%）
+  var LP_TAX = 0.075;
+
   var _lp = {
     inited: false,
     loading: false,
@@ -357,8 +360,9 @@
         var cost = num(o.isk_cost) + matCost;
         var revNow = buy > 0 ? buy * o.quantity : null;
         var revList = sell > 0 ? sell * o.quantity : null;
-        var profitNow = revNow === null ? null : revNow - cost;
-        var profitList = revList === null ? null : revList - cost;
+        // 卖出收入先扣 0 技能销售税，再扣 ISK 与材料成本
+        var profitNow = revNow === null ? null : revNow * (1 - LP_TAX) - cost;
+        var profitList = revList === null ? null : revList * (1 - LP_TAX) - cost;
 
         var amt = num(_lp.lp[st.key]);
         var times = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
@@ -378,7 +382,7 @@
               depRev += depTake * num(dep.buy[dj].p);
               depRem -= depTake;
             }
-            depProfit = depRev - depUse * cost;
+            depProfit = depRev * (1 - LP_TAX) - depUse * cost;
           }
         }
 
@@ -465,7 +469,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；净 ISK/LP = (卖出收入 − ISK 成本 − 材料成本) ÷ LP，毛 ISK/LP = 卖出收入 ÷ LP（不扣成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（填了 LP 就取深度与 LP 中更小的一方）；均未计手续费和税，取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存，点行展开挂单前五。</p>';
+    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；净 ISK/LP = (卖出收入 × (1 − 7.5% 销售税) − ISK 成本 − 材料成本) ÷ LP，毛 ISK/LP = 卖出收入 ÷ LP（不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（同样扣 7.5% 销售税，填了 LP 就取深度与 LP 中更小的一方）；销售税按 0 技能基础 7.5% 计，未计中介费。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存，点行展开挂单前五。</p>';
     renderBody(html);
   }
 
