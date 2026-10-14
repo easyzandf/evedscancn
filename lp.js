@@ -233,6 +233,8 @@
     return null;
   }
 
+  function rowKey(r) { return r.store.key + ':' + r.offer.offer_id; }
+
   function findOffer(key) {
     var parts = String(key || '').split(':');
     var sk = parts[0], oid = parseInt(parts[1], 10);
@@ -252,18 +254,115 @@
   }
 
   // 刷新这条报价用到的材料行情（只刷这几个 type，绕过 15 分钟缓存）
+  // 回来后只重算/重画用到这些材料的行：整表 758 行重建实测 ~300ms（脚本 70 + 布局 120 + 样式 50 + 绘制 60）
   function refreshMaterials(key, btn) {
     var o = findOffer(key);
     if (!o || !o.required_items || !o.required_items.length) return;
     var ids = o.required_items.map(function (ri) { return ri.type_id; });
     if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); }
+    setHint('正在刷新「' + typeName(o.type_id) + '」的材料价格…');
     apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station + '&ids=' + ids.join(',') + '&force=1', function (res) {
       if (btn) { btn.disabled = false; btn.classList.remove('lp-spin'); }
-      if (res && res.depths) {
-        Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
-        render();
-      }
+      if (!res || !res.depths) { setHint('材料价格刷新失败，请重试'); return; }
+      Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
+      var n = patchMaterialRows(ids);
+      setHint('已刷新「' + typeName(o.type_id) + '」的材料价格 · 共更新 ' + n + ' 行');
+      setTimeout(function () { setHint(''); }, 3500);
     });
+  }
+
+  // 这些 type 的行情变了：找出用到它们的报价（含自己），只重算这几行
+  function patchMaterialRows(typeIds) {
+    var hit = {};
+    typeIds.forEach(function (t) { hit[String(t)] = 1; });
+
+    var keys = {};
+    var offerTypeHit = false;   // 刷新的是“物品本身”的行情时买卖价会变，可能影响筛选，交给整表重绘
+    LP_STORES.forEach(function (st) {
+      (_lp.offers[st.key] || []).forEach(function (o) {
+        if (!o.lp_cost || o.lp_cost <= 0) return;
+        var used = !!hit[String(o.type_id)];
+        if (used) offerTypeHit = true;
+        if (!used) {
+          (o.required_items || []).forEach(function (ri) { if (hit[String(ri.type_id)]) used = true; });
+        }
+        if (used) keys[st.key + ':' + o.offer_id] = 1;
+      });
+    });
+
+    if (offerTypeHit) { render(); return Object.keys(keys).length; }
+
+    var fresh = computeRows(keys);
+    if (!fresh.length || !_lp.rows.length) { render(); return fresh.length; }
+
+    var byKey = {};
+    fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
+    _lp.rows = _lp.rows.map(function (r) {
+      var k = rowKey(r);
+      return byKey[k] || r;
+    });
+
+    repaintRows(keys);
+    var sw = document.querySelector('#lpBody .lp-sumwrap');
+    if (sw) sw.innerHTML = summaryHtml(_lp.rows);
+    return fresh.length;
+  }
+
+  // 原地换掉受影响的行（rowHtml 会按 _lp.expanded 自动带上展开状态；明细行要单独重画）
+  function repaintRows(keys) {
+    var tbody = document.querySelector('#lpBody table.lp-tbl tbody');
+    if (!tbody) return;
+    var trs = tbody.querySelectorAll('tr.lp-row');
+    for (var i = 0; i < trs.length; i++) {
+      var k = trs[i].getAttribute('data-lp-key');
+      if (!keys[k]) continue;
+      var r = findRowByKey(k);
+      if (!r) continue;
+      var nx = trs[i].nextElementSibling;
+      var det = (nx && nx.classList.contains('lp-detail-row')) ? nx : null;
+      trs[i].outerHTML = rowHtml(r);
+      if (det) det.outerHTML = detailRowHtml(r);
+    }
+    reorderRows(keys);
+  }
+
+  // 只有受影响的行会位移；其余行的相对顺序不变，所以一次倒序扫描就够了
+  function reorderRows(keys) {
+    var tbody = document.querySelector('#lpBody table.lp-tbl tbody');
+    if (!tbody) return;
+    var index = {};
+    _lp.rows.forEach(function (r) { index[rowKey(r)] = r; });
+
+    var trs = tbody.querySelectorAll('tr.lp-row');
+    var visible = [];
+    var units = {};
+    for (var i = 0; i < trs.length; i++) {
+      var k = trs[i].getAttribute('data-lp-key');
+      var r = index[k];
+      if (!r) continue;
+      var nx = trs[i].nextElementSibling;
+      visible.push(r);
+      units[k] = { main: trs[i], detail: (nx && nx.classList.contains('lp-detail-row')) ? nx : null };
+    }
+    if (visible.length < 2) return;
+
+    var desired = sortRows(visible.slice());
+    var ref = null;
+    for (var j = desired.length - 1; j >= 0; j--) {
+      var key = rowKey(desired[j]);
+      var u = units[key];
+      if (!u) continue;
+      var tail = u.detail || u.main;
+      if (keys[key] && tail.nextElementSibling !== ref) {
+        if (u.detail) {
+          tbody.insertBefore(u.main, ref);
+          tbody.insertBefore(u.detail, ref);
+        } else {
+          tbody.insertBefore(u.main, ref);
+        }
+      }
+      ref = u.main;
+    }
   }
 
   // -- 名称 --
@@ -516,11 +615,13 @@
   }
 
   // -- 计算 --
-  function computeRows() {
+  // 传了 onlyKeys 就只算这几条报价：材料刷新后局部重算，不用跑完整的 785 条
+  function computeRows(onlyKeys) {
     var rows = [];
     LP_STORES.forEach(function (st) {
       (_lp.offers[st.key] || []).forEach(function (o) {
         if (!o.lp_cost || o.lp_cost <= 0) return;
+        if (onlyKeys && !onlyKeys[st.key + ':' + o.offer_id]) return;
 
         var p = _lp.prices[o.type_id] || null;
         // 站内订单簿加载完就用站内价；未加载到时先用全区聚合价占位
@@ -705,7 +806,7 @@
     var cnt = $('lpCnt');
     if (cnt) cnt.textContent = rows.length + ' / ' + all.length + ' 条';
 
-    var html = summaryHtml(all);
+    var html = '<div class="lp-sumwrap">' + summaryHtml(all) + '</div>';
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
     html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站；站内订单簿没加载完之前不显示价格，避免混入全区价。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按你输入的 LP 折算。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 1.8%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情与前五深度 15 分钟缓存；站内订单簿首次加载需要十几秒。</p>';
     renderBody(html);
@@ -861,7 +962,7 @@
   function detailRowHtml(r) {
     var o = r.offer;
     var key = r.store.key + ':' + o.offer_id;
-    return '<tr class="lp-detail-row"><td colspan="9">'
+    return '<tr class="lp-detail-row" data-lp-detail="' + escHtml(key) + '"><td colspan="9">'
       + '<div class="lp-detail">'
       + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button>'
         + '<button type="button" class="lp-copy-btn lp-book-refresh" data-lp-bookrefresh="' + o.type_id + '" title="重新拉取这个物品在 ' + escHtml(stationLabel()) + ' 的买卖前五（绕过 15 分钟缓存，约 1 秒）">' + LP_REFRESH_ICON + '<span class="lp-book-refresh-label">刷新挂单前五</span></button></div>'
