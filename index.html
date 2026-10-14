@@ -784,6 +784,10 @@
   .tbl-wrap table.lp-tbl { min-width: 1160px; table-layout: fixed; }
   table.lp-tbl th, table.lp-tbl td { padding: 6px 9px; }
   table.lp-tbl th { white-space: nowrap; }
+  table.lp-tbl th.lp-sortable { cursor: pointer; user-select: none; }
+  table.lp-tbl th.lp-sortable:hover { color: var(--brand-2); }
+  table.lp-tbl .lp-sort-ar { margin-left: 3px; font-size: 9px; color: var(--dim); }
+  table.lp-tbl .lp-sort-ar.on { color: var(--brand-2); }
   table.lp-tbl th.num, table.lp-tbl td.num { text-align: right; white-space: nowrap; }
   table.lp-tbl .lp-th-item { width: 21%; text-align: left; }
   table.lp-tbl .lp-th-cost { width: 13%; }
@@ -1436,6 +1440,10 @@
         <option value="now">按秒卖 ISK/LP</option>
         <option value="list">按挂卖 ISK/LP</option>
         <option value="contract">按合同净 ISK/LP</option>
+        <option value="sell">按最低出售价</option>
+        <option value="depth">按前五秒卖收益</option>
+        <option value="vol">按体积</option>
+        <option value="h48">按 48h 成交量</option>
         <option value="profit">按秒卖单次收益</option>
         <option value="total">按可兑总收益</option>
         <option value="lp">按 LP 成本</option>
@@ -5138,6 +5146,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=59d0663f"></script>
+<script src="lp.js?v=db18ee8a"></script>
 </body>
 </html>

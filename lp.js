@@ -25,6 +25,8 @@
   ];
 
   // 主要贸易枢纽空间站（只看站内行情）
+  // 点表头排序时，每个列第一次点击的默认方向
+  var LP_SORT_DIR = { name: 'asc', lp: 'asc', cost: 'asc', sell: 'desc', now: 'desc', list: 'desc', contract: 'desc', depth: 'desc', vol: 'asc', h48: 'desc', total: 'desc' };
   var LP_STATIONS = [
     { id: 60003760, region: 10000002, label: 'Jita IV-4 海军装配厂' },
     { id: 60008494, region: 10000043, label: 'Amarr VIII 皇帝家族学院' },
@@ -75,6 +77,7 @@
     fee: { taxLevel: LP_FEE_DEFAULT.taxLevel, broker: LP_FEE_DEFAULT.broker, safe: LP_FEE_DEFAULT.safe },
     faction: 'all',
     sort: 'now',
+    sortDir: 'desc',
     q: '',
     onlyMarket: true,
     onlyContract: false,
@@ -640,25 +643,30 @@
 
   function sortRows(rows) {
     var key = _lp.sort;
+    var dir = (_lp.sortDir === 'asc') ? 1 : -1;
     function val(r) {
       if (key === 'list') return r.perLpList;
       if (key === 'contract') return r.contractPerLp;
       if (key === 'profit') return r.profitNow;
       if (key === 'total') return r.totalNow;
-      if (key === 'lp') return r.offer.lp_cost;
+      if (key === 'lp' || key === 'cost') return r.offer.lp_cost;
       if (key === 'name') return r.name;
+      if (key === 'sell') return r.sell > 0 ? r.sell : null;
+      if (key === 'buy') return r.buy > 0 ? r.buy : null;
+      if (key === 'depth') return r.depProfit;
+      if (key === 'vol') return r.volTotal;
+      if (key === 'h48') return r.hVol;
       return r.perLpNow;
     }
     rows.sort(function (a, b) {
-      if (key === 'name') return String(val(a)).localeCompare(String(val(b)), 'zh');
-      if (key === 'lp') return num(val(a)) - num(val(b));
+      if (key === 'name') return dir * String(val(a)).localeCompare(String(val(b)), 'zh');
       var x = val(a), y = val(b);
       var xn = (x === null || x === undefined || !isFinite(x));
       var yn = (y === null || y === undefined || !isFinite(y));
       if (xn && yn) return 0;
-      if (xn) return 1;
+      if (xn) return 1;   // 没数据的永远排最后
       if (yn) return -1;
-      return y - x;
+      return dir * (x - y);
     });
     return rows;
   }
@@ -711,18 +719,24 @@
     return html;
   }
 
+  // 表头上的排序箭头（只有当前排序列显示）
+  function sortArrow(key) {
+    if (_lp.sort !== key) return '<span class="lp-sort-ar"></span>';
+    return '<span class="lp-sort-ar on">' + (_lp.sortDir === 'asc' ? '▲' : '▼') + '</span>';
+  }
+
   function tableHtml(rows) {
     if (!rows.length) return '<div class="lp-empty">没有符合条件的报价</div>';
     var head = '<thead><tr>'
-      + '<th class="lp-th-item">物品</th>'
-      + '<th class="num lp-th-cost">兑换成本</th>'
-      + '<th class="num lp-th-market">市场 / 产出</th>'
-      + '<th class="num lp-th-gain">秒卖收益</th>'
-      + '<th class="num lp-th-gain">挂卖收益</th>'
-      + '<th class="num lp-th-depth">前五秒卖</th>'
-      + '<th class="num lp-th-vol">体积 m³</th>'
-      + '<th class="num lp-th-h48">48h 量/均价</th>'
-      + '<th class="num lp-th-total">可兑总收益</th>'
+      + '<th class="lp-th-item lp-sortable" data-sort="name">物品' + sortArrow('name') + '</th>'
+      + '<th class="num lp-th-cost lp-sortable" data-sort="lp">兑换成本' + sortArrow('lp') + '</th>'
+      + '<th class="num lp-th-market lp-sortable" data-sort="sell">市场 / 产出' + sortArrow('sell') + '</th>'
+      + '<th class="num lp-th-gain lp-sortable" data-sort="now">秒卖收益' + sortArrow('now') + '</th>'
+      + '<th class="num lp-th-gain lp-sortable" data-sort="list">挂卖收益' + sortArrow('list') + '</th>'
+      + '<th class="num lp-th-depth lp-sortable" data-sort="depth">前五秒卖' + sortArrow('depth') + '</th>'
+      + '<th class="num lp-th-vol lp-sortable" data-sort="vol">体积 m³' + sortArrow('vol') + '</th>'
+      + '<th class="num lp-th-h48 lp-sortable" data-sort="h48">48h 量/均价' + sortArrow('h48') + '</th>'
+      + '<th class="num lp-th-total lp-sortable" data-sort="total">可兑总收益' + sortArrow('total') + '</th>'
       + '</tr></thead>';
     return '<table class="ship-tbl lp-tbl">' + head + '<tbody>'
       + rows.map(rowHtml).join('') + '</tbody></table>';
@@ -1010,7 +1024,7 @@
     render();
   }
 
-  function lpSetSort(v) { _lp.sort = v; render(); }
+  function lpSetSort(v) { _lp.sort = v; _lp.sortDir = LP_SORT_DIR[v] || 'desc'; render(); }
   function lpSetSearch(v) { _lp.q = v || ''; scheduleRender(); }
   function lpSetFlag(k, on) {
     if (k === 'onlyMarket') _lp.onlyMarket = !!on;
@@ -1024,6 +1038,22 @@
   document.addEventListener('click', function (e) {
     var t = e.target;
     if (!t || !t.closest) return;
+    // 点表头排序：同一列再点一下切换升降序
+    var th = t.closest('#pg-lp thead th[data-sort]');
+    if (th) {
+      e.preventDefault();
+      var sk = th.getAttribute('data-sort');
+      if (_lp.sort === sk) _lp.sortDir = (_lp.sortDir === 'asc' ? 'desc' : 'asc');
+      else { _lp.sort = sk; _lp.sortDir = LP_SORT_DIR[sk] || 'desc'; }
+      var sel = $('lpSort');
+      if (sel) {
+        var hasOpt = false;
+        for (var si = 0; si < sel.options.length; si++) { if (sel.options[si].value === sk) hasOpt = true; }
+        if (hasOpt) sel.value = sk;
+      }
+      render();
+      return;
+    }
     // 材料清单复制：拦在行展开之前
     var cp = t.closest('[data-lp-mat]');
     if (cp && cp.closest('#pg-lp')) {
