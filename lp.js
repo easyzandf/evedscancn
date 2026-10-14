@@ -39,11 +39,15 @@
     depth: {},
     depthLoading: false,
     depthRegion: 0,
+    contracts: {},
+    contractsLoading: false,
+    contractsRegion: 0,
     lp: { C: '', G: '' },
     faction: 'all',
     sort: 'now',
     q: '',
     onlyMarket: true,
+    onlyContract: false,
     hideBp: true,
     noReq: false,
     expanded: {},
@@ -296,10 +300,25 @@
     setHint('');
     render();
     if (_lp.depthRegion !== _lp.region) loadDepths(!!_lp.forceDepth);
+    if (_lp.contractsRegion !== _lp.region) loadContracts(!!_lp.forceDepth);
     _lp.forceDepth = false;
   }
 
   // 前五收单深度：整表约 500 个 type，服务端逐 type 缓存 15 分钟，首次拉完后面秒开
+  // 公开合同：服务端按小时从 everef 快照重建，只保留 LP 可换物品的单物品合同
+  function loadContracts(force) {
+    if (_lp.contractsLoading) return;
+    _lp.contractsLoading = true;
+    apiGet('lp.php?action=contracts&region=' + _lp.region + (force ? '&force=1' : ''), function (res) {
+      _lp.contractsLoading = false;
+      if (res && res.contracts) {
+        _lp.contracts = res.contracts;
+        _lp.contractsRegion = _lp.region;
+        if (_lp.loaded) render();
+      }
+    });
+  }
+
   function loadDepths(force) {
     if (_lp.depthLoading) return;
     _lp.depthLoading = true;
@@ -369,6 +388,12 @@
 
         // 吃满前五收单：次数受深度限制，输入 LP 后再受 LP 限制
         var dep = _lp.depth[o.type_id] || null;
+        var ctr = _lp.contracts[o.type_id] || [];
+        var contractPerLp = null;
+        if (ctr.length && o.lp_cost > 0) {
+          var cRev = num(ctr[0].unit) * o.quantity;
+          contractPerLp = (cRev * (1 - LP_TAX) - cost) / o.lp_cost;
+        }
         var depLoaded = Object.prototype.hasOwnProperty.call(_lp.depth, o.type_id);
         var depQty = 0, depTimes = 0, depUse = 0, depProfit = null;
         if (dep && dep.buy && dep.buy.length) {
@@ -409,6 +434,8 @@
           depTimes: depTimes,
           depUse: depUse,
           depProfit: depProfit,
+          contracts: ctr,
+          contractPerLp: contractPerLp,
           times: times,
           totalNow: profitNow === null ? null : times * profitNow,
           totalList: profitList === null ? null : times * profitList
@@ -422,8 +449,9 @@
     var q = _lp.q.trim().toLowerCase();
     return rows.filter(function (r) {
       if (_lp.faction !== 'all' && r.store.key !== _lp.faction) return false;
-      if (_lp.onlyMarket && !(r.buy > 0 || r.sell > 0)) return false;
-      if (_lp.hideBp && r.isBp) return false;
+      if (_lp.onlyMarket && !(r.buy > 0 || r.sell > 0 || r.contracts.length)) return false;
+      if (_lp.onlyContract && !r.contracts.length) return false;
+      if (_lp.hideBp && r.isBp && !r.contracts.length) return false;
       if (_lp.noReq && (r.offer.required_items || []).length) return false;
       if (q) {
         var hay = (r.name + ' ' + r.en + ' ' + r.offer.type_id).toLowerCase();
@@ -437,6 +465,7 @@
     var key = _lp.sort;
     function val(r) {
       if (key === 'list') return r.perLpList;
+      if (key === 'contract') return r.contractPerLp;
       if (key === 'profit') return r.profitNow;
       if (key === 'total') return r.totalNow;
       if (key === 'lp') return r.offer.lp_cost;
@@ -469,7 +498,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；净 ISK/LP = (卖出收入 × (1 − 7.5% 销售税) − ISK 成本 − 材料成本) ÷ LP，毛 ISK/LP = 卖出收入 ÷ LP（不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（同样扣 7.5% 销售税，填了 LP 就取深度与 LP 中更小的一方）；销售税按 0 技能基础 7.5% 计，未计中介费。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存，点行展开挂单前五。</p>';
+    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；净 ISK/LP = (卖出收入 × (1 − 7.5% 销售税) − ISK 成本 − 材料成本) ÷ LP，毛 ISK/LP = 卖出收入 ÷ LP（不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（同样扣 7.5% 销售税，填了 LP 就取深度与 LP 中更小的一方）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建），点行展开可看合同明细与合同口径 ISK/LP。销售税按 0 技能基础 7.5% 计，未计中介费。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
     renderBody(html);
   }
 
@@ -568,6 +597,7 @@
         + '<div><span class="lp-k">收</span>' + (r.buy > 0 ? iskShort(r.buy) : '—') + '</div>'
         + '<div><span class="lp-k">售</span>' + (r.sell > 0 ? iskShort(r.sell) : '—') + '</div>'
         + '<div><span class="lp-k">换得</span>x' + iskN(o.quantity) + '</div>'
+        + (r.contracts.length ? '<div class="lp-contract"><span class="lp-k">合同</span>' + iskShort(r.contracts[0].unit) + '</div>' : '')
       + '</td>'
       + '<td class="num lp-c-gain">'
         + '<div class="lp-val lp-strong">净 ' + perLp(r.perLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
@@ -587,10 +617,39 @@
       html += '<tr class="lp-detail-row"><td colspan="7">'
         + '<div class="lp-detail">'
         + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button></div>'
+        + contractBlockHtml(r)
         + '<div data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
         + '</div></td></tr>';
     }
     return html;
+  }
+
+  // 展开面板里的公开合同块：列出该物品最便宜的单物品合同，并算合同口径的净 ISK/LP
+  function contractBlockHtml(r) {
+    var list = r.contracts || [];
+    if (!list.length) return '';
+    var html = '<div class="lp-book lp-contract-block"><h5>公开合同（单物品，最低单价优先）</h5>'
+      + '<table class="lp-book-tbl"><thead><tr>'
+      + '<th>单价</th><th>合同价</th><th>数量</th><th>说明</th><th>地点</th><th>到期</th>'
+      + '</tr></thead><tbody>';
+    list.forEach(function (c) {
+      var note = c.bpc ? ('BPC ' + iskN(c.runs) + ' run · ME' + iskN(c.me) + ' TE' + iskN(c.te)) : '成品';
+      html += '<tr><td class="num">' + iskN(c.unit) + '</td>'
+        + '<td class="num">' + iskN(c.price) + '</td>'
+        + '<td class="num">' + iskN(c.qty) + '</td>'
+        + '<td>' + escHtml(note) + '</td>'
+        + '<td>' + escHtml(c.loc_name || ('#' + c.loc)) + '</td>'
+        + '<td>' + escHtml(String(c.exp || '').replace('T', ' ').replace('Z', '')) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    var c0 = list[0];
+    var rev = num(c0.unit) * r.offer.quantity;
+    var profit = rev * (1 - LP_TAX) - r.cost;
+    var per = r.offer.lp_cost > 0 ? profit / r.offer.lp_cost : null;
+    html += '<div class="lp-detail-msg">按最低合同单价：毛收入 ' + iskShort(rev)
+      + '，扣 7.5% 销售税与 ISK/材料成本后净收益 ' + iskShort(profit)
+      + '，折合 <b>' + perLp(per) + ' ISK/LP</b></div>';
+    return html + '</div>';
   }
 
   function detailHtml(typeId) {
@@ -678,6 +737,8 @@
     _lp.books = {};
     _lp.depth = {};
     _lp.depthRegion = 0;
+    _lp.contracts = {};
+    _lp.contractsRegion = 0;
     _lp.pricesAt = 0;
     lpReload(false);
   }
@@ -702,6 +763,7 @@
   function lpSetSearch(v) { _lp.q = v || ''; scheduleRender(); }
   function lpSetFlag(k, on) {
     if (k === 'onlyMarket') _lp.onlyMarket = !!on;
+    if (k === 'onlyContract') _lp.onlyContract = !!on;
     if (k === 'hideBp') _lp.hideBp = !!on;
     if (k === 'noReq') _lp.noReq = !!on;
     render();

@@ -310,12 +310,14 @@ LP 商店报价来自 ESI `/loyalty/stores/{corp}/offers/`，市场行情优先�
 | GET | `?action=offers&corp=1000181` | 盖伦特国民卫队 LP 商店报价（24h 缓存） |
 | GET | `?action=aggregate&region=10000002&ids=1,2,3` | 批量取最高收购价 / 最低出售价（15min 缓存） |
 | GET | `?action=depths&region=10000002&ids=1,2,3` | 批量取前五收单深度（15min 缓存，用于算「吃满前五」的次数与收益） |
+| GET | `?action=contracts&region=10000002` | LP 可换物品的公开合同最低单价（每小时从 everef 快照重建） |
 | GET | `?action=book&region=10000002&type_id=16068` | 单个物品买卖挂单前五（15min 缓存，前端展开行时才拉） |
 
 - `corp` 走白名单（1000180 = State Protectorate，1000181 = Federal Defense Union），`region` 也走白名单（Jita / Amarr / Dodixie / Rens / Hek）。
 - 主表只用最高收购价 / 最低出售价算 ISK/LP；净收益按 0 技能销售税 7.5% 扣减（Accounting 每级再降 11%，满级 3.37%），未计中介费。挂单前五按需拉取，只显示价格、数量、最小成交量和地点。
 - 主表的「前五秒卖」按前五收单从高到低吃掉这些量，给出可兑换次数与净收益（填了 LP 就取深度与 LP 中更小的一方）；深度数据需要逐 type 拉订单簿，服务端缓存 15 分钟。
 - ⚠️ 同样需要可写目录：`sudo mkdir -p <站点>/lp_data && sudo chmod 777 <站点>/lp_data`
+- 公开合同走 everef 的 `public-contracts` 快照（每小时更新，约 6.6MB）：服务端下载后用容器自带 tar 解压，只保留「单物品 item_exchange 合同」，按物品取最便宜的 3 条，再过滤到 LP 能换到的物品。前端可以「只看有合同」筛选、按合同净 ISK/LP 排序，展开看合同明细。
 
 ### 舰船/装备中文名从哪来
 

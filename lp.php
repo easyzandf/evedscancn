@@ -23,6 +23,8 @@ define('LP_VER', 'v1');
 define('LP_OFFER_TTL', 86400);   // LP 商店报价：游戏更新才变
 define('LP_PRICE_TTL', 900);     // 市场行情：15 分钟
 define('LP_STATION_TTL', 2592000); // 空间站名基本不变
+define('LP_CONTRACT_TTL', 3600);   // 公开合同索引：每小时重建
+define('LP_CONTRACT_URL', 'https://data.everef.net/public-contracts/public-contracts-latest.v2.tar.bz2');
 define('LP_MAX_AGE', 1209600);   // 14 天没碰过的缓存行清掉
 define('LP_MAX_ROWS', 6000);
 define('LP_UA', 'EVE-DScan-CN/1.0 (+https://dscan.dpdns.org/)');
@@ -337,6 +339,147 @@ function lpStations($pdo, array $ids) {
     return $out;
 }
 
+// ---- 公开合同：从 everef 快照里抽出 LP 物品的单物品合同最低单价 ----
+// 快照每小时更新；PHP 容器没装 bz2 扩展，下载后交给容器自带的 tar 解压。
+function lpDownload($url, $dest) {
+    if (function_exists('curl_init')) {
+        $fp = @fopen($dest, 'wb');
+        if (!$fp) return false;
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_FILE           => $fp,
+            CURLOPT_TIMEOUT        => 180,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_HTTPHEADER     => ['User-Agent: ' . LP_UA],
+        ]);
+        $ok = curl_exec($ch);
+        curl_close($ch);
+        fclose($fp);
+        return $ok !== false;
+    }
+    $ctx = stream_context_create(['http' => ['timeout' => 180, 'header' => 'User-Agent: ' . LP_UA]]);
+    $d = @file_get_contents($url, false, $ctx);
+    if ($d === false) return false;
+    return @file_put_contents($dest, $d) !== false;
+}
+
+function lpOfferTypeSet($pdo) {
+    $set = [];
+    foreach ([1000180, 1000181] as $corp) {
+        $c = lpCacheGet($pdo, 'of:' . $corp, LP_OFFER_TTL);
+        if (!is_array($c)) continue;
+        foreach ($c as $o) {
+            if (!empty($o['type_id'])) $set[(int)$o['type_id']] = true;
+        }
+    }
+    return $set;
+}
+
+function lpBuildContracts($pdo, $dataDir) {
+    global $LP_REGIONS;
+    $tar = $dataDir . '/everef-contracts.tar.bz2';
+    $dir = $dataDir . '/everef';
+    if (!is_dir($dir)) @mkdir($dir, 0777, true);
+    @chmod($dir, 0777);
+    if (!lpDownload(LP_CONTRACT_URL, $tar)) return false;
+    @shell_exec('tar -xjf ' . escapeshellarg($tar) . ' -C ' . escapeshellarg($dir) . ' contracts.csv contract_items.csv 2>&1');
+    $cf = $dir . '/contracts.csv';
+    $if = $dir . '/contract_items.csv';
+    if (!is_file($cf) || !is_file($if)) return false;
+
+    $allowed = array_flip(array_map('intval', $LP_REGIONS));
+
+    // 1) 合同主表：只要 item_exchange + 白名单区域 + 价格 > 0
+    $meta = [];
+    $fh = fopen($cf, 'r');
+    if (!$fh) return false;
+    $head = fgetcsv($fh);
+    if (!is_array($head)) { fclose($fh); return false; }
+    $ix = array_flip($head);
+    while (($r = fgetcsv($fh)) !== false) {
+        if (count($r) !== count($head)) continue;
+        if (($r[$ix['type']] ?? '') !== 'item_exchange') continue;
+        $rg = (int)($r[$ix['region_id']] ?? 0);
+        if (!isset($allowed[$rg])) continue;
+        $price = (float)($r[$ix['price']] ?? 0);
+        if ($price <= 0) continue;
+        $cid = (string)$r[$ix['contract_id']];
+        $loc = (int)($r[$ix['station_id']] ?? 0);
+        if (!$loc) $loc = (int)($r[$ix['start_location_id']] ?? 0);
+        $meta[$cid] = ['rg' => $rg, 'price' => $price, 'loc' => $loc, 'exp' => (string)($r[$ix['date_expired']] ?? '')];
+    }
+    fclose($fh);
+
+    // 2) 合同物品：只留主表里出现过的合同
+    $items = [];
+    $fh = fopen($if, 'r');
+    if (!$fh) return false;
+    $head = fgetcsv($fh);
+    if (!is_array($head)) { fclose($fh); return false; }
+    $ix = array_flip($head);
+    while (($r = fgetcsv($fh)) !== false) {
+        if (count($r) !== count($head)) continue;
+        $cid = (string)($r[$ix['contract_id']] ?? '');
+        if (!isset($meta[$cid])) continue;
+        $tid = (int)($r[$ix['type_id']] ?? 0);
+        $qty = (int)($r[$ix['quantity']] ?? 0);
+        if ($tid <= 0 || $qty <= 0) continue;
+        if (!isset($items[$cid])) $items[$cid] = ['t' => [], 'bpc' => 0, 'runs' => 0, 'me' => 0, 'te' => 0];
+        $items[$cid]['t'][$tid] = ($items[$cid]['t'][$tid] ?? 0) + $qty;
+        if (($r[$ix['is_blueprint_copy']] ?? '') === 'true') {
+            $items[$cid]['bpc'] = 1;
+            $items[$cid]['runs'] = (int)($r[$ix['runs']] ?? 0);
+            $items[$cid]['me'] = (int)($r[$ix['material_efficiency']] ?? 0);
+            $items[$cid]['te'] = (int)($r[$ix['time_efficiency']] ?? 0);
+        }
+    }
+    fclose($fh);
+
+    // 3) 单物品合同：每个区域每个 type 保留最便宜的 3 条
+    $regions = [];
+    foreach ($LP_REGIONS as $rg) $regions[$rg] = [];
+    foreach ($items as $cid => $e) {
+        if (count($e['t']) !== 1) continue;
+        $tid = (int)array_key_first($e['t']);
+        $qty = $e['t'][$tid];
+        $m = $meta[$cid];
+        $regions[$m['rg']][$tid][] = [
+            'unit' => $m['price'] / $qty, 'price' => $m['price'], 'qty' => $qty,
+            'bpc' => $e['bpc'], 'runs' => $e['runs'], 'me' => $e['me'], 'te' => $e['te'],
+            'loc' => $m['loc'], 'exp' => $m['exp'], 'cid' => (int)$cid,
+        ];
+    }
+
+    // 4) 只保留 LP 能换到的物品，补上地点名
+    $lpTypes = lpOfferTypeSet($pdo);
+    foreach ($regions as $rg => $types) {
+        $out = []; $locIds = [];
+        foreach ($types as $tid => $list) {
+            if (!isset($lpTypes[$tid])) continue;
+            usort($list, function ($a, $b) { return $a['unit'] <=> $b['unit']; });
+            $out[$tid] = array_slice($list, 0, 3);
+            foreach ($out[$tid] as $row) {
+                if ($row['loc'] > 0 && $row['loc'] < 1000000000000) $locIds[$row['loc']] = true;
+            }
+        }
+        $stations = $locIds ? lpStations($pdo, array_keys($locIds)) : [];
+        foreach ($out as $tid => $list) {
+            foreach ($list as $i => $row) {
+                $out[$tid][$i]['loc_name'] = $row['loc'] >= 1000000000000
+                    ? '玩家建筑'
+                    : (isset($stations[$row['loc']]) ? $stations[$row['loc']] : '');
+            }
+        }
+        lpCachePut($pdo, 'ct:' . $rg, $out);
+    }
+
+    @unlink($cf);
+    @unlink($if);
+    @unlink($tar);
+    lpCachePrune($pdo);
+    return true;
+}
+
 $action = isset($_GET['action']) ? (string)$_GET['action'] : '';
 $force  = !empty($_GET['force']);
 
@@ -407,6 +550,25 @@ if ($action === 'depths') {
         }
     }
     echo json_encode(['region' => $region, 'depths' => $out, 'cachedAt' => time()], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ---- 公开合同单价（只返回 LP 能换到的物品）----
+if ($action === 'contracts') {
+    $region = isset($_GET['region']) ? (int)$_GET['region'] : 0;
+    if (!in_array($region, $LP_REGIONS, true)) lpFail('unknown region');
+    $pdo = lpDb($dataDir);
+    $idx = $force ? null : lpCacheGet($pdo, 'ct:' . $region, LP_CONTRACT_TTL);
+    if ($idx === null) {
+        $fail = lpCacheGet($pdo, 'ct:fail', 300);
+        if ($force || $fail === null) {
+            if (lpBuildContracts($pdo, $dataDir)) lpCachePut($pdo, 'ct:fail', ['at' => 0]);
+            else lpCachePut($pdo, 'ct:fail', ['at' => time()]);
+        }
+        $idx = lpCacheGet($pdo, 'ct:' . $region, LP_CONTRACT_TTL);
+        if ($idx === null) $idx = [];
+    }
+    echo json_encode(['region' => $region, 'contracts' => $idx, 'cachedAt' => time()], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

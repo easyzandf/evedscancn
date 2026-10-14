@@ -798,6 +798,9 @@
   table.lp-tbl .lp-k { display: inline-block; min-width: 30px; margin-right: 5px; color: var(--dim); font-size: 10.5px; text-align: right; }
   table.lp-tbl .lp-val { font-size: 13px; font-weight: 600; }
   table.lp-tbl .lp-unit { color: var(--dim); font-size: 10px; font-weight: 500; }
+  table.lp-tbl .lp-contract { color: var(--cyan); }
+  .lp-contract-block { flex: 1 1 100%; margin-bottom: 10px; }
+  .lp-contract-block table.lp-book-tbl th:first-child { text-align: right; }
   .lp-mini {
     display: inline-block; margin-top: 3px; padding: 1px 7px; border-radius: 10px;
     background: var(--surface-2); color: var(--muted); font-size: 10.5px;
@@ -1393,12 +1396,14 @@
       <select id="lpSort" onchange="lpSetSort(this.value)">
         <option value="now">按秒卖 ISK/LP</option>
         <option value="list">按挂卖 ISK/LP</option>
+        <option value="contract">按合同净 ISK/LP</option>
         <option value="profit">按秒卖单次收益</option>
         <option value="total">按可兑总收益</option>
         <option value="lp">按 LP 成本</option>
         <option value="name">按物品名</option>
       </select>
       <label class="lp-chk"><input type="checkbox" id="lpOnlyMarket" checked onchange="lpSetFlag('onlyMarket',this.checked)">只看有行情</label>
+      <label class="lp-chk"><input type="checkbox" id="lpOnlyContract" onchange="lpSetFlag('onlyContract',this.checked)">只看有合同</label>
       <label class="lp-chk"><input type="checkbox" id="lpHideBp" checked onchange="lpSetFlag('hideBp',this.checked)">隐藏蓝图</label>
       <label class="lp-chk"><input type="checkbox" id="lpNoReq" onchange="lpSetFlag('noReq',this.checked)">无需材料</label>
       <span class="cnt" id="lpCnt"></span>
@@ -5094,6 +5099,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=c68f87b5"></script>
+<script src="lp.js?v=e5f50b1f"></script>
 </body>
 </html>
