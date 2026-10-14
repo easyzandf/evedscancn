@@ -393,17 +393,11 @@
     if (!rows.length) return '<div class="lp-empty">没有符合条件的报价</div>';
     var head = '<thead><tr>'
       + '<th class="lp-th-item">物品</th>'
-      + '<th>卫队</th>'
-      + '<th class="num">LP 成本</th>'
-      + '<th class="num">ISK 成本</th>'
-      + '<th>材料</th>'
-      + '<th class="num">换得</th>'
-      + '<th class="num">最高收购</th>'
-      + '<th class="num">最低出售</th>'
-      + '<th class="num">秒卖 ISK/LP</th>'
-      + '<th class="num">挂卖 ISK/LP</th>'
-      + '<th class="num">秒卖单次收益</th>'
-      + '<th class="num">可兑总收益</th>'
+      + '<th class="num lp-th-cost">兑换成本</th>'
+      + '<th class="num lp-th-market">市场 / 产出</th>'
+      + '<th class="num lp-th-gain">秒卖收益</th>'
+      + '<th class="num lp-th-gain">挂卖收益</th>'
+      + '<th class="num lp-th-total">可兑总收益</th>'
       + '</tr></thead>';
     return '<table class="ship-tbl lp-tbl">' + head + '<tbody>'
       + rows.map(rowHtml).join('') + '</tbody></table>';
@@ -422,35 +416,44 @@
     var open = !!_lp.expanded[key];
     var cls = 'lp-row' + (open ? ' open' : '');
 
-    var matCell = r.mats.length
-      ? '<span title="' + escHtml(matTitle(r)) + '">' + r.mats.length + ' 项 · ' + iskShort(r.matCost) + '</span>'
+    var matLine = r.mats.length
+      ? '<span title="' + escHtml(matTitle(r)) + '">' + r.mats.length + ' 项 ' + iskShort(r.matCost) + '</span>'
         + (r.matUnknown ? ' <span class="lp-warn" title="有材料查不到行情，成本偏低">?</span>' : '')
       : '—';
 
     var amt = num(_lp.lp[r.store.key]);
     var totalCell = amt > 0
-      ? (r.totalNow === null ? '—' : '<b>' + iskShort(r.totalNow) + '</b><br><span class="lp-sub">' + iskN(r.times) + ' 次</span>')
+      ? (r.totalNow === null ? '—' : '<div class="lp-val lp-strong">' + iskShort(r.totalNow) + '</div><div class="lp-sub">' + iskN(r.times) + ' 次</div>')
       : '<span class="lp-muted">填 LP</span>';
 
     var html = '<tr class="' + cls + '" data-lp-key="' + escHtml(key) + '" data-lp-type="' + o.type_id + '">'
-      + '<td class="lp-c-item"><div class="cn">' + escHtml(r.name) + '</div>'
-        + (r.en ? '<div class="en">' + escHtml(r.en) + '</div>' : '')
-        + (r.isBp ? ' <span class="lp-mini">蓝图</span>' : '') + '</td>'
-      + '<td><span class="lp-tag lp-tag-' + r.store.key.toLowerCase() + '">' + r.store.key + '</span></td>'
-      + '<td class="num">' + iskN(o.lp_cost) + '</td>'
-      + '<td class="num">' + iskShort(o.isk_cost) + '</td>'
-      + '<td class="lp-c-mat">' + matCell + '</td>'
-      + '<td class="num">x' + iskN(o.quantity) + '</td>'
-      + '<td class="num">' + (r.buy > 0 ? iskShort(r.buy) : '—') + '</td>'
-      + '<td class="num">' + (r.sell > 0 ? iskShort(r.sell) : '—') + '</td>'
-      + '<td class="num lp-strong">' + perLp(r.perLpNow) + '</td>'
-      + '<td class="num">' + perLp(r.perLpList) + '</td>'
-      + '<td class="num ' + (num(r.profitNow) < 0 ? 'lp-neg' : '') + '">' + (r.profitNow === null ? '—' : iskShort(r.profitNow)) + '</td>'
-      + '<td class="num">' + totalCell + '</td>'
+      + '<td class="lp-c-item"><div class="lp-name">'
+        + '<span class="lp-tag lp-tag-' + r.store.key.toLowerCase() + '">' + r.store.key + '</span>'
+        + escHtml(r.name) + (r.isBp ? ' <span class="lp-mini">蓝图</span>' : '') + '</div>'
+        + (r.en ? '<div class="lp-en">' + escHtml(r.en) + '</div>' : '') + '</td>'
+      + '<td class="num lp-c-cost">'
+        + '<div><span class="lp-k">LP</span>' + iskN(o.lp_cost) + '</div>'
+        + '<div><span class="lp-k">ISK</span>' + iskShort(o.isk_cost) + '</div>'
+        + '<div><span class="lp-k">材料</span>' + matLine + '</div>'
+      + '</td>'
+      + '<td class="num lp-c-market">'
+        + '<div><span class="lp-k">收</span>' + (r.buy > 0 ? iskShort(r.buy) : '—') + '</div>'
+        + '<div><span class="lp-k">售</span>' + (r.sell > 0 ? iskShort(r.sell) : '—') + '</div>'
+        + '<div><span class="lp-k">换得</span>x' + iskN(o.quantity) + '</div>'
+      + '</td>'
+      + '<td class="num lp-c-gain">'
+        + '<div class="lp-val lp-strong">' + perLp(r.perLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
+        + '<div class="lp-sub' + (num(r.profitNow) < 0 ? ' lp-sub-neg' : '') + '">单次 ' + (r.profitNow === null ? '—' : iskShort(r.profitNow)) + '</div>'
+      + '</td>'
+      + '<td class="num lp-c-gain">'
+        + '<div class="lp-val">' + perLp(r.perLpList) + ' <span class="lp-unit">ISK/LP</span></div>'
+        + '<div class="lp-sub">单次 ' + (r.profitList === null ? '—' : iskShort(r.profitList)) + '</div>'
+      + '</td>'
+      + '<td class="num lp-c-total">' + totalCell + '</td>'
       + '</tr>';
 
     if (open) {
-      html += '<tr class="lp-detail-row"><td colspan="12">'
+      html += '<tr class="lp-detail-row"><td colspan="6">'
         + '<div class="lp-detail" data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
         + '</td></tr>';
     }
