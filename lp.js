@@ -33,11 +33,17 @@
     { id: 60005686, region: 10000042, label: 'Hek VIII-12 无限创造工厂' }
   ];
 
+  function stationLabel() {
+    var label = '';
+    LP_STATIONS.forEach(function (s) { if (s.id === _lp.station) label = s.label; });
+    return label || String(_lp.station);
+  }
+
   // 销售税 = 7.5% × (1 − 11% × Accounting 等级)；默认 4 级 = 4.2%
   var LP_TAX_BASE = 7.5;
   var LP_TAX_PER_LEVEL = 0.11;
   // 默认费率：Accounting 4 级、中介费 2.4%、安全税 0；页面上的控件可改
-  var LP_FEE_DEFAULT = { taxLevel: 4, broker: 2.4, safe: 0 };
+  var LP_FEE_DEFAULT = { taxLevel: 4, broker: 1.8, safe: 0 };
 
   // 复制图标（lucide copy，内联避免依赖）
   var LP_COPY_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
@@ -333,11 +339,16 @@
     _lp.loading = false;
     _lp.loaded = true;
     _lp.inited = true;
-    setHint('');
-    render();
-    if (_lp.depthRegion !== _lp.region) loadDepths(!!_lp.forceDepth);
     if (_lp.contractsRegion !== _lp.region) loadContracts(!!_lp.forceDepth);
     if (!_lp.volumesLoaded) loadVolumes();
+    if (_lp.depthRegion !== _lp.region) {
+      // 先拉站内订单簿再渲染：避免加载期间显示全区价被当成站内价
+      setHint('正在拉取 ' + stationLabel() + ' 站内行情…首次约 10~30 秒');
+      loadDepths(!!_lp.forceDepth, function () { render(); });
+    } else {
+      setHint('');
+      render();
+    }
     _lp.forceDepth = false;
   }
 
@@ -384,7 +395,16 @@
     });
   }
 
-  function loadDepths(force) {
+  var _depthCallbacks = [];
+  function _flushDepthCallbacks() {
+    var cbs = _depthCallbacks;
+    _depthCallbacks = [];
+    if (cbs.length) cbs.forEach(function (cb) { cb(); });
+    else render();
+  }
+
+  function loadDepths(force, done) {
+    if (typeof done === 'function') _depthCallbacks.push(done);
     if (_lp.depthLoading) return;
     _lp.depthLoading = true;
     var uniq = {};
@@ -396,25 +416,26 @@
     if (!list.length) {
       _lp.depthLoading = false;
       _lp.depthRegion = _lp.region;
+      _flushDepthCallbacks();
       return;
     }
     var chunks = [];
     for (var i = 0; i < list.length; i += 60) chunks.push(list.slice(i, i + 60));
-    var done = 0, idx = 0;
+    var sent = 0, idx = 0;
     var next = function () {
       if (idx >= chunks.length) {
         _lp.depthLoading = false;
         _lp.depthRegion = _lp.region;
         setHint('');
-        render();
+        _flushDepthCallbacks();
         return;
       }
-      setHint('正在拉取站内行情… ' + done + ' / ' + list.length);
+      setHint('正在拉取站内行情… ' + sent + ' / ' + list.length);
       apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station + '&ids=' + chunks[idx].join(',') + (force ? '&force=1' : ''), function (res) {
         if (res && res.depths) {
           Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
         }
-        done += chunks[idx].length;
+        sent += chunks[idx].length;
         idx++;
         next();
       });
@@ -600,7 +621,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按你输入的 LP 折算。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 2.4%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情与前五深度 15 分钟缓存；站内订单簿首次加载需要十几秒。</p>';
+    html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站；站内订单簿没加载完之前不显示价格，避免混入全区价。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按你输入的 LP 折算。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 1.8%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情与前五深度 15 分钟缓存；站内订单簿首次加载需要十几秒。</p>';
     renderBody(html);
   }
 

@@ -1406,7 +1406,7 @@
           <option value="4" selected>Accounting 4 级 · 4.20%</option>
           <option value="5">Accounting 5 级 · 3.38%</option>
         </select></label>
-        <label>中介费 <input type="number" id="lpFeeBroker" value="2.4" min="0" max="100" step="0.1" oninput="lpSetFee('broker', this.value)">%</label>
+        <label>中介费 <input type="number" id="lpFeeBroker" value="1.8" min="0" max="100" step="0.1" oninput="lpSetFee('broker', this.value)">%</label>
         <label>安全税 <input type="number" id="lpFeeSafe" value="0" min="0" max="100" step="0.1" oninput="lpSetFee('safe', this.value)">%</label>
       </span>
       <button class="btn btn-go" onclick="lpReload(true)"><i data-lucide="search"></i>刷新行情</button>
@@ -5126,6 +5126,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=ab5bb634"></script>
+<script src="lp.js?v=5dfbb054"></script>
 </body>
 </html>
