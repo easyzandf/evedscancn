@@ -24,6 +24,15 @@
     { id: 10000042, label: 'Hek / Metropolis' }
   ];
 
+  // 主要贸易枢纽空间站（只看站内行情）
+  var LP_STATIONS = [
+    { id: 60003760, region: 10000002, label: 'Jita IV-4 海军装配厂' },
+    { id: 60008494, region: 10000043, label: 'Amarr VIII 皇帝家族学院' },
+    { id: 60011866, region: 10000032, label: 'Dodixie IX-20 联邦海军装配厂' },
+    { id: 60004588, region: 10000030, label: 'Rens VI-8 布鲁特部落财政部' },
+    { id: 60005686, region: 10000042, label: 'Hek VIII-12 无限创造工厂' }
+  ];
+
   // 销售税 = 7.5% × (1 − 11% × Accounting 等级)；默认 4 级 = 4.2%
   var LP_TAX_BASE = 7.5;
   var LP_TAX_PER_LEVEL = 0.11;
@@ -38,6 +47,7 @@
     loading: false,
     loaded: false,
     region: 10000002,
+    station: 60003760,
     offers: {},
     prices: {},
     esiNames: {},
@@ -399,8 +409,8 @@
         render();
         return;
       }
-      setHint('正在拉取收单深度… ' + done + ' / ' + list.length);
-      apiGet('lp.php?action=depths&region=' + _lp.region + '&ids=' + chunks[idx].join(',') + (force ? '&force=1' : ''), function (res) {
+      setHint('正在拉取站内行情… ' + done + ' / ' + list.length);
+      apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station + '&ids=' + chunks[idx].join(',') + (force ? '&force=1' : ''), function (res) {
         if (res && res.depths) {
           Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
         }
@@ -420,8 +430,10 @@
         if (!o.lp_cost || o.lp_cost <= 0) return;
 
         var p = _lp.prices[o.type_id] || null;
-        var buy = p ? num(p.b) : 0;    // 最高收购价
-        var sell = p ? num(p.s) : 0;   // 最低出售价
+        // 站内订单簿加载完就用站内价；未加载到时先用全区聚合价占位
+        var ob = _lp.depth[o.type_id] || null;
+        var buy = ob ? ((ob.buy && ob.buy.length) ? num(ob.buy[0].p) : 0) : (p ? num(p.b) : 0);
+        var sell = ob ? ((ob.sell && ob.sell.length) ? num(ob.sell[0].p) : 0) : (p ? num(p.s) : 0);
 
         var amt = num(_lp.lp[st.key]);
         var times = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
@@ -470,7 +482,7 @@
 
         // 吃满前五收单：次数受深度限制，输入 LP 后再受 LP 限制
         var dep = _lp.depth[o.type_id] || null;
-        var ctr = _lp.contracts[o.type_id] || [];
+        var ctr = (_lp.contracts[o.type_id] || []).filter(function (c) { return num(c.loc) === num(_lp.station); });
         var contractPerLp = null, contractGrossPerLp = null, contractProfit = null, totalContract = null;
         if (ctr.length && o.lp_cost > 0) {
           var cRev = num(ctr[0].unit) * o.quantity;
@@ -588,7 +600,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价，净收益扣『销售税』；挂卖 = 挂最低出售价，净收益扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建）。市场没有挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按当前挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按你输入的 LP 折算——同一个物品一次换得越多，材料均价越高。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 2.4%、安全税 0 可手动改，改完所有数字实时重算。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
+    html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按你输入的 LP 折算。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 2.4%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情与前五深度 15 分钟缓存；站内订单簿首次加载需要十几秒。</p>';
     renderBody(html);
   }
 
@@ -789,15 +801,15 @@
 
   // -- 交互 --
   function renderShell() {
-    var region = $('lpRegion');
-    if (region && !region.options.length) {
-      LP_REGIONS.forEach(function (r) {
+    var st = $('lpStation');
+    if (st && !st.options.length) {
+      LP_STATIONS.forEach(function (s) {
         var o = document.createElement('option');
-        o.value = r.id;
-        o.textContent = r.label;
-        region.appendChild(o);
+        o.value = s.id;
+        o.textContent = s.label;
+        st.appendChild(o);
       });
-      region.value = String(_lp.region);
+      st.value = String(_lp.station);
     }
   }
 
@@ -825,7 +837,7 @@
   }
 
   function loadBook(typeId, force) {
-    apiGet('lp.php?action=book&region=' + _lp.region + '&type_id=' + typeId + (force ? '&force=1' : ''), function (res) {
+    apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + (force ? '&force=1' : ''), function (res) {
       _lp.books[typeId] = (res && (res.buy || res.sell)) ? res : { error: 1 };
       var cells = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
       for (var i = 0; i < cells.length; i++) cells[i].innerHTML = detailHtml(typeId);
@@ -836,6 +848,24 @@
     var id = parseInt(v, 10);
     if (!id || id === _lp.region) return;
     _lp.region = id;
+    _lp.prices = {};
+    _lp.books = {};
+    _lp.depth = {};
+    _lp.depthRegion = 0;
+    _lp.contracts = {};
+    _lp.contractsRegion = 0;
+    _lp.pricesAt = 0;
+    lpReload(false);
+  }
+
+  // 切换空间站（同时切区域，价格全部按站内算）
+  function lpSetStation(v) {
+    var id = parseInt(v, 10);
+    var st = null;
+    LP_STATIONS.forEach(function (s) { if (s.id === id) st = s; });
+    if (!st || id === _lp.station) return;
+    _lp.station = id;
+    _lp.region = st.region;
     _lp.prices = {};
     _lp.books = {};
     _lp.depth = {};
@@ -924,6 +954,7 @@
   window.lpReload = function (force) { return lpReload(!!force); };
   window.lpReloadBook = lpReloadBook;
   window.lpSetRegion = lpSetRegion;
+  window.lpSetStation = lpSetStation;
   window.lpSetLp = lpSetLp;
   window.lpSetFee = lpSetFee;
   window.lpSetTaxLevel = lpSetTaxLevel;

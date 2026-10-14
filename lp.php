@@ -39,6 +39,15 @@ $LP_STORES = [1000180, 1000181];
 // 欧服主要贸易中心
 $LP_REGIONS = [10000002, 10000043, 10000032, 10000030, 10000042];
 
+// 主要贸易枢纽的空间站（只看站内行情时用）
+$LP_STATIONS = [
+    60003760 => 10000002,   // Jita IV-4 海军装配厂
+    60008494 => 10000043,   // Amarr VIII 皇帝家族学院
+    60011866 => 10000032,   // Dodixie IX-20 联邦海军装配厂
+    60004588 => 10000030,   // Rens VI-8 布鲁特部落财政部
+    60005686 => 10000042,   // Hek VIII-12 无限创造工厂
+];
+
 function lpFail($msg, $http = 400) {
     http_response_code($http);
     echo json_encode(['error' => $msg], JSON_UNESCAPED_UNICODE);
@@ -227,9 +236,10 @@ function lpOrdersFor($region, array $typeIds) {
 }
 
 // 订单簿 -> 紧凑结构：买价降序前五、卖价升序前五 + 总量
-function lpTrimBook(array $orders) {
+function lpTrimBook(array $orders, $station = 0) {
     $buy = []; $sell = []; $bv = 0; $sv = 0; $bc = 0; $sc = 0;
     foreach ($orders as $o) {
+        if ($station > 0 && (int)(isset($o['location_id']) ? $o['location_id'] : 0) !== $station) continue;   // 只看站内
         $row = [
             'p'   => isset($o['price']) ? (float)$o['price'] : 0.0,
             'v'   => isset($o['volume_remain']) ? (int)$o['volume_remain'] : 0,
@@ -256,15 +266,20 @@ function lpBookSummary(array $book) {
     ];
 }
 
-// 用 ESI 订单簿给一批 type 落缓存（fuzzwork 挂了时的兜底）
-function lpPrimePrices($pdo, $region, array $ids) {
+// 订单簿缓存键：station=0 表示全区
+function lpBookKey($region, $station, $type) {
+    return 'bk:' . $region . ':' . ($station > 0 ? (int)$station : 'all') . ':' . (int)$type;
+}
+
+// 用 ESI 订单簿给一批 type 落缓存（顺便当作 fuzzwork 挂了时的兜底）
+function lpPrimePrices($pdo, $region, array $ids, $station = 0) {
     $out = [];
     foreach (array_chunk($ids, 60) as $chunk) {
         foreach (lpOrdersFor($region, $chunk) as $t => $orders) {
             if ($orders === null) continue;
-            $book = lpTrimBook($orders);
-            lpCachePut($pdo, 'ag:' . $region . ':' . (int)$t, lpBookSummary($book));
-            lpCachePut($pdo, 'bk:' . $region . ':' . (int)$t, $book);
+            $book = lpTrimBook($orders, $station);
+            lpCachePut($pdo, lpBookKey($region, $station, (int)$t), $book);
+            if ($station <= 0) lpCachePut($pdo, 'ag:' . $region . ':' . (int)$t, lpBookSummary($book));
             $out[(int)$t] = lpBookSummary($book);
         }
     }
@@ -527,6 +542,8 @@ if ($action === 'aggregate') {
 if ($action === 'depths') {
     $region = isset($_GET['region']) ? (int)$_GET['region'] : 0;
     if (!in_array($region, $LP_REGIONS, true)) lpFail('unknown region');
+    $station = isset($_GET['station']) ? (int)$_GET['station'] : 0;
+    if ($station > 0 && !isset($LP_STATIONS[$station])) lpFail('unknown station');
 
     $want = [];
     foreach (explode(',', isset($_GET['ids']) ? (string)$_GET['ids'] : '') as $x) {
@@ -539,14 +556,14 @@ if ($action === 'depths') {
     $pdo = lpDb($dataDir);
     $out = []; $miss = [];
     foreach (array_keys($want) as $id) {
-        $b = $force ? null : lpCacheGet($pdo, 'bk:' . $region . ':' . $id, LP_PRICE_TTL);
+        $b = $force ? null : lpCacheGet($pdo, lpBookKey($region, $station, $id), LP_PRICE_TTL);
         if ($b !== null) $out[$id] = ['buy' => $b['buy'], 'sell' => $b['sell'], 'bv' => $b['bv'], 'bc' => $b['bc'], 'sv' => $b['sv'], 'sc' => $b['sc']];
         else $miss[] = $id;
     }
     if ($miss) {
-        lpPrimePrices($pdo, $region, $miss);
+        lpPrimePrices($pdo, $region, $miss, $station);
         foreach ($miss as $id) {
-            $b = lpCacheGet($pdo, 'bk:' . $region . ':' . $id, LP_PRICE_TTL);
+            $b = lpCacheGet($pdo, lpBookKey($region, $station, $id), LP_PRICE_TTL);
             if ($b !== null) $out[$id] = ['buy' => $b['buy'], 'sell' => $b['sell'], 'bv' => $b['bv'], 'bc' => $b['bc'], 'sv' => $b['sv'], 'sc' => $b['sc']];
         }
     }
@@ -612,17 +629,19 @@ if ($action === 'book') {
     $region = isset($_GET['region']) ? (int)$_GET['region'] : 0;
     $type   = isset($_GET['type_id']) ? (int)$_GET['type_id'] : 0;
     if (!in_array($region, $LP_REGIONS, true)) lpFail('unknown region');
+    $station = isset($_GET['station']) ? (int)$_GET['station'] : 0;
+    if ($station > 0 && !isset($LP_STATIONS[$station])) lpFail('unknown station');
     if ($type <= 0) lpFail('invalid type_id');
 
     $pdo = lpDb($dataDir);
     $at  = 0;
-    $book = $force ? null : lpCacheGet($pdo, 'bk:' . $region . ':' . $type, LP_PRICE_TTL, $at);
+    $book = $force ? null : lpCacheGet($pdo, lpBookKey($region, $station, $type), LP_PRICE_TTL, $at);
     if ($book === null) {
         $orders = lpOrdersFor($region, [$type]);
         $o = isset($orders[$type]) ? $orders[$type] : [];
-        $book = lpTrimBook(is_array($o) ? $o : []);
-        lpCachePut($pdo, 'bk:' . $region . ':' . $type, $book);
-        lpCachePut($pdo, 'ag:' . $region . ':' . $type, lpBookSummary($book));
+        $book = lpTrimBook(is_array($o) ? $o : [], $station);
+        lpCachePut($pdo, lpBookKey($region, $station, $type), $book);
+        if ($station <= 0) lpCachePut($pdo, 'ag:' . $region . ':' . $type, lpBookSummary($book));
         lpCachePrune($pdo);
         $at = time();
     }
@@ -637,6 +656,7 @@ if ($action === 'book') {
 
     echo json_encode([
         'type_id'  => $type,
+        'station'  => $station,
         'region'   => $region,
         'buy'      => $book['buy'],
         'sell'     => $book['sell'],

@@ -313,7 +313,7 @@ LP 商店报价来自 ESI `/loyalty/stores/{corp}/offers/`，市场行情优先�
 | GET | `?action=contracts&region=10000002` | LP 可换物品的公开合同最低单价（每小时从 everef 快照重建） |
 | GET | `?action=book&region=10000002&type_id=16068` | 单个物品买卖挂单前五（15min 缓存，前端展开行时才拉） |
 
-- `corp` 走白名单（1000180 = State Protectorate，1000181 = Federal Defense Union），`region` 也走白名单（Jita / Amarr / Dodixie / Rens / Hek）。
+- `corp` 走白名单（1000180 = State Protectorate，1000181 = Federal Defense Union），`region` 也走白名单（Jita / Amarr / Dodixie / Rens / Hek）；`station` 走 5 个贸易枢纽空间站白名单，`depths` / `book` 传了 `station` 就只算该站的订单簿（前端默认 Jita IV-4，所有价格、材料成本、前五深度、合同都只看站内）。
 - 净收益扣减规则：秒卖（吃收单）只扣销售税；挂卖（挂单）再扣中介费和安全税。销售税改成选 Accounting 技能等级（0~5），按 `7.5% × (1 − 11% × 等级)` 自动算，默认 4 级 = 4.20%；中介费默认 2.4%、安全税默认 0，可直接改。材料成本按当前挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按输入的 LP 折算，所以同一个物品换得越多、材料均价越高。挂单前五按需拉取，只显示价格、数量、最小成交量和地点。
 - 主表的「前五秒卖」按前五收单从高到低吃掉这些量，给出可兑换次数与净收益（填了 LP 就取深度与 LP 中更小的一方）；深度数据需要逐 type 拉订单簿，服务端缓存 15 分钟。
 - ⚠️ 同样需要可写目录：`sudo mkdir -p <站点>/lp_data && sudo chmod 777 <站点>/lp_data`
