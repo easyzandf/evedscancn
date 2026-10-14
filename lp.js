@@ -818,7 +818,8 @@
     if (open) {
       html += '<tr class="lp-detail-row"><td colspan="9">'
         + '<div class="lp-detail">'
-        + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button></div>'
+        + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button>'
+          + '<button type="button" class="lp-copy-btn lp-book-refresh" data-lp-bookrefresh="' + o.type_id + '" title="重新拉取这个物品在 ' + escHtml(stationLabel()) + ' 的买卖前五（绕过 15 分钟缓存）">' + LP_REFRESH_ICON + ' 刷新挂单前五</button></div>'
         + contractBlockHtml(r)
         + '<div data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
         + '</div></td></tr>';
@@ -921,6 +922,19 @@
     var cells = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
     for (var i = 0; i < cells.length; i++) cells[i].innerHTML = detailHtml(typeId);
     loadBook(typeId, true);
+  }
+
+  // 展开面板里按物品强刷站内买卖前五
+  function refreshBook(typeId, btn) {
+    if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); }
+    var cells = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
+    for (var i = 0; i < cells.length; i++) cells[i].innerHTML = '<div class="lp-detail-msg">正在刷新挂单…</div>';
+    apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + '&force=1', function (res) {
+      if (btn) { btn.disabled = false; btn.classList.remove('lp-spin'); }
+      _lp.books[typeId] = (res && (res.buy || res.sell)) ? res : { error: 1 };
+      var cells2 = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
+      for (var j = 0; j < cells2.length; j++) cells2[j].innerHTML = detailHtml(typeId);
+    });
   }
 
   function loadBook(typeId, force) {
@@ -1027,6 +1041,12 @@
     if (mr && mr.closest('#pg-lp')) {
       e.preventDefault();
       refreshMaterials(mr.getAttribute('data-lp-matrefresh'), mr);
+      return;
+    }
+    var br = t.closest('[data-lp-bookrefresh]');
+    if (br && br.closest('#pg-lp')) {
+      e.preventDefault();
+      refreshBook(parseInt(br.getAttribute('data-lp-bookrefresh'), 10), br);
       return;
     }
     var tr = t.closest('tr.lp-row');

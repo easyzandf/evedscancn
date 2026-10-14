@@ -832,6 +832,9 @@
   }
   table.lp-tbl .lp-mat-refresh:hover { color: var(--brand-2); }
   table.lp-tbl .lp-mat-refresh.lp-spin svg { animation: lp-spin .9s linear infinite; }
+  .lp-spin svg { animation: lp-spin .9s linear infinite; }
+  .lp-book-refresh { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; }
+  .lp-book-refresh svg { width: 12px; height: 12px; }
   @keyframes lp-spin { to { transform: rotate(360deg); } }
   .lp-detail-bar { margin-bottom: 8px; }
   .lp-copy-btn {
@@ -5135,6 +5138,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=4dcd31ae"></script>
+<script src="lp.js?v=59d0663f"></script>
 </body>
 </html>
