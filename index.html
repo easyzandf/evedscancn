@@ -851,6 +851,7 @@
   .lp-spin svg { animation: lp-spin .9s linear infinite; }
   .lp-book-refresh { display: inline-flex; align-items: center; gap: 5px; margin-left: 8px; }
   .lp-book-refresh svg { width: 12px; height: 12px; }
+  .lp-refreshing { opacity: .45; transition: opacity .15s ease; }
   @keyframes lp-spin { to { transform: rotate(360deg); } }
   .lp-detail-bar { margin-bottom: 8px; }
   .lp-copy-btn {
@@ -5158,6 +5159,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=50b37a84"></script>
+<script src="lp.js?v=d3ead77e"></script>
 </body>
 </html>

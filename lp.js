@@ -216,6 +216,15 @@
     }
   }
 
+  // 按 "卫队:offer_id" 找到计算好的那一行（展开时用）
+  function findRowByKey(key) {
+    for (var i = 0; i < _lp.rows.length; i++) {
+      var r = _lp.rows[i];
+      if ((r.store.key + ':' + r.offer.offer_id) === key) return r;
+    }
+    return null;
+  }
+
   function findOffer(key) {
     var parts = String(key || '').split(':');
     var sk = parts[0], oid = parseInt(parts[1], 10);
@@ -836,16 +845,21 @@
       + '<td class="num lp-c-total">' + totalCell + '</td>'
       + '</tr>';
 
-    if (open) {
-      html += '<tr class="lp-detail-row"><td colspan="9">'
-        + '<div class="lp-detail">'
-        + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button>'
-          + '<button type="button" class="lp-copy-btn lp-book-refresh" data-lp-bookrefresh="' + o.type_id + '" title="重新拉取这个物品在 ' + escHtml(stationLabel()) + ' 的买卖前五（绕过 15 分钟缓存）">' + LP_REFRESH_ICON + ' 刷新挂单前五</button></div>'
-        + contractBlockHtml(r)
-        + '<div data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
-        + '</div></td></tr>';
-    }
+    if (open) html += detailRowHtml(r);
     return html;
+  }
+
+  // 明细行单独抽出来：展开/收起时只插/删这一行，不重绘整张表
+  function detailRowHtml(r) {
+    var o = r.offer;
+    var key = r.store.key + ':' + o.offer_id;
+    return '<tr class="lp-detail-row"><td colspan="9">'
+      + '<div class="lp-detail">'
+      + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button>'
+        + '<button type="button" class="lp-copy-btn lp-book-refresh" data-lp-bookrefresh="' + o.type_id + '" title="重新拉取这个物品在 ' + escHtml(stationLabel()) + ' 的买卖前五（绕过 15 分钟缓存）">' + LP_REFRESH_ICON + ' 刷新挂单前五</button></div>'
+      + contractBlockHtml(r)
+      + '<div data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
+      + '</div></td></tr>';
   }
 
   // 展开面板里的公开合同块：列出该物品最便宜的单物品合同，并算合同口径的净 ISK/LP
@@ -949,12 +963,15 @@
   function refreshBook(typeId, btn) {
     if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); }
     var cells = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
-    for (var i = 0; i < cells.length; i++) cells[i].innerHTML = '<div class="lp-detail-msg">正在刷新挂单…</div>';
+    for (var i = 0; i < cells.length; i++) cells[i].classList.add('lp-refreshing');
     apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + '&force=1', function (res) {
       if (btn) { btn.disabled = false; btn.classList.remove('lp-spin'); }
       _lp.books[typeId] = (res && (res.buy || res.sell)) ? res : { error: 1 };
       var cells2 = document.querySelectorAll('[data-lp-det="' + typeId + '"]');
-      for (var j = 0; j < cells2.length; j++) cells2[j].innerHTML = detailHtml(typeId);
+      for (var j = 0; j < cells2.length; j++) {
+        cells2[j].classList.remove('lp-refreshing');
+        cells2[j].innerHTML = detailHtml(typeId);
+      }
     });
   }
 
@@ -1090,14 +1107,19 @@
     if (!tr || !tr.closest('#pg-lp')) return;
     var key = tr.getAttribute('data-lp-key');
     var typeId = parseInt(tr.getAttribute('data-lp-type'), 10);
+    // 只动这一行：不再重建整张表（758 行重绘要 500ms+）
     if (_lp.expanded[key]) {
       delete _lp.expanded[key];
-      render();
+      tr.classList.remove('open');
+      var nx = tr.nextElementSibling;
+      if (nx && nx.classList.contains('lp-detail-row')) nx.parentNode.removeChild(nx);
     } else {
+      var rowObj = findRowByKey(key);
+      if (!rowObj) { render(); return; }
       _lp.expanded[key] = 1;
-      render();
-      var cell = document.querySelector('[data-lp-det="' + typeId + '"]');
-      if (cell && !_lp.books[typeId]) loadBook(typeId, false);
+      tr.classList.add('open');
+      tr.insertAdjacentHTML('afterend', detailRowHtml(rowObj));
+      if (!_lp.books[typeId]) loadBook(typeId, false);
     }
   });
 
