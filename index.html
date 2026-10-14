@@ -776,7 +776,8 @@
   .lp-best-g .lp-best-tag { color: var(--brand-2); background: var(--brand-dim); }
   .lp-best-rest { color: var(--dim); margin-left: auto; }
 
-  table.lp-tbl { min-width: 980px; table-layout: fixed; }
+  /* 权重必须压过上面的 .tbl-wrap table.ship-tbl{min-width:620px}，否则窄屏会把数值列挤扁 */
+  .tbl-wrap table.lp-tbl { min-width: 980px; table-layout: fixed; }
   table.lp-tbl th, table.lp-tbl td { padding: 6px 10px; }
   table.lp-tbl th { white-space: nowrap; }
   table.lp-tbl th.num, table.lp-tbl td.num { text-align: right; white-space: nowrap; }
