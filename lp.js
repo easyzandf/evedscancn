@@ -1004,12 +1004,10 @@
     if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); bookBtnText(btn, '刷新中…'); }
     var cells = bookCells(typeId);
     for (var i = 0; i < cells.length; i++) cells[i].classList.add('lp-refreshing');
-    // 进度文字必须放表格外面（#lpHint）：表格有 758 行，在格子里改一次文字就要整表重排 ~5ms
-    var timer = setInterval(function () {
-      setHint('正在刷新「' + nm + '」挂单前五… ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
-    }, 250);
+    // 整个等待期间不要再动 DOM：表格有 758 行，在格子里改一次文字要整表重排 ~5ms，
+    // 工具栏再改一次又要重排 ~10ms。每秒十几次足以把弱机器拖卡，所以只报开始和结果。
+    setHint('正在刷新「' + nm + '」挂单前五…（约 1 秒）');
     apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + '&force=1', function (res) {
-      clearInterval(timer);
       delete _lp.bookBusy[typeId];
       var ms = Date.now() - t0;
       var ok = !!(res && (res.buy || res.sell));
