@@ -338,7 +338,10 @@
     if (_lp.volumesLoading || _lp.volumesLoaded) return;
     _lp.volumesLoading = true;
     var uniq = {};
-    eachOffer(function (st, o) { if (o.type_id) uniq[o.type_id] = 1; });
+    eachOffer(function (st, o) {
+      if (o.type_id) uniq[o.type_id] = 1;
+      (o.required_items || []).forEach(function (ri) { if (ri.type_id) uniq[ri.type_id] = 1; });
+    });
     var list = Object.keys(uniq);
     if (!list.length) { _lp.volumesLoading = false; _lp.volumesLoaded = true; return; }
     var chunks = [];
@@ -375,7 +378,10 @@
     if (_lp.depthLoading) return;
     _lp.depthLoading = true;
     var uniq = {};
-    eachOffer(function (st, o) { if (o.type_id) uniq[o.type_id] = 1; });
+    eachOffer(function (st, o) {
+      if (o.type_id) uniq[o.type_id] = 1;
+      (o.required_items || []).forEach(function (ri) { if (ri.type_id) uniq[ri.type_id] = 1; });
+    });
     var list = Object.keys(uniq);
     if (!list.length) {
       _lp.depthLoading = false;
@@ -417,15 +423,37 @@
         var buy = p ? num(p.b) : 0;    // 最高收购价
         var sell = p ? num(p.s) : 0;   // 最低出售价
 
+        var amt = num(_lp.lp[st.key]);
+        var times = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
+        var batch = times > 0 ? times : 1;   // 材料按本次要换的总批数去买
+
         var mats = [];
         var matCost = 0;
         var matUnknown = false;
         (o.required_items || []).forEach(function (ri) {
           var rp = _lp.prices[ri.type_id] || null;
-          var unit = rp ? (num(rp.s) || num(rp.b)) : 0;   // 买材料按最低卖价，无卖单用最高收购价兜底
-          if (!unit) matUnknown = true;
-          matCost += unit * ri.quantity;
-          mats.push({ type_id: ri.type_id, quantity: ri.quantity, unit: unit });
+          var best = rp ? (num(rp.s) || num(rp.b)) : 0;   // 兜底价：最低卖价，无卖单用最高收购价
+          if (!best) matUnknown = true;
+          var need = ri.quantity * batch;
+          var dep = _lp.depth[ri.type_id] || null;
+          var unit = best, per;
+          if (dep && dep.sell && dep.sell.length) {
+            // 按当前挂卖单从低到高逐档吃，算这批材料的真实成本
+            var swept = 0, rem = need, last = best;
+            for (var k = 0; k < dep.sell.length && rem > 0; k++) {
+              var take = Math.min(num(dep.sell[k].v), rem);
+              swept += take * num(dep.sell[k].p);
+              rem -= take;
+              last = num(dep.sell[k].p);
+            }
+            if (rem > 0) swept += rem * last;   // 前五深度不够，按最后一档价兜底
+            per = swept / batch;
+            unit = swept / need;
+          } else {
+            per = best * ri.quantity;
+          }
+          matCost += per;
+          mats.push({ type_id: ri.type_id, quantity: ri.quantity, unit: unit, batchNeed: need });
         });
 
         var cost = num(o.isk_cost) + matCost;
@@ -439,9 +467,6 @@
 
         var volUnit = num(_lp.volumes[o.type_id]);
         var volTotal = volUnit * o.quantity;
-
-        var amt = num(_lp.lp[st.key]);
-        var times = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
 
         // 吃满前五收单：次数受深度限制，输入 LP 后再受 LP 限制
         var dep = _lp.depth[o.type_id] || null;
@@ -563,7 +588,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价，净收益扣『销售税』；挂卖 = 挂最低出售价，净收益扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建）。市场没有挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 2.4%、安全税 0 可手动改，改完所有数字实时重算。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
+    html += '<p class="lp-note">秒卖 = 卖给最高收购价，净收益扣『销售税』；挂卖 = 挂最低出售价，净收益扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建）。市场没有挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按当前挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按你输入的 LP 折算——同一个物品一次换得越多，材料均价越高。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 2.4%、安全税 0 可手动改，改完所有数字实时重算。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
     renderBody(html);
   }
 
@@ -618,7 +643,7 @@
   function matTitle(r) {
     if (!r.mats.length) return '';
     return r.mats.map(function (m) {
-      return typeName(m.type_id) + ' x' + m.quantity + ' @ ' + iskN(m.unit);
+      return typeName(m.type_id) + ' x' + m.quantity + ' @ 均价 ' + iskN(m.unit) + '（本批共买 ' + iskN(m.batchNeed) + '）';
     }).join('\n');
   }
 

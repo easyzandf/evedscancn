@@ -540,14 +540,14 @@ if ($action === 'depths') {
     $out = []; $miss = [];
     foreach (array_keys($want) as $id) {
         $b = $force ? null : lpCacheGet($pdo, 'bk:' . $region . ':' . $id, LP_PRICE_TTL);
-        if ($b !== null) $out[$id] = ['buy' => $b['buy'], 'bv' => $b['bv'], 'bc' => $b['bc']];
+        if ($b !== null) $out[$id] = ['buy' => $b['buy'], 'sell' => $b['sell'], 'bv' => $b['bv'], 'bc' => $b['bc'], 'sv' => $b['sv'], 'sc' => $b['sc']];
         else $miss[] = $id;
     }
     if ($miss) {
         lpPrimePrices($pdo, $region, $miss);
         foreach ($miss as $id) {
             $b = lpCacheGet($pdo, 'bk:' . $region . ':' . $id, LP_PRICE_TTL);
-            if ($b !== null) $out[$id] = ['buy' => $b['buy'], 'bv' => $b['bv'], 'bc' => $b['bc']];
+            if ($b !== null) $out[$id] = ['buy' => $b['buy'], 'sell' => $b['sell'], 'bv' => $b['bv'], 'bc' => $b['bc'], 'sv' => $b['sv'], 'sc' => $b['sc']];
         }
     }
     echo json_encode(['region' => $region, 'depths' => $out, 'cachedAt' => time()], JSON_UNESCAPED_UNICODE);
