@@ -548,7 +548,7 @@
         if (--left === 0) {
           _lp.historyLoading = false;
           _lp.historyLoaded = true;
-          if (_lp.loaded && _lp.depthRegion === _lp.region) render();
+          if (_lp.loaded && _lp.depthRegion === _lp.region) scheduleRender();
         }
       });
     });
@@ -575,7 +575,7 @@
         if (--left === 0) {
           _lp.volumesLoading = false;
           _lp.volumesLoaded = true;
-          if (_lp.loaded && _lp.depthRegion === _lp.region) render();
+          if (_lp.loaded && _lp.depthRegion === _lp.region) scheduleRender();
         }
       });
     });
@@ -589,7 +589,7 @@
       if (res && res.contracts) {
         _lp.contracts = res.contracts;
         _lp.contractsRegion = _lp.region;
-        if (_lp.loaded && _lp.depthRegion === _lp.region) render();
+        if (_lp.loaded && _lp.depthRegion === _lp.region) scheduleRender();
       }
     });
   }
