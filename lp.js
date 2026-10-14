@@ -293,6 +293,8 @@
           profitList: profitList,
           perLpNow: profitNow === null ? null : profitNow / o.lp_cost,
           perLpList: profitList === null ? null : profitList / o.lp_cost,
+          grossPerLpNow: revNow === null ? null : revNow / o.lp_cost,
+          grossPerLpList: revList === null ? null : revList / o.lp_cost,
           times: times,
           totalNow: profitNow === null ? null : times * profitNow,
           totalList: profitList === null ? null : times * profitList
@@ -353,7 +355,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；均未计手续费和税，取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情 15 分钟缓存，点行展开挂单前五。</p>';
+    html += '<p class="lp-note">秒卖 = 卖给最高收购价；挂卖 = 挂最低出售价；净 ISK/LP = (卖出收入 − ISK 成本 − 材料成本) ÷ LP，毛 ISK/LP = 卖出收入 ÷ LP（不扣成本）；均未计手续费和税，取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情 15 分钟缓存，点行展开挂单前五。</p>';
     renderBody(html);
   }
 
@@ -442,11 +444,13 @@
         + '<div><span class="lp-k">换得</span>x' + iskN(o.quantity) + '</div>'
       + '</td>'
       + '<td class="num lp-c-gain">'
-        + '<div class="lp-val lp-strong">' + perLp(r.perLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
+        + '<div class="lp-val lp-strong">净 ' + perLp(r.perLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
+        + '<div class="lp-sub">毛 ' + perLp(r.grossPerLpNow) + ' <span class="lp-unit">ISK/LP</span></div>'
         + '<div class="lp-sub' + (num(r.profitNow) < 0 ? ' lp-sub-neg' : '') + '">单次 ' + (r.profitNow === null ? '—' : iskShort(r.profitNow)) + '</div>'
       + '</td>'
       + '<td class="num lp-c-gain">'
-        + '<div class="lp-val">' + perLp(r.perLpList) + ' <span class="lp-unit">ISK/LP</span></div>'
+        + '<div class="lp-val">净 ' + perLp(r.perLpList) + ' <span class="lp-unit">ISK/LP</span></div>'
+        + '<div class="lp-sub">毛 ' + perLp(r.grossPerLpList) + ' <span class="lp-unit">ISK/LP</span></div>'
         + '<div class="lp-sub">单次 ' + (r.profitList === null ? '—' : iskShort(r.profitList)) + '</div>'
       + '</td>'
       + '<td class="num lp-c-total">' + totalCell + '</td>'
