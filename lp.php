@@ -24,6 +24,7 @@ define('LP_OFFER_TTL', 86400);   // LP 商店报价：游戏更新才变
 define('LP_PRICE_TTL', 900);     // 市场行情：15 分钟
 define('LP_STATION_TTL', 2592000); // 空间站名基本不变
 define('LP_CONTRACT_TTL', 3600);   // 公开合同索引：每小时重建
+define('LP_TYPE_TTL', 2592000);    // 物品体积基本不变，缓存 30 天
 define('LP_CONTRACT_URL', 'https://data.everef.net/public-contracts/public-contracts-latest.v2.tar.bz2');
 define('LP_MAX_AGE', 1209600);   // 14 天没碰过的缓存行清掉
 define('LP_MAX_ROWS', 6000);
@@ -569,6 +570,40 @@ if ($action === 'contracts') {
         if ($idx === null) $idx = [];
     }
     echo json_encode(['region' => $region, 'contracts' => $idx, 'cachedAt' => time()], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ---- 物品体积（typeID -> m3，缓存 30 天）----
+if ($action === 'volumes') {
+    $want = [];
+    foreach (explode(',', isset($_GET['ids']) ? (string)$_GET['ids'] : '') as $x) {
+        $x = (int)trim($x);
+        if ($x > 0) $want[$x] = true;
+        if (count($want) >= 200) break;
+    }
+    if (!$want) lpFail('invalid ids');
+
+    $pdo = lpDb($dataDir);
+    $out = []; $miss = [];
+    foreach (array_keys($want) as $id) {
+        $c = lpCacheGet($pdo, 'vol:' . $id, LP_TYPE_TTL);
+        if ($c !== null && isset($c['v'])) $out[$id] = (float)$c['v'];
+        else $miss[] = $id;
+    }
+    if ($miss) {
+        foreach (array_chunk($miss, 60) as $chunk) {
+            $urls = [];
+            foreach ($chunk as $id) $urls[(string)$id] = "$ESI/universe/types/$id/?datasource=tranquility";
+            foreach (lpMultiGet($urls) as $id => $r) {
+                if (!isset($r['data']['volume'])) continue;
+                $v = (float)$r['data']['volume'];
+                lpCachePut($pdo, 'vol:' . (int)$id, ['v' => $v]);
+                $out[(int)$id] = $v;
+            }
+        }
+        lpCachePrune($pdo);
+    }
+    echo json_encode(['volumes' => $out], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

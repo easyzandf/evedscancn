@@ -48,6 +48,8 @@
     contracts: {},
     contractsLoading: false,
     contractsRegion: 0,
+    volumes: {},
+    volumesLoaded: false,
     lp: { C: '', G: '' },
     fee: { taxLevel: LP_FEE_DEFAULT.taxLevel, broker: LP_FEE_DEFAULT.broker, safe: LP_FEE_DEFAULT.safe },
     faction: 'all',
@@ -95,6 +97,17 @@
     if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + ' M';
     if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + ' K';
     return String(Math.round(v));
+  }
+
+  // 体积：m3，按 K/M 分级
+  function volFmt(v) {
+    if (v === null || v === undefined || !isFinite(v)) return '—';
+    if (v === 0) return '0';
+    var a = Math.abs(v);
+    if (a >= 1e6) return (v / 1e6).toFixed(2) + ' M';
+    if (a >= 1e3) return (v / 1e3).toFixed(2) + ' K';
+    if (a >= 1) return String(Math.round(v * 100) / 100);
+    return v.toFixed(3);
   }
 
   // 每 LP 收益：小于 100 保留一位小数，其余取整
@@ -314,11 +327,37 @@
     render();
     if (_lp.depthRegion !== _lp.region) loadDepths(!!_lp.forceDepth);
     if (_lp.contractsRegion !== _lp.region) loadContracts(!!_lp.forceDepth);
+    if (!_lp.volumesLoaded) loadVolumes();
     _lp.forceDepth = false;
   }
 
   // 前五收单深度：整表约 500 个 type，服务端逐 type 缓存 15 分钟，首次拉完后面秒开
   // 公开合同：服务端按小时从 everef 快照重建，只保留 LP 可换物品的单物品合同
+  // 物品体积：volume 与区域无关，服务端缓存 30 天，全站只拉一次
+  function loadVolumes() {
+    if (_lp.volumesLoading || _lp.volumesLoaded) return;
+    _lp.volumesLoading = true;
+    var uniq = {};
+    eachOffer(function (st, o) { if (o.type_id) uniq[o.type_id] = 1; });
+    var list = Object.keys(uniq);
+    if (!list.length) { _lp.volumesLoading = false; _lp.volumesLoaded = true; return; }
+    var chunks = [];
+    for (var i = 0; i < list.length; i += 200) chunks.push(list.slice(i, i + 200));
+    var left = chunks.length;
+    chunks.forEach(function (c) {
+      apiGet('lp.php?action=volumes&ids=' + c.join(','), function (res) {
+        if (res && res.volumes) {
+          Object.keys(res.volumes).forEach(function (k) { _lp.volumes[k] = res.volumes[k]; });
+        }
+        if (--left === 0) {
+          _lp.volumesLoading = false;
+          _lp.volumesLoaded = true;
+          if (_lp.loaded) render();
+        }
+      });
+    });
+  }
+
   function loadContracts(force) {
     if (_lp.contractsLoading) return;
     _lp.contractsLoading = true;
@@ -398,6 +437,9 @@
         var profitNow = revNow === null ? null : revNow * (1 - fSales) - cost;
         var profitList = revList === null ? null : revList * (1 - fList) - cost;
 
+        var volUnit = num(_lp.volumes[o.type_id]);
+        var volTotal = volUnit * o.quantity;
+
         var amt = num(_lp.lp[st.key]);
         var times = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
 
@@ -453,6 +495,8 @@
           depUse: depUse,
           depProfit: depProfit,
           contracts: ctr,
+          volUnit: volUnit,
+          volTotal: volTotal,
           contractPerLp: contractPerLp,
           contractGrossPerLp: contractGrossPerLp,
           contractProfit: contractProfit,
@@ -564,6 +608,7 @@
       + '<th class="num lp-th-gain">秒卖收益</th>'
       + '<th class="num lp-th-gain">挂卖收益</th>'
       + '<th class="num lp-th-depth">前五秒卖</th>'
+      + '<th class="num lp-th-vol">体积 m³</th>'
       + '<th class="num lp-th-total">可兑总收益</th>'
       + '</tr></thead>';
     return '<table class="ship-tbl lp-tbl">' + head + '<tbody>'
@@ -642,11 +687,12 @@
         + '<div class="lp-sub">单次 ' + (r.profitList === null ? '—' : iskShort(r.profitList)) + '</div>'
       + '</td>'
       + '<td class="num lp-c-depth">' + depthCell + '</td>'
+      + '<td class="num lp-c-vol" title="单个 ' + volFmt(r.volUnit) + ' m³"><div class="lp-val">' + volFmt(r.volTotal) + '</div><div class="lp-sub">单个 ' + volFmt(r.volUnit) + '</div></td>'
       + '<td class="num lp-c-total">' + totalCell + '</td>'
       + '</tr>';
 
     if (open) {
-      html += '<tr class="lp-detail-row"><td colspan="7">'
+      html += '<tr class="lp-detail-row"><td colspan="8">'
         + '<div class="lp-detail">'
         + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button></div>'
         + contractBlockHtml(r)
