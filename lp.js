@@ -195,9 +195,12 @@
 
   // 输入框连续打字时不要每敲一下就重建整张表
   var _renderTimer = null;
-  function scheduleRender() {
+  var _renderReuse = false;
+  // reuse=true：只重排/重画，不重算 785 条。改 LP 数量、费率这类会影响计算值的操作不能传 true。
+  function scheduleRender(reuse) {
+    _renderReuse = !!reuse;
     if (_renderTimer) clearTimeout(_renderTimer);
-    _renderTimer = setTimeout(function () { _renderTimer = null; render(); }, 150);
+    _renderTimer = setTimeout(function () { _renderTimer = null; render(_renderReuse); }, 150);
   }
 
   // -- 材料清单复制（Multi-Buy：名称 + Tab + 数量）--
@@ -281,15 +284,15 @@
     });
   }
 
-  // 这些 type 的行情变了：写入 depth、统计受影响条数，然后重绘当前这一页。
-  // 分页之后每页只有几十到几百行，重绘一页很便宜，不需要再做行级局部替换。
+  // 这些 type 的行情变了：写入 depth，只重算用到它们的报价（其余行复用），
+  // 然后按当前排序重画这一页。实测比整表重算 + 整表重绘快很多。
   function applyMaterialDepths(typeIds, depths) {
     Object.keys(depths).forEach(function (k) { _lp.depth[k] = depths[k]; });
 
     var hit = {};
     typeIds.forEach(function (t) { hit[String(t)] = 1; });
 
-    var n = 0;
+    var keys = {};
     LP_STORES.forEach(function (st) {
       (_lp.offers[st.key] || []).forEach(function (o) {
         if (!o.lp_cost || o.lp_cost <= 0) return;
@@ -297,11 +300,21 @@
         if (!used) {
           (o.required_items || []).forEach(function (ri) { if (hit[String(ri.type_id)]) used = true; });
         }
-        if (used) n++;
+        if (used) keys[st.key + ':' + o.offer_id] = 1;
       });
     });
+    var n = Object.keys(keys).length;
 
-    render();
+    // 只重算用到这些材料的报价，其余行直接复用，再按当前排序重画这一页
+    var fresh = computeRows(keys);
+    if (fresh.length && _lp.rows.length) {
+      var byKey = {};
+      fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
+      _lp.rows = _lp.rows.map(function (r) { return byKey[rowKey(r)] || r; });
+      render(true);
+    } else {
+      render();
+    }
     return n;
   }
 
@@ -737,10 +750,12 @@
   }
 
   // -- 渲染 --
-  function render() {
+  function render(reuse) {
     if (!$('lpBody') || !_lp.loaded) return;
     syncStickyTop();
-    var all = computeRows();
+    // reuse=true：排序/翻页直接复用上次算好的行——这两件事不改变任何计算值，
+    // 重算 785 条纯属浪费（6 倍降速下实测就是 ~500ms 的卡顿）。
+    var all = (reuse && _lp.rows.length) ? _lp.rows : computeRows();
     _lp.rows = all;
     var rows = sortRows(filterRows(all));
 
@@ -1180,18 +1195,18 @@
         b.classList.toggle('on', b.getAttribute('data-f') === v);
       });
     }
-    render();
+    render(true);
   }
 
-  function lpSetSort(v) { _lp.sort = v; _lp.sortDir = LP_SORT_DIR[v] || 'desc'; _lp.page = 1; render(); }
-  function lpSetSearch(v) { _lp.q = v || ''; _lp.page = 1; scheduleRender(); }
+  function lpSetSort(v) { _lp.sort = v; _lp.sortDir = LP_SORT_DIR[v] || 'desc'; _lp.page = 1; render(true); }
+  function lpSetSearch(v) { _lp.q = v || ''; _lp.page = 1; scheduleRender(true); }
 
   function lpSetPageSize(v) {
     var n = parseInt(v, 10);
     if (!isFinite(n) || n <= 0) n = 20;
     _lp.pageSize = n > 0 ? n : 0;
     _lp.page = 1;
-    render();
+    render(true);
   }
 
   // 翻页：重绘后回到表格顶部（顶栏吸顶，要把它让出来）
@@ -1199,7 +1214,7 @@
     var n = parseInt(p, 10);
     if (!isFinite(n) || n < 1 || n === _lp.page) return;
     _lp.page = n;
-    render();
+    render(true);
     var wrap = document.querySelector('#lpBody .tbl-wrap');
     if (!wrap) return;
     var top = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--lp-sticky-top'), 10) || 56;
@@ -1211,7 +1226,7 @@
     if (k === 'hideBp') _lp.hideBp = !!on;
     if (k === 'noReq') _lp.noReq = !!on;
     _lp.page = 1;
-    render();
+    render(true);
   }
 
   // 一行点击 = 展开/收起；展开后首次按需拉挂单前五
@@ -1231,7 +1246,8 @@
         for (var si = 0; si < sel.options.length; si++) { if (sel.options[si].value === sk) hasOpt = true; }
         if (hasOpt) sel.value = sk;
       }
-      render();
+      _lp.page = 1;
+      render(true);
       return;
     }
     // 材料清单复制：拦在行展开之前
