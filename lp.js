@@ -66,6 +66,9 @@
     contracts: {},
     contractsLoading: false,
     contractsRegion: 0,
+    history: {},
+    historyLoading: false,
+    historyLoaded: false,
     volumes: {},
     volumesLoaded: false,
     lp: { C: '', G: '' },
@@ -109,8 +112,8 @@
   }
 
   function iskShort(v) {
-    if (typeof fmtIsk === 'function') return fmtIsk(v);
     if (v === null || v === undefined || !isFinite(v)) return '—';
+    if (Math.abs(v) >= 1e12) return (v / 1e12).toFixed(2) + ' T';
     if (Math.abs(v) >= 1e9) return (v / 1e9).toFixed(2) + ' B';
     if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + ' M';
     if (Math.abs(v) >= 1e3) return (v / 1e3).toFixed(1) + ' K';
@@ -358,6 +361,7 @@
     _lp.inited = true;
     if (_lp.contractsRegion !== _lp.region) loadContracts(!!_lp.forceDepth);
     if (!_lp.volumesLoaded) loadVolumes();
+    if (!_lp.historyLoaded) loadHistory();
     if (_lp.depthRegion !== _lp.region) {
       // 先拉站内订单簿再渲染：避免加载期间显示全区价被当成站内价
       setHint('正在拉取 ' + stationLabel() + ' 站内行情…首次约 10~30 秒');
@@ -372,6 +376,31 @@
   // 前五收单深度：整表约 500 个 type，服务端逐 type 缓存 15 分钟，首次拉完后面秒开
   // 公开合同：服务端按小时从 everef 快照重建，只保留 LP 可换物品的单物品合同
   // 物品体积：volume 与区域无关，服务端缓存 30 天，全站只拉一次
+  // 48h 成交量/均价：ESI 市场历史是区域级、按天的，取最近两个日桶
+  function loadHistory() {
+    if (_lp.historyLoading || _lp.historyLoaded) return;
+    _lp.historyLoading = true;
+    var uniq = {};
+    eachOffer(function (st, o) { if (o.type_id) uniq[o.type_id] = 1; });
+    var list = Object.keys(uniq);
+    if (!list.length) { _lp.historyLoading = false; _lp.historyLoaded = true; return; }
+    var chunks = [];
+    for (var i = 0; i < list.length; i += 120) chunks.push(list.slice(i, i + 120));
+    var left = chunks.length;
+    chunks.forEach(function (c) {
+      apiGet('lp.php?action=history&region=' + _lp.region + '&ids=' + c.join(','), function (res) {
+        if (res && res.history) {
+          Object.keys(res.history).forEach(function (k) { _lp.history[k] = res.history[k]; });
+        }
+        if (--left === 0) {
+          _lp.historyLoading = false;
+          _lp.historyLoaded = true;
+          if (_lp.loaded && _lp.depthRegion === _lp.region) render();
+        }
+      });
+    });
+  }
+
   function loadVolumes() {
     if (_lp.volumesLoading || _lp.volumesLoaded) return;
     _lp.volumesLoading = true;
@@ -393,7 +422,7 @@
         if (--left === 0) {
           _lp.volumesLoading = false;
           _lp.volumesLoaded = true;
-          if (_lp.loaded) render();
+          if (_lp.loaded && _lp.depthRegion === _lp.region) render();
         }
       });
     });
@@ -407,7 +436,7 @@
       if (res && res.contracts) {
         _lp.contracts = res.contracts;
         _lp.contractsRegion = _lp.region;
-        if (_lp.loaded) render();
+        if (_lp.loaded && _lp.depthRegion === _lp.region) render();
       }
     });
   }
@@ -518,6 +547,11 @@
         var volUnit = num(_lp.volumes[o.type_id]);
         var volTotal = volUnit * o.quantity;
 
+        var hh = _lp.history[o.type_id] || null;
+        var hVol = hh ? num(hh.v) : 0;
+        var hAvg = hh ? num(hh.p) : 0;
+        var hDays = (hh && hh.days) ? hh.days : [];
+
         // 吃满前五收单：次数受深度限制，输入 LP 后再受 LP 限制
         var dep = _lp.depth[o.type_id] || null;
         var ctr = (_lp.contracts[o.type_id] || []).filter(function (c) { return num(c.loc) === num(_lp.station); });
@@ -572,6 +606,9 @@
           contracts: ctr,
           volUnit: volUnit,
           volTotal: volTotal,
+          hVol: hVol,
+          hAvg: hAvg,
+          hDays: hDays,
           contractPerLp: contractPerLp,
           contractGrossPerLp: contractGrossPerLp,
           contractProfit: contractProfit,
@@ -684,6 +721,7 @@
       + '<th class="num lp-th-gain">挂卖收益</th>'
       + '<th class="num lp-th-depth">前五秒卖</th>'
       + '<th class="num lp-th-vol">体积 m³</th>'
+      + '<th class="num lp-th-h48">48h 量/均价</th>'
       + '<th class="num lp-th-total">可兑总收益</th>'
       + '</tr></thead>';
     return '<table class="ship-tbl lp-tbl">' + head + '<tbody>'
@@ -694,6 +732,15 @@
     if (!r.mats.length) return '';
     return r.mats.map(function (m) {
       return typeName(m.type_id) + ' x' + m.quantity + ' @ 均价 ' + iskN(m.unit) + '（本批共买 ' + iskN(m.batchNeed) + '）';
+    }).join('\n');
+  }
+
+  // 48h 历史的悬停明细（区域级、按天）
+  function hTitle(r) {
+    var head = 'ESI 市场历史（区域级，不是单个空间站）';
+    if (!r.hDays || !r.hDays.length) return head + '\n暂无可用量';
+    return head + '\n' + r.hDays.map(function (d) {
+      return d.d + '：量 ' + iskN(d.v) + '，均价 ' + iskShort(d.a) + '（高 ' + iskShort(d.h) + ' / 低 ' + iskShort(d.l) + '）';
     }).join('\n');
   }
 
@@ -764,11 +811,12 @@
       + '</td>'
       + '<td class="num lp-c-depth">' + depthCell + '</td>'
       + '<td class="num lp-c-vol" title="单个 ' + volFmt(r.volUnit) + ' m³"><div class="lp-val">' + volFmt(r.volTotal) + '</div><div class="lp-sub">单个 ' + volFmt(r.volUnit) + '</div></td>'
+      + '<td class="num lp-c-h48" title="' + escHtml(hTitle(r)) + '"><div class="lp-val">' + (r.hVol > 0 ? iskN(r.hVol) : '—') + '</div><div class="lp-sub">' + (r.hAvg > 0 ? iskShort(r.hAvg) : '') + '</div></td>'
       + '<td class="num lp-c-total">' + totalCell + '</td>'
       + '</tr>';
 
     if (open) {
-      html += '<tr class="lp-detail-row"><td colspan="8">'
+      html += '<tr class="lp-detail-row"><td colspan="9">'
         + '<div class="lp-detail">'
         + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button></div>'
         + contractBlockHtml(r)
@@ -893,6 +941,8 @@
     _lp.depthRegion = 0;
     _lp.contracts = {};
     _lp.contractsRegion = 0;
+    _lp.history = {};
+    _lp.historyLoaded = false;
     _lp.pricesAt = 0;
     lpReload(false);
   }

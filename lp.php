@@ -25,6 +25,7 @@ define('LP_PRICE_TTL', 900);     // 市场行情：15 分钟
 define('LP_STATION_TTL', 2592000); // 空间站名基本不变
 define('LP_CONTRACT_TTL', 3600);   // 公开合同索引：每小时重建
 define('LP_TYPE_TTL', 2592000);    // 物品体积基本不变，缓存 30 天
+define('LP_HISTORY_TTL', 21600);   // 市场历史每天更新一次，缓存 6 小时
 define('LP_CONTRACT_URL', 'https://data.everef.net/public-contracts/public-contracts-latest.v2.tar.bz2');
 define('LP_MAX_AGE', 1209600);   // 14 天没碰过的缓存行清掉
 define('LP_MAX_ROWS', 6000);
@@ -621,6 +622,55 @@ if ($action === 'volumes') {
         lpCachePrune($pdo);
     }
     echo json_encode(['volumes' => $out], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ---- 48 小时成交量与均价（ESI 市场历史，区域级、按天）----
+// 没有 48 小时这个粒度，取最近两个日桶：量相加，价按量加权。
+if ($action === 'history') {
+    $region = isset($_GET['region']) ? (int)$_GET['region'] : 0;
+    if (!in_array($region, $LP_REGIONS, true)) lpFail('unknown region');
+
+    $want = [];
+    foreach (explode(',', isset($_GET['ids']) ? (string)$_GET['ids'] : '') as $x) {
+        $x = (int)trim($x);
+        if ($x > 0) $want[$x] = true;
+        if (count($want) >= 120) break;
+    }
+    if (!$want) lpFail('invalid ids');
+
+    $pdo = lpDb($dataDir);
+    $out = []; $miss = [];
+    foreach (array_keys($want) as $id) {
+        $c = $force ? null : lpCacheGet($pdo, 'hi:' . $region . ':' . $id, LP_HISTORY_TTL);
+        if ($c !== null) $out[$id] = $c;
+        else $miss[] = $id;
+    }
+    if ($miss) {
+        foreach (array_chunk($miss, 60) as $chunk) {
+            $urls = [];
+            foreach ($chunk as $id) $urls[(string)$id] = "$ESI/markets/$region/history/?type_id=$id&datasource=tranquility";
+            foreach (lpMultiGet($urls) as $id => $r) {
+                $d = $r['data'];
+                if (!is_array($d) || !$d) continue;   // 新物品没有历史
+                $tail = array_slice($d, -2);
+                $vol = 0; $sum = 0; $oc = 0; $days = [];
+                foreach ($tail as $row) {
+                    $v = (float)($row['volume'] ?? 0);
+                    $a = (float)($row['average'] ?? 0);
+                    $vol += $v;
+                    $sum += $a * $v;
+                    $oc += (int)($row['order_count'] ?? 0);
+                    $days[] = ['d' => (string)($row['date'] ?? ''), 'v' => $v, 'a' => $a, 'h' => (float)($row['highest'] ?? 0), 'l' => (float)($row['lowest'] ?? 0)];
+                }
+                $rec = ['v' => $vol, 'p' => $vol > 0 ? $sum / $vol : 0, 'oc' => $oc, 'days' => $days];
+                lpCachePut($pdo, 'hi:' . $region . ':' . (int)$id, $rec);
+                $out[(int)$id] = $rec;
+            }
+        }
+        lpCachePrune($pdo);
+    }
+    echo json_encode(['region' => $region, 'history' => $out], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
