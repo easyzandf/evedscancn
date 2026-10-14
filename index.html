@@ -742,6 +742,7 @@
   .lp-fee { display: inline-flex; align-items: center; gap: 8px; padding: 3px 9px; border: 1px solid var(--border); border-radius: var(--radius); }
   .lp-fee label { gap: 4px; }
   .lp-bar .lp-fee input[type=number] { width: 58px; padding: 4px 6px; text-align: right; }
+  .lp-bar .lp-fee select { padding: 4px 6px; font-size: 12.5px; }
   .lp-bar input[type=text] { width: 190px; }
   .lp-lpinput { padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); }
   .lp-lpinput .lp-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
@@ -1387,7 +1388,14 @@
       <label class="lp-lpinput lp-c"><span class="lp-dot"></span>加达里 LP <input type="number" id="lpAmtC" min="0" step="1000" placeholder="0" oninput="lpSetLp('C', this.value)"></label>
       <label class="lp-lpinput lp-g"><span class="lp-dot"></span>盖伦特 LP <input type="number" id="lpAmtG" min="0" step="1000" placeholder="0" oninput="lpSetLp('G', this.value)"></label>
       <span class="lp-fee">
-        <label>销售税 <input type="number" id="lpFeeSales" value="7.5" min="0" max="100" step="0.1" oninput="lpSetFee('sales', this.value)">%</label>
+        <label>销售税 <select id="lpFeeSalesLevel" onchange="lpSetTaxLevel(this.value)">
+          <option value="0">Accounting 0 级 · 7.50%</option>
+          <option value="1">Accounting 1 级 · 6.68%</option>
+          <option value="2">Accounting 2 级 · 5.85%</option>
+          <option value="3">Accounting 3 级 · 5.03%</option>
+          <option value="4" selected>Accounting 4 级 · 4.20%</option>
+          <option value="5">Accounting 5 级 · 3.38%</option>
+        </select></label>
         <label>中介费 <input type="number" id="lpFeeBroker" value="2.4" min="0" max="100" step="0.1" oninput="lpSetFee('broker', this.value)">%</label>
         <label>安全税 <input type="number" id="lpFeeSafe" value="0" min="0" max="100" step="0.1" oninput="lpSetFee('safe', this.value)">%</label>
       </span>
@@ -5108,6 +5116,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=0600eac5"></script>
+<script src="lp.js?v=de9a830a"></script>
 </body>
 </html>

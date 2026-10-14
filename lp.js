@@ -24,10 +24,11 @@
     { id: 10000042, label: 'Hek / Metropolis' }
   ];
 
-  // 销售税：0 技能基础 7.5%（Accounting 每级再降 11%，满级 3.37%）
-  var LP_TAX = 0.075;
-  // 默认费率：销售税 0 技能 7.5%、中介费 0 技能 3%、安全税 0；页面上的输入框可改
-  var LP_FEE_DEFAULT = { sales: 7.5, broker: 2.4, safe: 0 };
+  // 销售税 = 7.5% × (1 − 11% × Accounting 等级)；默认 4 级 = 4.2%
+  var LP_TAX_BASE = 7.5;
+  var LP_TAX_PER_LEVEL = 0.11;
+  // 默认费率：Accounting 4 级、中介费 2.4%、安全税 0；页面上的控件可改
+  var LP_FEE_DEFAULT = { taxLevel: 4, broker: 2.4, safe: 0 };
 
   var _lp = {
     inited: false,
@@ -45,7 +46,7 @@
     contractsLoading: false,
     contractsRegion: 0,
     lp: { C: '', G: '' },
-    fee: { sales: LP_FEE_DEFAULT.sales, broker: LP_FEE_DEFAULT.broker, safe: LP_FEE_DEFAULT.safe },
+    fee: { taxLevel: LP_FEE_DEFAULT.taxLevel, broker: LP_FEE_DEFAULT.broker, safe: LP_FEE_DEFAULT.safe },
     faction: 'all',
     sort: 'now',
     q: '',
@@ -71,6 +72,12 @@
   function num(v) {
     var n = parseFloat(v);
     return isFinite(n) ? n : 0;
+  }
+
+  // Accounting 等级 -> 销售税百分比
+  function salesTaxPct() {
+    var lv = Math.max(0, Math.min(5, Math.round(num(_lp.fee.taxLevel))));
+    return LP_TAX_BASE * (1 - LP_TAX_PER_LEVEL * lv);
   }
 
   function iskN(v) {
@@ -381,7 +388,7 @@
 
         var cost = num(o.isk_cost) + matCost;
         // 秒卖（吃收单）只扣销售税；挂卖还要再扣中介费和安全税
-        var fSales = num(_lp.fee.sales) / 100;
+        var fSales = salesTaxPct() / 100;
         var fList = fSales + num(_lp.fee.broker) / 100 + num(_lp.fee.safe) / 100;
         var revNow = buy > 0 ? buy * o.quantity : null;
         var revList = sell > 0 ? sell * o.quantity : null;
@@ -509,7 +516,7 @@
 
     var html = summaryHtml(all);
     html += '<div class="tbl-wrap">' + tableHtml(rows) + '</div>';
-    html += '<p class="lp-note">秒卖 = 卖给最高收购价，净收益扣『销售税』；挂卖 = 挂最低出售价，净收益扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建）。市场没有挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。费率默认：销售税 7.5%、中介费 2.4%、安全税 0，顶部输入框可随时修改，改完所有数字实时重算。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
+    html += '<p class="lp-note">秒卖 = 卖给最高收购价，净收益扣『销售税』；挂卖 = 挂最低出售价，净收益扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 公开合同里该物品最便宜的单物品合同单价（只索引 LP 能换到的物品，每小时从 everef 快照重建）。市场没有挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 2.4%、安全税 0 可手动改，改完所有数字实时重算。取欧服全区最优（可能含玩家建筑）。LP 商店报价 24 小时缓存，行情与前五深度 15 分钟缓存。</p>';
     renderBody(html);
   }
 
@@ -665,10 +672,10 @@
     html += '</tbody></table>';
     var c0 = list[0];
     var rev = num(c0.unit) * r.offer.quantity;
-    var profit = rev * (1 - num(_lp.fee.sales) / 100) - r.cost;
+    var profit = rev * (1 - salesTaxPct() / 100) - r.cost;
     var per = r.offer.lp_cost > 0 ? profit / r.offer.lp_cost : null;
     html += '<div class="lp-detail-msg">按最低合同单价：毛收入 ' + iskShort(rev)
-      + '，扣 ' + num(_lp.fee.sales) + '% 销售税与 ISK/材料成本后净收益 ' + iskShort(profit)
+      + '，扣 ' + salesTaxPct().toFixed(2) + '% 销售税与 ISK/材料成本后净收益 ' + iskShort(profit)
       + '，折合 <b>' + perLp(per) + ' ISK/LP</b></div>';
     return html + '</div>';
   }
@@ -777,6 +784,13 @@
     scheduleRender();
   }
 
+  // 销售税改成选 Accounting 等级，不用手输税率
+  function lpSetTaxLevel(v) {
+    var n = parseInt(v, 10);
+    _lp.fee.taxLevel = (isFinite(n) && n >= 0 && n <= 5) ? n : 4;
+    scheduleRender();
+  }
+
   function lpSetFaction(v) {
     _lp.faction = v;
     var box = $('lpFaction');
@@ -831,6 +845,7 @@
   window.lpSetRegion = lpSetRegion;
   window.lpSetLp = lpSetLp;
   window.lpSetFee = lpSetFee;
+  window.lpSetTaxLevel = lpSetTaxLevel;
   window.lpSetFaction = lpSetFaction;
   window.lpSetSort = lpSetSort;
   window.lpSetSearch = lpSetSearch;
