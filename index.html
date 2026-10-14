@@ -803,6 +803,17 @@
     background: var(--surface-2); color: var(--muted); font-size: 10.5px;
   }
   .lp-warn { color: var(--red); font-weight: 700; cursor: help; }
+  table.lp-tbl .lp-copy-mat { cursor: copy; border-bottom: 1px dashed var(--dim); }
+  table.lp-tbl .lp-copy-mat:hover { color: var(--brand-2); border-bottom-color: var(--brand-2); }
+  table.lp-tbl .lp-copy-mat.lp-copied { color: var(--green); border-bottom-color: var(--green); }
+  .lp-detail-bar { margin-bottom: 8px; }
+  .lp-copy-btn {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+    padding: 5px 12px; border-radius: var(--radius); font-size: 12px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .lp-copy-btn:hover { color: var(--text); border-color: var(--brand); }
+  .lp-copy-btn.lp-copied-btn { color: var(--green); border-color: var(--green); }
   .lp-tag { display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
   .lp-tag-c { background: var(--cyan-dim); color: var(--cyan); }
   .lp-tag-g { background: var(--brand-dim); color: var(--brand-2); }
@@ -5083,6 +5094,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=c91e9b8f"></script>
+<script src="lp.js?v=b25d8604"></script>
 </body>
 </html>

@@ -126,6 +126,51 @@
     _renderTimer = setTimeout(function () { _renderTimer = null; render(); }, 150);
   }
 
+  // -- 材料清单复制（Multi-Buy：名称 + Tab + 数量）--
+  function copyText(t, ok) {
+    if (typeof _copyText === 'function') { _copyText(t, null, ok); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(ok, function () {});
+  }
+
+  function sanName(s) {
+    if (typeof _sanName === 'function') return _sanName(s);
+    return String(s == null ? '' : s).replace(/[\t\r\n]+/g, ' ');
+  }
+
+  function flashCopied(el, msg) {
+    if (!el) return;
+    if (el.tagName === 'BUTTON') {
+      if (!el.getAttribute('data-label')) el.setAttribute('data-label', el.textContent);
+      el.textContent = msg;
+      el.classList.add('lp-copied-btn');
+      setTimeout(function () {
+        el.textContent = el.getAttribute('data-label') || el.textContent;
+        el.classList.remove('lp-copied-btn');
+      }, 1500);
+    } else {
+      el.classList.add('lp-copied');
+      setTimeout(function () { el.classList.remove('lp-copied'); }, 1200);
+    }
+  }
+
+  function findOffer(key) {
+    var parts = String(key || '').split(':');
+    var sk = parts[0], oid = parseInt(parts[1], 10);
+    var found = null;
+    (_lp.offers[sk] || []).forEach(function (o) { if (o.offer_id === oid) found = o; });
+    return found;
+  }
+
+  function copyMaterialList(key, el) {
+    var o = findOffer(key);
+    if (!o) return;
+    if (!o.required_items || !o.required_items.length) { flashCopied(el, '无需材料'); return; }
+    var lines = o.required_items.map(function (ri) {
+      return sanName(typeName(ri.type_id)) + '\t' + ri.quantity;
+    });
+    copyText(lines.join('\n'), function () { flashCopied(el, '已复制!'); });
+  }
+
   // -- 名称 --
   function localName(id) {
     if (typeof kbTypeLocal === 'function') {
@@ -485,7 +530,8 @@
     var cls = 'lp-row' + (open ? ' open' : '');
 
     var matLine = r.mats.length
-      ? '<span title="' + escHtml(matTitle(r)) + '">' + r.mats.length + ' 项 ' + iskShort(r.matCost) + '</span>'
+      ? '<span class="lp-copy-mat" data-lp-mat="' + escHtml(key) + '" title="点击复制材料清单（Multi-Buy）&#10;' + escHtml(matTitle(r)) + '">'
+        + r.mats.length + ' 项 ' + iskShort(r.matCost) + '</span>'
         + (r.matUnknown ? ' <span class="lp-warn" title="有材料查不到行情，成本偏低">?</span>' : '')
       : '—';
 
@@ -535,8 +581,10 @@
 
     if (open) {
       html += '<tr class="lp-detail-row"><td colspan="7">'
-        + '<div class="lp-detail" data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
-        + '</td></tr>';
+        + '<div class="lp-detail">'
+        + '<div class="lp-detail-bar"><button type="button" class="lp-copy-btn" data-lp-mat="' + escHtml(key) + '">复制材料清单(Multi-Buy)</button></div>'
+        + '<div data-lp-det="' + o.type_id + '">' + detailHtml(o.type_id) + '</div>'
+        + '</div></td></tr>';
     }
     return html;
   }
@@ -657,7 +705,16 @@
 
   // 一行点击 = 展开/收起；展开后首次按需拉挂单前五
   document.addEventListener('click', function (e) {
-    var tr = e.target && e.target.closest ? e.target.closest('tr.lp-row') : null;
+    var t = e.target;
+    if (!t || !t.closest) return;
+    // 材料清单复制：拦在行展开之前
+    var cp = t.closest('[data-lp-mat]');
+    if (cp && cp.closest('#pg-lp')) {
+      e.preventDefault();
+      copyMaterialList(cp.getAttribute('data-lp-mat'), cp);
+      return;
+    }
+    var tr = t.closest('tr.lp-row');
     if (!tr || !tr.closest('#pg-lp')) return;
     var key = tr.getAttribute('data-lp-key');
     var typeId = parseInt(tr.getAttribute('data-lp-type'), 10);
