@@ -793,7 +793,16 @@
   table.lp-tbl .lp-th-total { width: 9%; }
   table.lp-tbl tr.lp-row { cursor: pointer; }
   table.lp-tbl tr.lp-row.open td { background: var(--brand-dim); }
-  table.lp-tbl .lp-name { font-weight: 600; color: var(--text); white-space: normal; }
+  table.lp-tbl .lp-c-item { position: relative; }
+  table.lp-tbl .lp-name { font-weight: 600; color: var(--text); white-space: normal; padding-right: 22px; }
+  table.lp-tbl .lp-name-copy {
+    position: absolute; top: 7px; right: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; margin: 0; padding: 0;
+    background: none; border: none; color: var(--dim); cursor: pointer;
+  }
+  table.lp-tbl .lp-name-copy:hover { color: var(--brand-2); }
+  table.lp-tbl .lp-name-copy.lp-copied { color: var(--green); }
   table.lp-tbl .lp-en { color: var(--dim); font-size: 11px; white-space: normal; }
   table.lp-tbl .lp-strong { color: var(--green); font-weight: 700; }
   table.lp-tbl .lp-sub { color: var(--dim); font-size: 11px; }
@@ -5116,6 +5125,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=de9a830a"></script>
+<script src="lp.js?v=b86f27f3"></script>
 </body>
 </html>

@@ -30,6 +30,9 @@
   // 默认费率：Accounting 4 级、中介费 2.4%、安全税 0；页面上的控件可改
   var LP_FEE_DEFAULT = { taxLevel: 4, broker: 2.4, safe: 0 };
 
+  // 复制图标（lucide copy，内联避免依赖）
+  var LP_COPY_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+
   var _lp = {
     inited: false,
     loading: false,
@@ -156,7 +159,7 @@
 
   function flashCopied(el, msg) {
     if (!el) return;
-    if (el.tagName === 'BUTTON') {
+    if (el.tagName === 'BUTTON' && !el.querySelector('svg')) {
       if (!el.getAttribute('data-label')) el.setAttribute('data-label', el.textContent);
       el.textContent = msg;
       el.classList.add('lp-copied-btn');
@@ -619,6 +622,7 @@
       + '<td class="lp-c-item"><div class="lp-name">'
         + '<span class="lp-tag lp-tag-' + r.store.key.toLowerCase() + '">' + r.store.key + '</span>'
         + escHtml(r.name) + (r.isBp ? ' <span class="lp-mini">蓝图</span>' : '') + '</div>'
+        + '<button type="button" class="lp-name-copy" data-lp-name="' + escHtml(r.name) + '" title="复制物品名">' + LP_COPY_ICON + '</button>' + '</div>'
         + (r.en ? '<div class="lp-en">' + escHtml(r.en) + '</div>' : '') + '</td>'
       + '<td class="num lp-c-cost">'
         + '<div><span class="lp-k">LP</span>' + iskN(o.lp_cost) + '</div>'
@@ -821,6 +825,12 @@
     if (cp && cp.closest('#pg-lp')) {
       e.preventDefault();
       copyMaterialList(cp.getAttribute('data-lp-mat'), cp);
+      return;
+    }
+    var cn = t.closest('[data-lp-name]');
+    if (cn && cn.closest('#pg-lp')) {
+      e.preventDefault();
+      copyText(cn.getAttribute('data-lp-name'), function () { flashCopied(cn, '已复制!'); });
       return;
     }
     var tr = t.closest('tr.lp-row');
