@@ -47,6 +47,8 @@
 
   // 复制图标（lucide copy，内联避免依赖）
   var LP_COPY_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+  // 刷新图标（lucide refresh-cw）
+  var LP_REFRESH_ICON = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>';
 
   var _lp = {
     inited: false,
@@ -218,6 +220,21 @@
       return sanName(typeName(ri.type_id)) + '\t' + ri.quantity;
     });
     copyText(lines.join('\n'), function () { flashCopied(el, '已复制!'); });
+  }
+
+  // 刷新这条报价用到的材料行情（只刷这几个 type，绕过 15 分钟缓存）
+  function refreshMaterials(key, btn) {
+    var o = findOffer(key);
+    if (!o || !o.required_items || !o.required_items.length) return;
+    var ids = o.required_items.map(function (ri) { return ri.type_id; });
+    if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); }
+    apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station + '&ids=' + ids.join(',') + '&force=1', function (res) {
+      if (btn) { btn.disabled = false; btn.classList.remove('lp-spin'); }
+      if (res && res.depths) {
+        Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
+        render();
+      }
+    });
   }
 
   // -- 名称 --
@@ -690,6 +707,7 @@
       ? '<span class="lp-copy-mat" data-lp-mat="' + escHtml(key) + '" title="点击复制材料清单（Multi-Buy）&#10;' + escHtml(matTitle(r)) + '">'
         + r.mats.length + ' 项 ' + iskShort(r.matCost) + '</span>'
         + (r.matUnknown ? ' <span class="lp-warn" title="有材料查不到行情，成本偏低">?</span>' : '')
+        + '<button type="button" class="lp-mat-refresh" data-lp-matrefresh="' + escHtml(key) + '" title="刷新这几项材料的最新价格">' + LP_REFRESH_ICON + '</button>'
       : '—';
 
     var amt = num(_lp.lp[r.store.key]);
@@ -953,6 +971,12 @@
     if (cn && cn.closest('#pg-lp')) {
       e.preventDefault();
       copyText(cn.getAttribute('data-lp-name'), function () { flashCopied(cn, '已复制!'); });
+      return;
+    }
+    var mr = t.closest('[data-lp-matrefresh]');
+    if (mr && mr.closest('#pg-lp')) {
+      e.preventDefault();
+      refreshMaterials(mr.getAttribute('data-lp-matrefresh'), mr);
       return;
     }
     var tr = t.closest('tr.lp-row');

@@ -824,6 +824,14 @@
   table.lp-tbl .lp-copy-mat { cursor: copy; border-bottom: 1px dashed var(--dim); }
   table.lp-tbl .lp-copy-mat:hover { color: var(--brand-2); border-bottom-color: var(--brand-2); }
   table.lp-tbl .lp-copy-mat.lp-copied { color: var(--green); border-bottom-color: var(--green); }
+  table.lp-tbl .lp-mat-refresh {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; margin-left: 4px; padding: 0; vertical-align: -2px;
+    background: none; border: none; color: var(--dim); cursor: pointer;
+  }
+  table.lp-tbl .lp-mat-refresh:hover { color: var(--brand-2); }
+  table.lp-tbl .lp-mat-refresh.lp-spin svg { animation: lp-spin .9s linear infinite; }
+  @keyframes lp-spin { to { transform: rotate(360deg); } }
   .lp-detail-bar { margin-bottom: 8px; }
   .lp-copy-btn {
     background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
@@ -5126,6 +5134,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=5dfbb054"></script>
+<script src="lp.js?v=dcdc079f"></script>
 </body>
 </html>
