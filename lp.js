@@ -41,6 +41,12 @@
     return label || String(_lp.station);
   }
 
+  // 顶部栏本身是 sticky 的，表头吸顶要避开它的高度
+  function syncStickyTop() {
+    var tb = document.querySelector('.topbar');
+    if (tb) document.documentElement.style.setProperty('--lp-sticky-top', tb.offsetHeight + 'px');
+  }
+
   // 销售税 = 7.5% × (1 − 11% × Accounting 等级)；默认 4 级 = 4.2%
   var LP_TAX_BASE = 7.5;
   var LP_TAX_PER_LEVEL = 0.11;
@@ -674,6 +680,7 @@
   // -- 渲染 --
   function render() {
     if (!$('lpBody') || !_lp.loaded) return;
+    syncStickyTop();
     var all = computeRows();
     _lp.rows = all;
     var rows = sortRows(filterRows(all));
@@ -1107,4 +1114,12 @@
   window.lpSetSort = lpSetSort;
   window.lpSetSearch = lpSetSearch;
   window.lpSetFlag = lpSetFlag;
+  window.addEventListener('resize', syncStickyTop);
+  // 顶栏高度会随字体加载/换行变化，用 ResizeObserver 持续同步吸顶偏移
+  (function watchTopbar() {
+    var tb = document.querySelector('.topbar');
+    if (!tb) return;
+    if (window.ResizeObserver) new ResizeObserver(syncStickyTop).observe(tb);
+    syncStickyTop();
+  })();
 })();

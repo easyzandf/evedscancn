@@ -788,6 +788,18 @@
   table.lp-tbl th.lp-sortable:hover { color: var(--brand-2); }
   table.lp-tbl .lp-sort-ar { margin-left: 3px; font-size: 9px; color: var(--dim); }
   table.lp-tbl .lp-sort-ar.on { color: var(--brand-2); }
+
+  /* 宽屏没有横向滚动时，表头跟着页面滚动固定在顶部栏下方（窄屏仍需横向滚动，无法吸顶） */
+  @media (min-width: 1240px) {
+    #lpBody .tbl-wrap { overflow: visible; }
+    #lpBody table.lp-tbl thead th {
+      position: sticky;
+      top: var(--lp-sticky-top, 56px);
+      z-index: 3;
+      background: var(--surface);
+      box-shadow: 0 1px 0 var(--border);
+    }
+  }
   table.lp-tbl th.num, table.lp-tbl td.num { text-align: right; white-space: nowrap; }
   table.lp-tbl .lp-th-item { width: 21%; text-align: left; }
   table.lp-tbl .lp-th-cost { width: 13%; }
@@ -5146,6 +5158,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=dc28953f"></script>
+<script src="lp.js?v=50b37a84"></script>
 </body>
 </html>
