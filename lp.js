@@ -308,7 +308,8 @@
     return fresh.length;
   }
 
-  // 原地换掉受影响的行（rowHtml 会按 _lp.expanded 自动带上展开状态；明细行要单独重画）
+  // 原地换掉受影响的行。rowHtml 对展开中的行本来就会连明细行一起输出，
+  // 所以先把旧明细行摘掉再整行替换，否则会出现两条明细。
   function repaintRows(keys) {
     var tbody = document.querySelector('#lpBody table.lp-tbl tbody');
     if (!tbody) return;
@@ -319,9 +320,8 @@
       var r = findRowByKey(k);
       if (!r) continue;
       var nx = trs[i].nextElementSibling;
-      var det = (nx && nx.classList.contains('lp-detail-row')) ? nx : null;
+      if (nx && nx.classList.contains('lp-detail-row')) nx.parentNode.removeChild(nx);
       trs[i].outerHTML = rowHtml(r);
-      if (det) det.outerHTML = detailRowHtml(r);
     }
     reorderRows(keys);
   }
