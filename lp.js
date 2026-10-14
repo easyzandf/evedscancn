@@ -1000,12 +1000,14 @@
     if (_lp.bookBusy[typeId]) return;
     _lp.bookBusy[typeId] = 1;
     var t0 = Date.now();
-    if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); bookBtnText(btn, '刷新中… 0.0s'); }
+    var nm = typeName(typeId);
+    if (btn) { btn.disabled = true; btn.classList.add('lp-spin'); bookBtnText(btn, '刷新中…'); }
     var cells = bookCells(typeId);
     for (var i = 0; i < cells.length; i++) cells[i].classList.add('lp-refreshing');
+    // 进度文字必须放表格外面（#lpHint）：表格有 758 行，在格子里改一次文字就要整表重排 ~5ms
     var timer = setInterval(function () {
-      if (btn) bookBtnText(btn, '刷新中… ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
-    }, 100);
+      setHint('正在刷新「' + nm + '」挂单前五… ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
+    }, 250);
     apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + '&force=1', function (res) {
       clearInterval(timer);
       delete _lp.bookBusy[typeId];
@@ -1017,9 +1019,11 @@
       if (btn) {
         btn.classList.remove('lp-spin');
         btn.disabled = false;
-        bookBtnText(btn, ok ? ('已更新 · ' + (ms / 1000).toFixed(1) + 's') : '刷新失败，点这里重试');
+        bookBtnText(btn, ok ? '已更新' : '刷新失败，点这里重试');
         setTimeout(function () { bookBtnText(btn, '刷新挂单前五'); }, 2400);
       }
+      setHint(ok ? ('「' + nm + '」挂单前五已更新 · 用时 ' + (ms / 1000).toFixed(1) + 's') : ('「' + nm + '」挂单前五刷新失败'));
+      setTimeout(function () { if (!_lp.bookBusy[typeId]) setHint(''); }, 4000);
     });
   }
 
