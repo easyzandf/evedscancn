@@ -320,8 +320,32 @@
     return n;
   }
 
-  // 只重算这几条报价，其余行直接复用 _lp.rows，最后只重排 + 重画当前这一页。
-  // 改「拟兑换数量」、材料行情变化都走这里。
+  // 原地重画某一行（不重排）：用户填数量时，这行不该在光标底下跳走
+  function repaintRowNow(key) {
+    var tr = document.querySelector('#lpBody tr.lp-row[data-lp-key="' + key + '"]');
+    if (!tr) return;
+    var r = findRowByKey(key);
+    if (!r) return;
+    var nx = tr.nextElementSibling;
+    if (nx && nx.classList.contains('lp-detail-row')) nx.parentNode.removeChild(nx);
+    tr.outerHTML = rowHtml(r);
+    var sw = document.querySelector('#lpBody .lp-sumwrap');
+    if (sw) sw.innerHTML = summaryHtml(_lp.rows);
+  }
+
+  // 只重算一条报价，并把这一行原地换掉
+  function recomputeRow(key) {
+    var one = {};
+    one[key] = 1;
+    var fresh = computeRows(one);
+    if (!fresh.length || !_lp.rows.length) { render(); return; }
+    var byKey = {};
+    fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
+    _lp.rows = _lp.rows.map(function (r) { return byKey[rowKey(r)] || r; });
+    repaintRowNow(key);
+  }
+
+  // 只重算这几条报价，其余行复用 _lp.rows，然后重排 + 重画当前这一页（⟳ 刷新材料价格用）
   function recomputeOffers(keys) {
     var fresh = computeRows(keys);
     if (!fresh.length || !_lp.rows.length) { render(); return; }
@@ -1255,13 +1279,11 @@
   function lpSetQty(key, v) {
     var n = parseInt(v, 10);
     if (isFinite(n) && n > 0) _lp.qty[key] = n; else delete _lp.qty[key];
-    var one = {};
-    one[key] = 1;
     var o = findOffer(key);
     var ids = [];
     if (o && o.required_items) o.required_items.forEach(function (ri) { ids.push(ri.type_id); });
-    recomputeOffers(one);
-    if (ids.length) ensureMatLevels(ids, function () { recomputeOffers(one); });
+    recomputeRow(key);
+    if (ids.length) ensureMatLevels(ids, function () { recomputeRow(key); });
   }
 
   function lpSetFaction(v) {
