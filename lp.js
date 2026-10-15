@@ -936,7 +936,8 @@
 
     var amt = num(_lp.lp[r.store.key]);
     var totalVal = r.totalNow !== null ? r.totalNow : r.totalContract;
-    var totalCell = amt > 0
+    // 填了「拟兑换次数」时即使没填 LP 总量，也应该给出可兑总收益
+    var totalCell = r.times > 0
       ? (totalVal === null ? '—' : '<div class="lp-val lp-strong">' + iskShort(totalVal) + '</div><div class="lp-sub">' + iskN(r.times) + ' 次</div>')
       : '<span class="lp-muted">填 LP</span>';
 
