@@ -640,7 +640,8 @@
           // 优先用完整价格档位（matlevels）；没拉到就退回前五挂卖单
           var lvl = _lp.matLevels[ri.type_id];
           var d5 = _lp.depth[ri.type_id] || null;
-          var book = (lvl && lvl.lv && lvl.lv.length) ? lvl.lv : (d5 && d5.sell ? d5.sell : null);
+          var full = !!(lvl && lvl.lv && lvl.lv.length);   // 拿到的是不是完整档位
+          var book = full ? lvl.lv : (d5 && d5.sell ? d5.sell : null);
           var unit = best, per;
           if (book && book.length) {
             // 按站内挂卖单从低到高逐档吃；有完整档位时就是真实吃单成本
@@ -651,7 +652,8 @@
               rem -= take;
               last = num(book[k].p);
             }
-            if (rem > 0) { swept += rem * last; matShort = true; }   // 档位不够，尾部按最高可见价估
+            // 只有“完整档位也不够”才算真不够；只拿前五兜底时不报警，免得默认视图满屏感叹号
+            if (rem > 0) { swept += rem * last; if (full) matShort = true; }
             per = swept / batch;
             unit = swept / need;
           } else {
