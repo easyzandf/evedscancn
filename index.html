@@ -854,6 +854,14 @@
   }
   .lp-warn { color: var(--red); font-weight: 700; cursor: help; }
   table.lp-tbl .lp-copy-mat { cursor: copy; border-bottom: 1px dashed var(--dim); }
+  table.lp-tbl .lp-qty { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 2px; }
+  table.lp-tbl .lp-qty input {
+    width: 58px; padding: 1px 5px; font-size: 12px; text-align: right;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: inherit;
+  }
+  table.lp-tbl .lp-qty input:focus { border-color: var(--brand); outline: none; }
+  table.lp-tbl .lp-qty input::placeholder { color: var(--dim); }
   table.lp-tbl .lp-copy-mat:hover { color: var(--brand-2); border-bottom-color: var(--brand-2); }
   table.lp-tbl .lp-copy-mat.lp-copied { color: var(--green); border-bottom-color: var(--green); }
   table.lp-tbl .lp-mat-refresh {
@@ -5194,6 +5202,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=28e0f2a3"></script>
+<script src="lp.js?v=5c3416b4"></script>
 </body>
 </html>

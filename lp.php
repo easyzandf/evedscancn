@@ -4,6 +4,7 @@
 //   GET ?action=offers&corp=1000180[&force=1]        -> LP 商店报价（缓存 24h）
 //   GET ?action=aggregate&region=10000002&ids=1,2,3  -> 每个 type 的最高收购价/最低出售价（缓存 15min）
 //   GET ?action=book&region=10000002&type_id=123     -> 单物品买卖挂单前五（缓存 15min，按需拉）
+//   GET ?action=matlevels&region=&station=&ids=1,2    -> 站内卖单按价格聚合的完整档位（算大批量材料成本）
 //
 // 报价来自 ESI /loyalty/stores/{corp}/offers/（公开、免授权）。
 // 行情汇总优先用 fuzzwork 聚合（一次可问 200 个 type，省掉几百次请求），
@@ -207,7 +208,7 @@ function lpStoreOffers($pdo, $corp, $force) {
 }
 
 // ---- 订单簿：一次拿一个区域内某个 type 的全部买卖单，按需翻页 ----
-function lpOrdersFor($region, array $typeIds) {
+function lpOrdersFor($region, array $typeIds, $maxPages = 4) {
     global $ESI;
     $out  = [];
     $urls = [];
@@ -221,7 +222,7 @@ function lpOrdersFor($region, array $typeIds) {
         if (!is_array($r['data'])) { $out[(int)$k] = null; continue; }
         $out[(int)$k] = $r['data'];
         $pages = isset($r['headers']['x-pages']) ? (int)$r['headers']['x-pages'] : 1;
-        $pages = min($pages, 4);   // 单个 type 最多补到 4 页，防病态情况
+        $pages = min($pages, $maxPages);   // 单个 type 最多补到 N 页，防病态情况
         for ($p = 2; $p <= $pages; $p++) {
             $more[$k . '|' . $p] = "$ESI/markets/$region/orders/?datasource=tranquility&type_id=$k&page=$p";
         }
@@ -270,6 +271,34 @@ function lpBookSummary(array $book) {
 // 订单簿缓存键：station=0 表示全区
 function lpBookKey($region, $station, $type) {
     return 'bk:' . $region . ':' . ($station > 0 ? (int)$station : 'all') . ':' . (int)$type;
+}
+
+// 完整卖单档位的缓存键
+function lpLevelKey($region, $station, $type, $maxLv) {
+    return 'lv:' . $region . ':' . (int)$station . ':' . (int)$type . ':' . (int)$maxLv;
+}
+
+// 站内出售单按价格聚合成档位（升序），用来算任意批量买材料的真实吃单成本。
+// 返回 ['lv' => [['p'=>价,'v'=>量], ...], 'tot' => 站内卖单总量, 'cut' => 是否被 maxLv 截断]
+function lpSellLevels(array $orders, $station, $maxLv) {
+    $byPrice = [];
+    $tot = 0;
+    foreach ($orders as $o) {
+        if (!empty($o['is_buy_order'])) continue;
+        if ((int)(isset($o['location_id']) ? $o['location_id'] : 0) !== (int)$station) continue;
+        $p = (float)(isset($o['price']) ? $o['price'] : 0);
+        $v = (int)(isset($o['volume_remain']) ? $o['volume_remain'] : 0);
+        if ($p <= 0 || $v <= 0) continue;
+        $k = (string)$p;   // 同价合并（字符串键避开浮点误差）
+        if (!isset($byPrice[$k])) $byPrice[$k] = ['p' => $p, 'v' => 0];
+        $byPrice[$k]['v'] += $v;
+        $tot += $v;
+    }
+    $lv = array_values($byPrice);
+    usort($lv, function ($a, $b) { return $a['p'] <=> $b['p']; });
+    $cut = count($lv) > $maxLv;
+    if ($cut) $lv = array_slice($lv, 0, $maxLv);
+    return ['lv' => $lv, 'tot' => $tot, 'cut' => $cut];
 }
 
 // 用 ESI 订单簿给一批 type 落缓存（顺便当作 fuzzwork 挂了时的兜底）
@@ -569,6 +598,45 @@ if ($action === 'depths') {
         }
     }
     echo json_encode(['region' => $region, 'depths' => $out, 'cachedAt' => time()], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ---- 材料完整卖单档位：按「拟兑换数量」算真实吃单成本（前五远远不够）----
+if ($action === 'matlevels') {
+    $region = isset($_GET['region']) ? (int)$_GET['region'] : 0;
+    if (!in_array($region, $LP_REGIONS, true)) lpFail('unknown region');
+    $station = isset($_GET['station']) ? (int)$_GET['station'] : 0;
+    if ($station <= 0 || !isset($LP_STATIONS[$station])) lpFail('invalid station');
+    $force = isset($_GET['force']) && $_GET['force'];
+
+    $want = [];
+    foreach (explode(',', isset($_GET['ids']) ? (string)$_GET['ids'] : '') as $x) {
+        $x = (int)trim($x);
+        if ($x > 0) $want[$x] = true;
+        if (count($want) >= 20) break;
+    }
+    if (!$want) lpFail('invalid ids');
+
+    $maxLv = isset($_GET['max']) ? (int)$_GET['max'] : 400;
+    $maxLv = max(20, min(800, $maxLv));
+
+    $pdo = lpDb($dataDir);
+    $out = []; $miss = [];
+    foreach (array_keys($want) as $id) {
+        $c = $force ? null : lpCacheGet($pdo, lpLevelKey($region, $station, $id, $maxLv), LP_PRICE_TTL);
+        if ($c !== null) $out[$id] = $c; else $miss[] = $id;
+    }
+    if ($miss) {
+        // 材料可能挂着几千单，多翻几页再聚合
+        $orders = lpOrdersFor($region, $miss, 6);
+        foreach ($miss as $id) {
+            $o = isset($orders[$id]) && is_array($orders[$id]) ? $orders[$id] : [];
+            $out[$id] = lpSellLevels($o, $station, $maxLv);
+            lpCachePut($pdo, lpLevelKey($region, $station, $id, $maxLv), $out[$id]);
+        }
+        lpCachePrune($pdo);
+    }
+    echo json_encode(['region' => $region, 'station' => $station, 'levels' => $out, 'cachedAt' => time()], JSON_UNESCAPED_UNICODE);
     exit;
 }
 

@@ -69,6 +69,8 @@
     esiNames: {},
     books: {},
     depth: {},
+    matLevels: {},
+    qty: {},
     depthLoading: false,
     depthRegion: 0,
     contracts: {},
@@ -275,12 +277,21 @@
       setHint('正在刷新「' + nm + '」的材料价格… ' + Math.round((Date.now() - t0) / 1000) + 's');
     }, 1000);
     apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station + '&ids=' + ids.join(',') + '&force=1', function (res) {
-      clearInterval(tick);
-      delete _lp.matBusy[key];
-      if (!res || !res.depths) { setHint('材料价格刷新失败，请重试'); return; }
-      var n = applyMaterialDepths(ids, res.depths);
-      setHint('已刷新「' + nm + '」的材料价格 · 共更新 ' + n + ' 行');
-      setTimeout(function () { setHint(''); }, 3500);
+      if (!res || !res.depths) {
+        clearInterval(tick);
+        delete _lp.matBusy[key];
+        setHint('材料价格刷新失败，请重试');
+        return;
+      }
+      var depths = res.depths;
+      // 前五档不够算大批量；连带把完整卖单档位也强刷一遍
+      ensureMatLevels(ids, true, function () {
+        clearInterval(tick);
+        delete _lp.matBusy[key];
+        var n = applyMaterialDepths(ids, depths);
+        setHint('已刷新「' + nm + '」的材料价格 · 共更新 ' + n + ' 行');
+        setTimeout(function () { setHint(''); }, 3500);
+      });
     });
   }
 
@@ -305,17 +316,43 @@
     });
     var n = Object.keys(keys).length;
 
-    // 只重算用到这些材料的报价，其余行直接复用，再按当前排序重画这一页
-    var fresh = computeRows(keys);
-    if (fresh.length && _lp.rows.length) {
-      var byKey = {};
-      fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
-      _lp.rows = _lp.rows.map(function (r) { return byKey[rowKey(r)] || r; });
-      render(true);
-    } else {
-      render();
-    }
+    recomputeOffers(keys);
     return n;
+  }
+
+  // 只重算这几条报价，其余行直接复用 _lp.rows，最后只重排 + 重画当前这一页。
+  // 改「拟兑换数量」、材料行情变化都走这里。
+  function recomputeOffers(keys) {
+    var fresh = computeRows(keys);
+    if (!fresh.length || !_lp.rows.length) { render(); return; }
+    var byKey = {};
+    fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
+    _lp.rows = _lp.rows.map(function (r) { return byKey[rowKey(r)] || r; });
+    render(true);
+  }
+
+  // 拉取这几项材料的完整卖单档位（服务端按价格聚合，缓存 15 分钟）
+  function ensureMatLevels(ids, force, cb) {
+    if (typeof force === 'function') { cb = force; force = false; }
+    var want = [];
+    ids.forEach(function (t) {
+      if (!t) return;
+      if (force || !_lp.matLevels[t]) want.push(t);
+    });
+    if (!want.length) { cb(); return; }
+
+    var chunks = [];
+    for (var i = 0; i < want.length; i += 20) chunks.push(want.slice(i, i + 20));
+    var left = chunks.length;
+    chunks.forEach(function (c) {
+      apiGet('lp.php?action=matlevels&region=' + _lp.region + '&station=' + _lp.station
+        + '&ids=' + c.join(',') + (force ? '&force=1' : ''), function (res) {
+        if (res && res.levels) {
+          Object.keys(res.levels).forEach(function (k) { _lp.matLevels[k] = res.levels[k]; });
+        }
+        if (--left === 0) cb();
+      });
+    });
   }
 
 
@@ -584,29 +621,37 @@
         var sell = ob ? ((ob.sell && ob.sell.length) ? num(ob.sell[0].p) : 0) : (p ? num(p.s) : 0);
 
         var amt = num(_lp.lp[st.key]);
-        var times = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
+        var key = st.key + ':' + o.offer_id;
+        var lpTimes = amt > 0 ? Math.floor(amt / o.lp_cost) : 0;
+        // 每行可以单独填「拟兑换次数」，不填就按上面输入的 LP 总量换算
+        var qty = Math.floor(num(_lp.qty[key]));
+        var times = qty > 0 ? qty : lpTimes;
         var batch = times > 0 ? times : 1;   // 材料按本次要换的总批数去买
 
         var mats = [];
         var matCost = 0;
         var matUnknown = false;
+        var matShort = false;
         (o.required_items || []).forEach(function (ri) {
           var rp = _lp.prices[ri.type_id] || null;
           var best = rp ? (num(rp.s) || num(rp.b)) : 0;   // 兜底价：最低卖价，无卖单用最高收购价
           if (!best) matUnknown = true;
           var need = ri.quantity * batch;
-          var dep = _lp.depth[ri.type_id] || null;
+          // 优先用完整价格档位（matlevels）；没拉到就退回前五挂卖单
+          var lvl = _lp.matLevels[ri.type_id];
+          var d5 = _lp.depth[ri.type_id] || null;
+          var book = (lvl && lvl.lv && lvl.lv.length) ? lvl.lv : (d5 && d5.sell ? d5.sell : null);
           var unit = best, per;
-          if (dep && dep.sell && dep.sell.length) {
-            // 按当前挂卖单从低到高逐档吃，算这批材料的真实成本
+          if (book && book.length) {
+            // 按站内挂卖单从低到高逐档吃；有完整档位时就是真实吃单成本
             var swept = 0, rem = need, last = best;
-            for (var k = 0; k < dep.sell.length && rem > 0; k++) {
-              var take = Math.min(num(dep.sell[k].v), rem);
-              swept += take * num(dep.sell[k].p);
+            for (var k = 0; k < book.length && rem > 0; k++) {
+              var take = Math.min(num(book[k].v), rem);
+              swept += take * num(book[k].p);
               rem -= take;
-              last = num(dep.sell[k].p);
+              last = num(book[k].p);
             }
-            if (rem > 0) swept += rem * last;   // 前五深度不够，按最后一档价兜底
+            if (rem > 0) { swept += rem * last; matShort = true; }   // 档位不够，尾部按最高可见价估
             per = swept / batch;
             unit = swept / need;
           } else {
@@ -650,7 +695,7 @@
           for (var di = 0; di < dep.buy.length; di++) depQty += num(dep.buy[di].v);
           depTimes = Math.floor(depQty / o.quantity);
           if (depTimes > 0) {
-            depUse = amt > 0 ? Math.min(depTimes, Math.floor(amt / o.lp_cost)) : depTimes;
+            depUse = times > 0 ? Math.min(depTimes, times) : depTimes;
             var depUnits = depUse * o.quantity, depRev = 0, depRem = depUnits;
             for (var dj = 0; dj < dep.buy.length && depRem > 0; dj++) {
               var depTake = Math.min(num(dep.buy[dj].v), depRem);
@@ -672,6 +717,9 @@
           mats: mats,
           matCost: matCost,
           matUnknown: matUnknown,
+          matShort: matShort,
+          batch: batch,
+          qty: qty,
           cost: cost,
           profitNow: profitNow,
           profitList: profitList,
@@ -772,7 +820,7 @@
     var html = '<div class="lp-sumwrap">' + summaryHtml(all) + '</div>';
     html += '<div class="tbl-wrap">' + tableHtml(view) + '</div>';
     html += pagerHtml(rows.length, pages);
-    html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站；站内订单簿没加载完之前不显示价格，避免混入全区价。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算（前五不够时按最后一档价兜底），批量按你输入的 LP 折算。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 1.8%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情与前五深度 15 分钟缓存；站内订单簿首次加载需要十几秒。</p>';
+    html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站；站内订单簿没加载完之前不显示价格，避免混入全区价。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算；每行可以填「拟兑换次数」（留空则按 LP 数量换算），填了会去拉该材料在站内的完整卖单档位（不只是前五档），所以大批量兑换给出的是真实吃单成本；档位吃不满时尾部按最高可见价估，并在材料后面标 !。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 1.8%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情与前五深度 15 分钟缓存；站内订单簿首次加载需要十几秒。</p>';
     renderBody(html);
   }
 
@@ -882,6 +930,7 @@
       ? '<span class="lp-copy-mat" data-lp-mat="' + escHtml(key) + '" title="点击复制材料清单（Multi-Buy）&#10;' + escHtml(matTitle(r)) + '">'
         + r.mats.length + ' 项 ' + iskShort(r.matCost) + '</span>'
         + (r.matUnknown ? ' <span class="lp-warn" title="有材料查不到行情，成本偏低">?</span>' : '')
+        + (r.matShort ? ' <span class="lp-warn" title="站内挂卖档位不够，超出部分按最高可见价估，实际成本会更高">!</span>' : '')
         + '<button type="button" class="lp-mat-refresh" data-lp-matrefresh="' + escHtml(key) + '" title="刷新这几项材料的最新价格">' + LP_REFRESH_ICON + '</button>'
       : '—';
 
@@ -924,6 +973,10 @@
         + '<div><span class="lp-k">LP</span>' + iskN(o.lp_cost) + '</div>'
         + '<div><span class="lp-k">ISK</span>' + iskShort(o.isk_cost) + '</div>'
         + '<div><span class="lp-k">材料</span>' + matLine + '</div>'
+        + '<div class="lp-qty"><span class="lp-k">次数</span>'
+          + '<input type="number" min="1" step="1" inputmode="numeric" data-lp-qty="' + escHtml(key) + '"'
+            + ' value="' + (r.qty > 0 ? r.qty : '') + '" placeholder="' + r.batch + '"'
+            + ' title="拟兑换次数：材料成本按这个数量从低到高逐档吃单估算；留空则按 LP 数量换算"></div>'
       + '</td>'
       + '<td class="num lp-c-market">'
         + '<div><span class="lp-k">收</span>' + (r.buy > 0 ? iskShort(r.buy) : '—') + '</div>'
@@ -1132,6 +1185,7 @@
     _lp.region = id;
     _lp.prices = {};
     _lp.books = {};
+    _lp.matLevels = {};
     _lp.bookBusy = {};
     _lp.matBusy = {};
     _lp.bookMeta = {};
@@ -1155,6 +1209,7 @@
     _lp.region = st.region;
     _lp.prices = {};
     _lp.books = {};
+    _lp.matLevels = {};
     _lp.bookBusy = {};
     _lp.matBusy = {};
     _lp.bookMeta = {};
@@ -1187,6 +1242,19 @@
   }
 
   function lpSetFaction(v) {
+  // 填拟兑换次数：只影响本行。先用现有数据算一遍，再去补齐全量卖单档位后重算一次。
+  function lpSetQty(key, v) {
+    var n = parseInt(v, 10);
+    if (isFinite(n) && n > 0) _lp.qty[key] = n; else delete _lp.qty[key];
+    var one = {};
+    one[key] = 1;
+    var o = findOffer(key);
+    var ids = [];
+    if (o && o.required_items) o.required_items.forEach(function (ri) { ids.push(ri.type_id); });
+    recomputeOffers(one);
+    if (ids.length) ensureMatLevels(ids, function () { recomputeOffers(one); });
+  }
+
     _lp.faction = v;
     _lp.page = 1;
     var box = $('lpFaction');
@@ -1230,9 +1298,19 @@
   }
 
   // 一行点击 = 展开/收起；展开后首次按需拉挂单前五
+  // 「拟兑换次数」失去焦点 / 回车时生效（不边打字边重绘，避免输入框被重建后丢焦点）
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    var q = t.closest('[data-lp-qty]');
+    if (q && q.closest('#pg-lp')) lpSetQty(q.getAttribute('data-lp-qty'), q.value);
+  });
+
   document.addEventListener('click', function (e) {
     var t = e.target;
     if (!t || !t.closest) return;
+    // 「拟兑换次数」输入框：走浏览器默认行为（聚焦/输入），不要当成行点击
+    if (t.closest('[data-lp-qty]')) return;
     // 点表头排序：同一列再点一下切换升降序
     var th = t.closest('#pg-lp thead th[data-sort]');
     if (th) {
