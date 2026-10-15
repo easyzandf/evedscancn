@@ -936,6 +936,12 @@
         + '<button type="button" class="lp-mat-refresh" data-lp-matrefresh="' + escHtml(key) + '" title="刷新这几项材料的最新价格">' + LP_REFRESH_ICON + '</button>'
       : '—';
 
+    // 单据成本会随量升高，但订单簿够深时每次的材料成本本来就不变；
+    // 所以把整批总花费也摆出来，填了次数才能一眼看出生效。
+    var matBatch = (r.mats.length && r.batch > 1)
+      ? '<div class="lp-sub">整批 ' + iskN(r.batch) + ' 次 共 ' + iskShort(r.matCost * r.batch) + '</div>'
+      : '';
+
     var amt = num(_lp.lp[r.store.key]);
     var totalVal = r.totalNow !== null ? r.totalNow : r.totalContract;
     // 填了「拟兑换次数」时即使没填 LP 总量，也应该给出可兑总收益
@@ -976,6 +982,7 @@
         + '<div><span class="lp-k">LP</span>' + iskN(o.lp_cost) + '</div>'
         + '<div><span class="lp-k">ISK</span>' + iskShort(o.isk_cost) + '</div>'
         + '<div><span class="lp-k">材料</span>' + matLine + '</div>'
+        + matBatch
         + '<div class="lp-qty"><span class="lp-k">次数</span>'
           + '<input type="number" min="1" step="1" inputmode="numeric" data-lp-qty="' + escHtml(key) + '"'
             + ' value="' + (r.qty > 0 ? r.qty : '') + '" placeholder="' + r.batch + '"'
