@@ -1241,7 +1241,6 @@
     scheduleRender();
   }
 
-  function lpSetFaction(v) {
   // 填拟兑换次数：只影响本行。先用现有数据算一遍，再去补齐全量卖单档位后重算一次。
   function lpSetQty(key, v) {
     var n = parseInt(v, 10);
@@ -1255,6 +1254,7 @@
     if (ids.length) ensureMatLevels(ids, function () { recomputeOffers(one); });
   }
 
+  function lpSetFaction(v) {
     _lp.faction = v;
     _lp.page = 1;
     var box = $('lpFaction');
