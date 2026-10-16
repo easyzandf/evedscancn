@@ -1336,6 +1336,8 @@
 
   function lpSetAuto(on) {
     _lp.auto = !!on;
+    var cb = document.getElementById('lpAuto');
+    if (cb && cb.checked !== _lp.auto) cb.checked = _lp.auto;
     if (_autoTimer) { clearInterval(_autoTimer); _autoTimer = null; }
     if (_lp.auto) {
       _autoTimer = setInterval(autoRefresh, _autoEvery * 1000);
