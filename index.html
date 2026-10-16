@@ -1482,6 +1482,12 @@
         <label>安全税 <input type="number" id="lpFeeSafe" value="0" min="0" max="100" step="0.1" oninput="lpSetFee('safe', this.value)">%</label>
       </span>
       <button class="btn btn-go" onclick="lpReload(true)"><i data-lucide="search"></i>刷新行情</button>
+      <label class="lp-chk" title="开启后按下面的间隔静默重拉当前页的行情（服务端 5 分钟缓存，命中缓存时开销很小）"><input type="checkbox" id="lpAuto" onchange="lpSetAuto(this.checked)">自动刷新</label>
+      <select id="lpAutoInterval" onchange="lpSetAutoInterval(this.value)" title="自动刷新间隔">
+        <option value="60">1 分钟</option>
+        <option value="120">2 分钟</option>
+        <option value="300" selected>5 分钟</option>
+      </select>
       <span class="hint" id="lpHint"></span>
     </div>
 
@@ -5202,6 +5208,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=59a09222"></script>
+<script src="lp.js?v=d6534f2b"></script>
 </body>
 </html>

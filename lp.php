@@ -22,7 +22,7 @@ if (!is_dir($dataDir)) @mkdir($dataDir, 0777, true);
 // 缓存结构改了就把版本号 +1，旧键自然失效
 define('LP_VER', 'v1');
 define('LP_OFFER_TTL', 86400);   // LP 商店报价：游戏更新才变
-define('LP_PRICE_TTL', 900);     // 市场行情：15 分钟
+define('LP_PRICE_TTL', 300);     // 市场行情：5 分钟（对齐 ESI 自己的刷新节奏）
 define('LP_STATION_TTL', 2592000); // 空间站名基本不变
 define('LP_CONTRACT_TTL', 3600);   // 公开合同索引：每小时重建
 define('LP_TYPE_TTL', 2592000);    // 物品体积基本不变，缓存 30 天

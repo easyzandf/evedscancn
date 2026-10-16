@@ -360,7 +360,24 @@
     render(true);
   }
 
-  // 拉取这几项材料的完整卖单档位（服务端按价格聚合，缓存 15 分钟）
+  // 拉取材料完整卖单档位（服务端按价格聚合，缓存 5 分钟）。force 才绕过服务端缓存。
+  function fetchMatLevels(ids, force, cb) {
+    if (!ids.length) { cb(); return; }
+    var chunks = [];
+    for (var i = 0; i < ids.length; i += 20) chunks.push(ids.slice(i, i + 20));
+    var left = chunks.length;
+    chunks.forEach(function (c) {
+      apiGet('lp.php?action=matlevels&region=' + _lp.region + '&station=' + _lp.station
+        + '&ids=' + c.join(',') + (force ? '&force=1' : ''), function (res) {
+        if (res && res.levels) {
+          Object.keys(res.levels).forEach(function (k) { _lp.matLevels[k] = res.levels[k]; });
+        }
+        if (--left === 0) cb();
+      });
+    });
+  }
+
+  // 只补齐本地没有的
   function ensureMatLevels(ids, force, cb) {
     if (typeof force === 'function') { cb = force; force = false; }
     var want = [];
@@ -369,15 +386,20 @@
       if (force || !_lp.matLevels[t]) want.push(t);
     });
     if (!want.length) { cb(); return; }
+    fetchMatLevels(want, force, cb);
+  }
 
+  // 站内前五挂单（服务端 5 分钟缓存；force 才绕过）
+  function fetchDepths(ids, force, cb) {
+    if (!ids.length) { cb(); return; }
     var chunks = [];
-    for (var i = 0; i < want.length; i += 20) chunks.push(want.slice(i, i + 20));
+    for (var i = 0; i < ids.length; i += 60) chunks.push(ids.slice(i, i + 60));
     var left = chunks.length;
     chunks.forEach(function (c) {
-      apiGet('lp.php?action=matlevels&region=' + _lp.region + '&station=' + _lp.station
+      apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station
         + '&ids=' + c.join(',') + (force ? '&force=1' : ''), function (res) {
-        if (res && res.levels) {
-          Object.keys(res.levels).forEach(function (k) { _lp.matLevels[k] = res.levels[k]; });
+        if (res && res.depths) {
+          Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
         }
         if (--left === 0) cb();
       });
@@ -851,7 +873,7 @@
     var html = '<div class="lp-sumwrap">' + summaryHtml(all) + '</div>';
     html += '<div class="tbl-wrap">' + tableHtml(view) + '</div>';
     html += pagerHtml(rows.length, pages);
-    html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站；站内订单簿没加载完之前不显示价格，避免混入全区价。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算；每行可以填「拟兑换次数」（留空则按 LP 数量换算），填了会去拉该材料在站内的完整卖单档位（不只是前五档），所以大批量兑换给出的是真实吃单成本；档位吃不满时尾部按最高可见价估，并在材料后面标 !。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 1.8%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情与前五深度 15 分钟缓存；站内订单簿首次加载需要十几秒。</p>';
+    html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站；站内订单簿没加载完之前不显示价格，避免混入全区价。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算；每行可以填「拟兑换次数」（留空则按 LP 数量换算），填了会去拉该材料在站内的完整卖单档位（不只是前五档），所以大批量兑换给出的是真实吃单成本；档位吃不满时尾部按最高可见价估，并在材料后面标 !。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 1.8%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情 / 前五深度 / 材料档位 5 分钟缓存（对齐数据源的刷新节奏）；开启「自动刷新」后当前页会按所选间隔静默更新，不用手点。站内订单簿首次加载需要十几秒。</p>';
     renderBody(html);
   }
 
@@ -1307,6 +1329,61 @@
   function lpSetSearch(v) { _lp.q = v || ''; _lp.page = 1; scheduleRender(true); }
 
   function lpSetPageSize(v) {
+  // -- 自动刷新（方案 A：轮询我们自己的缓存，不做推送）--
+  // 只重拉当前页用到的行情：物品本身的站内前五 + 它的材料完整档位。
+  // 服务端 5 分钟缓存，所以即使 1 分钟一轮，多数也是命中缓存、开销很小。
+  var _autoTimer = null;
+  var _autoEvery = 300;
+
+  function lpSetAuto(on) {
+    _lp.auto = !!on;
+    if (_autoTimer) { clearInterval(_autoTimer); _autoTimer = null; }
+    if (_lp.auto) {
+      _autoTimer = setInterval(autoRefresh, _autoEvery * 1000);
+      setHint('自动刷新已开启：每 ' + Math.round(_autoEvery / 60) + ' 分钟重拉当前页行情');
+      setTimeout(function () { if (_lp.auto) setHint(''); }, 4000);
+    } else {
+      setHint('');
+    }
+  }
+
+  function lpSetAutoInterval(v) {
+    var n = parseInt(v, 10);
+    if (!isFinite(n) || n < 30) n = 300;
+    _autoEvery = n;
+    if (_lp.auto) lpSetAuto(true);   // 重设定时器
+  }
+
+  function autoRefresh() {
+    if (!_lp.loaded || _lp.loading || !_autoTimer) return;
+    var pg = document.getElementById('pg-lp');
+    if (pg && pg.classList.contains('hidden')) return;   // 页面不在前台就别刷
+    // 用户正在输入时跳过这一轮，别把他正在操作的控件重建掉
+    var ae = document.activeElement;
+    if (ae && ae.closest && ae.closest('#pg-lp') && /^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) return;
+
+    var keys = {}, offers = {}, mats = {};
+    var trs = document.querySelectorAll('#lpBody tr.lp-row');
+    for (var i = 0; i < trs.length; i++) {
+      var k = trs[i].getAttribute('data-lp-key');
+      var r = findRowByKey(k);
+      if (!r) continue;
+      keys[k] = 1;
+      if (r.offer.type_id) offers[r.offer.type_id] = 1;
+      (r.offer.required_items || []).forEach(function (ri) { if (ri.type_id) mats[ri.type_id] = 1; });
+    }
+    var oids = Object.keys(offers), mids = Object.keys(mats);
+    if (!oids.length) return;
+
+    var finish = function () {
+      recomputeOffers(keys);
+      setHint('已自动刷新 · ' + clock(Date.now()));
+      setTimeout(function () { if (_lp.auto) setHint(''); }, 4000);
+    };
+    if (mids.length) fetchMatLevels(mids, false, function () { fetchDepths(oids, false, finish); });
+    else fetchDepths(oids, false, finish);
+  }
+
     var n = parseInt(v, 10);
     if (!isFinite(n) || n <= 0) n = 20;
     _lp.pageSize = n > 0 ? n : 0;
@@ -1425,6 +1502,8 @@
   window.lpSetFlag = lpSetFlag;
   window.lpSetPage = lpSetPage;
   window.lpSetPageSize = lpSetPageSize;
+  window.lpSetAuto = lpSetAuto;
+  window.lpSetAutoInterval = lpSetAutoInterval;
   window.addEventListener('resize', syncStickyTop);
   // 顶栏高度会随字体加载/换行变化，用 ResizeObserver 持续同步吸顶偏移
   (function watchTopbar() {
