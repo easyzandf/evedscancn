@@ -197,12 +197,17 @@
 
   // 输入框连续打字时不要每敲一下就重建整张表
   var _renderTimer = null;
-  var _renderReuse = false;
+  var _renderDirty = false;   // 挂起期间只要有「会改变计算值」的改动，这一次就必须重算
   // reuse=true：只重排/重画，不重算 785 条。改 LP 数量、费率这类会影响计算值的操作不能传 true。
   function scheduleRender(reuse) {
-    _renderReuse = !!reuse;
+    if (!reuse) _renderDirty = true;
     if (_renderTimer) clearTimeout(_renderTimer);
-    _renderTimer = setTimeout(function () { _renderTimer = null; render(_renderReuse); }, 150);
+    _renderTimer = setTimeout(function () {
+      _renderTimer = null;
+      var dirty = _renderDirty;
+      _renderDirty = false;
+      render(!dirty);   // 有脏数据就不能复用缓存行
+    }, 150);
   }
 
   // -- 材料清单复制（Multi-Buy：名称 + Tab + 数量）--
