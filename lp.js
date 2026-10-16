@@ -1328,7 +1328,6 @@
   function lpSetSort(v) { _lp.sort = v; _lp.sortDir = LP_SORT_DIR[v] || 'desc'; _lp.page = 1; render(true); }
   function lpSetSearch(v) { _lp.q = v || ''; _lp.page = 1; scheduleRender(true); }
 
-  function lpSetPageSize(v) {
   // -- 自动刷新（方案 A：轮询我们自己的缓存，不做推送）--
   // 只重拉当前页用到的行情：物品本身的站内前五 + 它的材料完整档位。
   // 服务端 5 分钟缓存，所以即使 1 分钟一轮，多数也是命中缓存、开销很小。
@@ -1383,6 +1382,8 @@
     if (mids.length) fetchMatLevels(mids, false, function () { fetchDepths(oids, false, finish); });
     else fetchDepths(oids, false, finish);
   }
+
+  function lpSetPageSize(v) {
 
     var n = parseInt(v, 10);
     if (!isFinite(n) || n <= 0) n = 20;
