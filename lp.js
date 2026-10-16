@@ -50,7 +50,7 @@
   // 销售税 = 7.5% × (1 − 11% × Accounting 等级)；默认 4 级 = 4.2%
   var LP_TAX_BASE = 7.5;
   var LP_TAX_PER_LEVEL = 0.11;
-  // 默认费率：Accounting 4 级、中介费 2.4%、安全税 0；页面上的控件可改
+  // 默认费率：Accounting 4 级、Broker Relations 4 级（1.8%）、安全税 0；页面上的控件可改
   var LP_FEE_DEFAULT = { taxLevel: 4, broker: 1.8, safe: 0 };
 
   // 复制图标（lucide copy，内联避免依赖）
@@ -79,10 +79,16 @@
     history: {},
     historyLoading: false,
     historyLoaded: false,
+    historyAt: 0,
+    offersAt: 0,
+    depthAt: 0,
+    matAt: 0,
+    contractsAt: 0,
     volumes: {},
     volumesLoaded: false,
     lp: { C: '', G: '' },
     fee: { taxLevel: LP_FEE_DEFAULT.taxLevel, broker: LP_FEE_DEFAULT.broker, safe: LP_FEE_DEFAULT.safe },
+    brokerLevel: 4,
     faction: 'all',
     sort: 'now',
     sortDir: 'desc',
@@ -98,7 +104,11 @@
     bookBusy: {},
     matBusy: {},
     bookMeta: {},
-    pricesAt: 0
+    pricesAt: 0,
+    visible: [],
+    regionToken: 0,
+    loadToken: 0,
+    reloadPending: false
   };
 
   // -- 小工具 --
@@ -274,6 +284,7 @@
     if (!o || !o.required_items || !o.required_items.length) return;
     if (_lp.matBusy[key]) return;
     _lp.matBusy[key] = 1;
+    var token = _lp.regionToken;
     var ids = o.required_items.map(function (ri) { return ri.type_id; });
     var nm = typeName(o.type_id);
     var t0 = Date.now();
@@ -282,6 +293,12 @@
       setHint('正在刷新「' + nm + '」的材料价格… ' + Math.round((Date.now() - t0) / 1000) + 's');
     }, 1000);
     apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station + '&ids=' + ids.join(',') + '&force=1', function (res) {
+      if (token !== _lp.regionToken) {
+        clearInterval(tick);
+        delete _lp.matBusy[key];
+        setHint('');
+        return;
+      }
       if (!res || !res.depths) {
         clearInterval(tick);
         delete _lp.matBusy[key];
@@ -335,7 +352,7 @@
     if (nx && nx.classList.contains('lp-detail-row')) nx.parentNode.removeChild(nx);
     tr.outerHTML = rowHtml(r);
     var sw = document.querySelector('#lpBody .lp-sumwrap');
-    if (sw) sw.innerHTML = summaryHtml(_lp.rows);
+    if (sw) sw.innerHTML = summaryHtml(_lp.rows, _lp.visible);
   }
 
   // 只重算一条报价，并把这一行原地换掉
@@ -347,6 +364,7 @@
     var byKey = {};
     fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
     _lp.rows = _lp.rows.map(function (r) { return byKey[rowKey(r)] || r; });
+    _lp.visible = _lp.visible.map(function (r) { return byKey[rowKey(r)] || r; });
     repaintRowNow(key);
   }
 
@@ -357,20 +375,24 @@
     var byKey = {};
     fresh.forEach(function (r) { byKey[rowKey(r)] = r; });
     _lp.rows = _lp.rows.map(function (r) { return byKey[rowKey(r)] || r; });
+    _lp.visible = _lp.visible.map(function (r) { return byKey[rowKey(r)] || r; });
     render(true);
   }
 
   // 拉取材料完整卖单档位（服务端按价格聚合，缓存 5 分钟）。force 才绕过服务端缓存。
   function fetchMatLevels(ids, force, cb) {
     if (!ids.length) { cb(); return; }
+    var token = _lp.regionToken;
     var chunks = [];
     for (var i = 0; i < ids.length; i += 20) chunks.push(ids.slice(i, i + 20));
     var left = chunks.length;
     chunks.forEach(function (c) {
       apiGet('lp.php?action=matlevels&region=' + _lp.region + '&station=' + _lp.station
         + '&ids=' + c.join(',') + (force ? '&force=1' : ''), function (res) {
+        if (token !== _lp.regionToken) { if (--left === 0) cb(); return; }
         if (res && res.levels) {
           Object.keys(res.levels).forEach(function (k) { _lp.matLevels[k] = res.levels[k]; });
+          if (res.cachedAt) _lp.matAt = Math.max(_lp.matAt, res.cachedAt);
         }
         if (--left === 0) cb();
       });
@@ -451,8 +473,9 @@
   }
 
   function start(force) {
-    if (_lp.loading) return;
+    if (_lp.loading) { _lp.reloadPending = true; return; }
     _lp.loading = true;
+    _lp.loadToken = _lp.regionToken;
     setHint('正在加载 LP 商店报价…');
     if (!_lp.loaded) renderBody('<div class="lp-empty">正在加载 LP 商店报价…</div>');
     loadItemsSafe(function () { loadOffers(force); });
@@ -463,8 +486,10 @@
     var failed = 0;
     LP_STORES.forEach(function (st) {
       apiGet('lp.php?action=offers&corp=' + st.corp + (force ? '&force=1' : ''), function (res) {
-        if (res && res.offers) _lp.offers[st.key] = res.offers;
-        else failed++;
+        if (res && res.offers) {
+          _lp.offers[st.key] = res.offers;
+          if (res.cachedAt) _lp.offersAt = Math.max(_lp.offersAt, res.cachedAt);
+        } else failed++;
         if (--pending !== 0) return;
         if (!_lp.offers.C && !_lp.offers.G) {
           _lp.loading = false;
@@ -497,9 +522,20 @@
     });
   }
 
+  // 区域/空间站切换后，旧请求回来时直接丢弃；需要时补一次新加载。
+  function abortLoad(token) {
+    if (token === _lp.regionToken) return false;
+    if (_lp.loadToken === token) {
+      _lp.loading = false;
+      if (_lp.reloadPending) { _lp.reloadPending = false; lpReload(false); }
+    }
+    return true;
+  }
+
   function loadPrices(force) {
     var ids = allTypeIds();
-    if (!ids.length) { finishLoad(); return; }
+    var token = _lp.loadToken;
+    if (!ids.length) { finishLoad(token); return; }
 
     var chunks = [];
     for (var i = 0; i < ids.length; i += 200) chunks.push(ids.slice(i, i + 200));
@@ -507,10 +543,12 @@
     var doneN = 0;
 
     var next = function (idx) {
-      if (idx >= chunks.length) { finishLoad(); return; }
+      if (abortLoad(token)) return;
+      if (idx >= chunks.length) { finishLoad(token); return; }
       setHint('正在拉取市场行情… ' + Math.min(doneN, total) + ' / ' + total);
       var url = 'lp.php?action=aggregate&region=' + _lp.region + '&ids=' + chunks[idx].join(',') + (force ? '&force=1' : '');
       apiGet(url, function (res) {
+        if (abortLoad(token)) return;
         if (res && res.prices) {
           Object.keys(res.prices).forEach(function (k) { _lp.prices[k] = res.prices[k]; });
           if (res.cachedAt) _lp.pricesAt = res.cachedAt;
@@ -522,7 +560,8 @@
     next(0);
   }
 
-  function finishLoad() {
+  function finishLoad(token) {
+    if (abortLoad(token)) return;
     _lp.loading = false;
     _lp.loaded = true;
     _lp.inited = true;
@@ -538,30 +577,35 @@
       render();
     }
     _lp.forceDepth = false;
+    if (_lp.reloadPending) { _lp.reloadPending = false; lpReload(false); }
   }
 
   // 前五收单深度：整表约 500 个 type，服务端逐 type 缓存 15 分钟，首次拉完后面秒开
   // 公开合同：服务端按小时从 everef 快照重建，只保留 LP 可换物品的单物品合同
   // 物品体积：volume 与区域无关，服务端缓存 30 天，全站只拉一次
-  // 48h 成交量/均价：ESI 市场历史是区域级、按天的，取最近两个日桶
+  // 近两日成交量/均价：ESI 市场历史是区域级、按天的，取最近两个日桶（每天约 11:05 UTC 更新）
   function loadHistory() {
     if (_lp.historyLoading || _lp.historyLoaded) return;
     _lp.historyLoading = true;
+    var token = _lp.regionToken;
     var uniq = {};
     eachOffer(function (st, o) { if (o.type_id) uniq[o.type_id] = 1; });
     var list = Object.keys(uniq);
-    if (!list.length) { _lp.historyLoading = false; _lp.historyLoaded = true; return; }
+    if (!list.length) { _lp.historyLoading = false; _lp.historyLoaded = true; _lp.historyAt = Math.floor(Date.now() / 1000); return; }
     var chunks = [];
     for (var i = 0; i < list.length; i += 120) chunks.push(list.slice(i, i + 120));
     var left = chunks.length;
     chunks.forEach(function (c) {
       apiGet('lp.php?action=history&region=' + _lp.region + '&ids=' + c.join(','), function (res) {
+        if (token !== _lp.regionToken) { _lp.historyLoading = false; return; }
         if (res && res.history) {
           Object.keys(res.history).forEach(function (k) { _lp.history[k] = res.history[k]; });
+          if (res.cachedAt) _lp.historyAt = Math.max(_lp.historyAt, res.cachedAt);
         }
         if (--left === 0) {
           _lp.historyLoading = false;
           _lp.historyLoaded = true;
+          if (!_lp.historyAt) _lp.historyAt = Math.floor(Date.now() / 1000);
           if (_lp.loaded && _lp.depthRegion === _lp.region) scheduleRender();
         }
       });
@@ -598,11 +642,14 @@
   function loadContracts(force) {
     if (_lp.contractsLoading) return;
     _lp.contractsLoading = true;
+    var token = _lp.regionToken;
     apiGet('lp.php?action=contracts&region=' + _lp.region + (force ? '&force=1' : ''), function (res) {
+      if (token !== _lp.regionToken) { _lp.contractsLoading = false; return; }
       _lp.contractsLoading = false;
       if (res && res.contracts) {
         _lp.contracts = res.contracts;
         _lp.contractsRegion = _lp.region;
+        _lp.contractsAt = res.cachedAt || Math.floor(Date.now() / 1000);
         if (_lp.loaded && _lp.depthRegion === _lp.region) scheduleRender();
       }
     });
@@ -620,6 +667,7 @@
     if (typeof done === 'function') _depthCallbacks.push(done);
     if (_lp.depthLoading) return;
     _lp.depthLoading = true;
+    var token = _lp.regionToken;
     var uniq = {};
     eachOffer(function (st, o) {
       if (o.type_id) uniq[o.type_id] = 1;
@@ -629,6 +677,7 @@
     if (!list.length) {
       _lp.depthLoading = false;
       _lp.depthRegion = _lp.region;
+      _lp.depthAt = Math.floor(Date.now() / 1000);
       _flushDepthCallbacks();
       return;
     }
@@ -636,6 +685,7 @@
     for (var i = 0; i < list.length; i += 60) chunks.push(list.slice(i, i + 60));
     var sent = 0, idx = 0;
     var next = function () {
+      if (token !== _lp.regionToken) { _lp.depthLoading = false; _depthCallbacks = []; return; }
       if (idx >= chunks.length) {
         _lp.depthLoading = false;
         _lp.depthRegion = _lp.region;
@@ -645,8 +695,10 @@
       }
       setHint('正在拉取站内行情… ' + sent + ' / ' + list.length);
       apiGet('lp.php?action=depths&region=' + _lp.region + '&station=' + _lp.station + '&ids=' + chunks[idx].join(',') + (force ? '&force=1' : ''), function (res) {
+        if (token !== _lp.regionToken) { _lp.depthLoading = false; _depthCallbacks = []; return; }
         if (res && res.depths) {
           Object.keys(res.depths).forEach(function (k) { _lp.depth[k] = res.depths[k]; });
+          if (res.cachedAt) _lp.depthAt = Math.max(_lp.depthAt, res.cachedAt);
         }
         sent += chunks[idx].length;
         idx++;
@@ -654,6 +706,50 @@
       });
     };
     next();
+  }
+
+  // 按本次要兑换的批数 batch 计算材料吃单成本。
+  // unknown：连一个参考价都没有；est：只按前五档估且五档未覆盖；short：完整档位也不够。
+  function matCostFor(o, batch) {
+    var out = { cost: 0, mats: [], unknown: false, est: false, short: false };
+    var n = batch > 0 ? batch : 1;
+    (o.required_items || []).forEach(function (ri) {
+      var rp = _lp.prices[ri.type_id] || null;
+      var best = rp ? (num(rp.s) || num(rp.b)) : 0;   // 兜底价：最低卖价，无卖单用最高收购价
+      var need = ri.quantity * n;
+      // 优先用完整价格档位（matlevels）；没拉到就退回前五挂卖单
+      var lvl = _lp.matLevels[ri.type_id];
+      var d5 = _lp.depth[ri.type_id] || null;
+      var full = !!(lvl && lvl.lv && lvl.lv.length);   // 拿到的是不是完整档位
+      var book = full ? lvl.lv : (d5 && d5.sell ? d5.sell : null);
+      var unit = best, per;
+      var covered = false;   // 站内订单簿是否真的给出了价格
+      if (book && book.length) {
+        // 按站内挂卖单从低到高逐档吃；有完整档位时就是真实吃单成本
+        var swept = 0, rem = need, last = best;
+        for (var k = 0; k < book.length && rem > 0; k++) {
+          var take = Math.min(num(book[k].v), rem);
+          swept += take * num(book[k].p);
+          rem -= take;
+          last = num(book[k].p);
+          covered = true;
+        }
+        if (rem > 0) {
+          swept += rem * last;
+          if (full) out.short = true;   // 完整档位都不够，成本必然低估
+          else out.est = true;          // 只拿前五兜底，且五档未覆盖
+        }
+        per = swept / n;
+        unit = need > 0 ? swept / need : best;
+      } else {
+        per = best * ri.quantity;
+        if (best) out.est = true;   // 站内订单簿没拿到，只能按区域聚合价估
+      }
+      if (!covered && !best) out.unknown = true;
+      out.cost += per;
+      out.mats.push({ type_id: ri.type_id, quantity: ri.quantity, unit: unit, batchNeed: need });
+    });
+    return out;
   }
 
   // -- 计算 --
@@ -679,40 +775,12 @@
         var times = qty > 0 ? qty : lpTimes;
         var batch = times > 0 ? times : 1;   // 材料按本次要换的总批数去买
 
-        var mats = [];
-        var matCost = 0;
-        var matUnknown = false;
-        var matShort = false;
-        (o.required_items || []).forEach(function (ri) {
-          var rp = _lp.prices[ri.type_id] || null;
-          var best = rp ? (num(rp.s) || num(rp.b)) : 0;   // 兜底价：最低卖价，无卖单用最高收购价
-          if (!best) matUnknown = true;
-          var need = ri.quantity * batch;
-          // 优先用完整价格档位（matlevels）；没拉到就退回前五挂卖单
-          var lvl = _lp.matLevels[ri.type_id];
-          var d5 = _lp.depth[ri.type_id] || null;
-          var full = !!(lvl && lvl.lv && lvl.lv.length);   // 拿到的是不是完整档位
-          var book = full ? lvl.lv : (d5 && d5.sell ? d5.sell : null);
-          var unit = best, per;
-          if (book && book.length) {
-            // 按站内挂卖单从低到高逐档吃；有完整档位时就是真实吃单成本
-            var swept = 0, rem = need, last = best;
-            for (var k = 0; k < book.length && rem > 0; k++) {
-              var take = Math.min(num(book[k].v), rem);
-              swept += take * num(book[k].p);
-              rem -= take;
-              last = num(book[k].p);
-            }
-            // 只有“完整档位也不够”才算真不够；只拿前五兜底时不报警，免得默认视图满屏感叹号
-            if (rem > 0) { swept += rem * last; if (full) matShort = true; }
-            per = swept / batch;
-            unit = swept / need;
-          } else {
-            per = best * ri.quantity;
-          }
-          matCost += per;
-          mats.push({ type_id: ri.type_id, quantity: ri.quantity, unit: unit, batchNeed: need });
-        });
+        var mainMat = matCostFor(o, batch);
+        var mats = mainMat.mats;
+        var matCost = mainMat.cost;
+        var matUnknown = mainMat.unknown;
+        var matEst = mainMat.est;
+        var matShort = mainMat.short;
 
         var cost = num(o.isk_cost) + matCost;
         // 秒卖（吃收单）只扣销售税；挂卖还要再扣中介费和安全税
@@ -735,8 +803,14 @@
         var dep = _lp.depth[o.type_id] || null;
         var ctr = (_lp.contracts[o.type_id] || []).filter(function (c) { return num(c.loc) === num(_lp.station); });
         var contractPerLp = null, contractGrossPerLp = null, contractProfit = null, totalContract = null;
+        var contractUnit = null;
         if (ctr.length && o.lp_cost > 0) {
-          var cRev = num(ctr[0].unit) * o.quantity;
+          var c0 = ctr[0];
+          var cUnit = num(c0.unit);
+          // BPC 合同按每 run 单价折算，才能和 LP 商店的蓝图拷贝比较
+          if (c0.bpc && num(c0.runs) > 1) cUnit = cUnit / num(c0.runs);
+          var cRev = cUnit * o.quantity;
+          contractUnit = cUnit;
           contractProfit = cRev * (1 - fSales) - cost;
           contractPerLp = contractProfit / o.lp_cost;
           contractGrossPerLp = cRev / o.lp_cost;
@@ -755,7 +829,10 @@
               depRev += depTake * num(dep.buy[dj].p);
               depRem -= depTake;
             }
-            depProfit = depRev * (1 - fSales) - depUse * cost;
+            // 材料成本要按实际吃得下的 depUse 批数重算，不能用整批 times 的单价
+            var depMat = matCostFor(o, depUse);
+            var depCost = num(o.isk_cost) + depMat.cost;
+            depProfit = depRev * (1 - fSales) - depUse * depCost;
           }
         }
 
@@ -770,6 +847,7 @@
           mats: mats,
           matCost: matCost,
           matUnknown: matUnknown,
+          matEst: matEst,
           matShort: matShort,
           batch: batch,
           qty: qty,
@@ -792,6 +870,7 @@
           hAvg: hAvg,
           hDays: hDays,
           contractPerLp: contractPerLp,
+          contractUnit: contractUnit,
           contractGrossPerLp: contractGrossPerLp,
           contractProfit: contractProfit,
           totalContract: totalContract,
@@ -859,6 +938,7 @@
     var all = (reuse && _lp.rows.length) ? _lp.rows : computeRows();
     _lp.rows = all;
     var rows = sortRows(filterRows(all));
+    _lp.visible = rows;
 
     var cnt = $('lpCnt');
     if (cnt) cnt.textContent = rows.length + ' / ' + all.length + ' 条';
@@ -870,23 +950,28 @@
     if (_lp.page < 1) _lp.page = 1;
     var view = size > 0 ? rows.slice((_lp.page - 1) * size, _lp.page * size) : rows;
 
-    var html = '<div class="lp-sumwrap">' + summaryHtml(all) + '</div>';
+    var html = '<div class="lp-sumwrap">' + summaryHtml(all, rows) + '</div>';
     html += '<div class="tbl-wrap">' + tableHtml(view) + '</div>';
     html += pagerHtml(rows.length, pages);
+    html += '<p class="lp-note">口径说明：BPC 合同按每 run 单价折算；材料只拿到站内前五档且不够覆盖本批时标「估」，填拟兑换次数可拉完整档位；中介费按 Broker Relations 等级计算（BR 5 且满声望最低 1%），可直接改写；极少数站内订单簿拉取失败的物品会退回区域聚合价兜底，订单簿正常时不会混入全区价。</p>';
     html += '<p class="lp-note">所有价格（最高收购价 / 最低出售价 / 材料成本 / 前五收单深度 / 合同）都只取顶部所选空间站内的订单，不跨站；站内订单簿没加载完之前不显示价格，避免混入全区价。秒卖 = 卖给站内最高收购价，扣『销售税』；挂卖 = 挂站内最低出售价，扣『销售税 + 中介费 + 安全税』；毛 ISK/LP = 卖出收入 ÷ LP（税前、不扣任何成本）；前五秒卖 = 按站内前五收购单从高到低吃掉这些量，可兑换的次数与净收益（按秒卖费率）；合同 = 站内公开合同里该物品最便宜的单物品合同单价（每小时从 everef 快照重建）。站内没有市场挂单的物品（主要是蓝图拷贝）会在「秒卖收益」列用青色「合同」标签给出合同口径的 ISK/LP。材料成本按站内挂卖单从低到高逐档吃单算；每行可以填「拟兑换次数」（留空则按 LP 数量换算），填了会去拉该材料在站内的完整卖单档位（不只是前五档），所以大批量兑换给出的是真实吃单成本；档位吃不满时尾部按最高可见价估，并在材料后面标 !。销售税按 Accounting 等级自动算（7.5% × (1 − 11% × 等级)，默认 4 级 = 4.20%）；中介费 1.8%、安全税 0 可手动改。LP 商店报价 24 小时缓存，站内行情 / 前五深度 / 材料档位 5 分钟缓存（对齐数据源的刷新节奏）；开启「自动刷新」后当前页会按所选间隔静默更新，不用手点。站内订单簿首次加载需要十几秒。</p>';
     renderBody(html);
   }
 
-  function summaryHtml(all) {
+  function summaryHtml(all, visible) {
     var market = all.filter(function (r) { return r.buy > 0 || r.sell > 0; }).length;
     var html = '<div class="lp-sum">'
       + '<span>共 <b>' + all.length + '</b> 条报价</span>'
       + '<span>有行情 <b>' + market + '</b></span>';
-    if (_lp.pricesAt) html += '<span>行情缓存 <b>' + ago(_lp.pricesAt) + '</b></span>';
+    // 各来源的实际拉取时间：只显示最旧的一源，避免“行情刚好”被当成整页都新
+    var stamps = [_lp.pricesAt, _lp.depthAt, _lp.matAt, _lp.contractsAt, _lp.historyAt].filter(function (t) { return t > 0; });
+    if (stamps.length) html += '<span>数据最旧 <b>' + ago(Math.min.apply(null, stamps)) + '</b></span>';
     html += '</div>';
 
+    // 只按当前筛选后可见的报价选“最优”，和表格保持一致
+    var src = visible || all;
     LP_STORES.forEach(function (st) {
-      var pool = all.filter(function (r) { return r.store.key === st.key && isFinite(r.perLpNow) && r.perLpNow !== null; });
+      var pool = src.filter(function (r) { return r.store.key === st.key && isFinite(r.perLpNow) && r.perLpNow !== null; });
       if (!pool.length) return;
       pool.sort(function (a, b) { return b.perLpNow - a.perLpNow; });
 
@@ -895,10 +980,20 @@
       html += '<div class="lp-best lp-best-' + st.key.toLowerCase() + '">'
         + '<span class="lp-best-tag">' + st.short + '</span>';
       if (amt > 0) {
+        // 总收益同时受 LP 上限和前五买单深度限制，取更小的那个口径
+        var capTimes = top.times;
+        var capProfit = top.totalNow;
+        var capped = false;
+        if (top.depLoaded && top.depTimes > 0 && top.depTimes < top.times) {
+          capTimes = top.depUse;
+          capProfit = top.depProfit;
+          capped = true;
+        }
         html += '<span>最优 <b>' + escHtml(top.name) + '</b>'
           + ' · 每 LP <b>' + perLp(top.perLpNow) + '</b>'
-          + ' · 可换 <b>' + iskN(top.times) + '</b> 次'
-          + ' · 秒卖总收益 <b>' + iskShort(top.totalNow) + '</b></span>';
+          + ' · 可换 <b>' + iskN(capTimes) + '</b> 次'
+          + (capped ? '（受前五买单限制）' : '')
+          + ' · 秒卖总收益 <b>' + (capProfit === null ? '—' : iskShort(capProfit)) + '</b></span>';
       } else {
         html += '<span>最优 <b>' + escHtml(top.name) + '</b> · 每 LP <b>' + perLp(top.perLpNow) + '</b></span>';
       }
@@ -925,7 +1020,7 @@
       + '<th class="num lp-th-gain lp-sortable" data-sort="list">挂卖收益' + sortArrow('list') + '</th>'
       + '<th class="num lp-th-depth lp-sortable" data-sort="depth">前五秒卖' + sortArrow('depth') + '</th>'
       + '<th class="num lp-th-vol lp-sortable" data-sort="vol">体积 m³' + sortArrow('vol') + '</th>'
-      + '<th class="num lp-th-h48 lp-sortable" data-sort="h48">48h 量/均价' + sortArrow('h48') + '</th>'
+      + '<th class="num lp-th-h48 lp-sortable" data-sort="h48">近两日 量/均价' + sortArrow('h48') + '</th>'
       + '<th class="num lp-th-total lp-sortable" data-sort="total">可兑总收益' + sortArrow('total') + '</th>'
       + '</tr></thead>';
     return '<table class="ship-tbl lp-tbl">' + head + '<tbody>'
@@ -964,9 +1059,13 @@
     }).join('\n');
   }
 
-  // 48h 历史的悬停明细（区域级、按天）
+  // 近两日历史的悬停明细（区域级、按天）
   function hTitle(r) {
-    var head = 'ESI 市场历史（区域级，不是单个空间站）';
+    var head = 'ESI 市场历史（区域级，不是单个空间站；每日约 11:05 UTC 更新，最新一天可能滞后）';
+    if (r.hDays && r.hDays.length) {
+      var span = r.hDays.length > 1 ? (r.hDays[0].d + ' ~ ' + r.hDays[r.hDays.length - 1].d) : r.hDays[0].d;
+      head += '\n统计区间：' + span;
+    }
     if (!r.hDays || !r.hDays.length) return head + '\n暂无可用量';
     return head + '\n' + r.hDays.map(function (d) {
       return d.d + '：量 ' + iskN(d.v) + '，均价 ' + iskShort(d.a) + '（高 ' + iskShort(d.h) + ' / 低 ' + iskShort(d.l) + '）';
@@ -983,6 +1082,7 @@
       ? '<span class="lp-copy-mat" data-lp-mat="' + escHtml(key) + '" title="点击复制材料清单（Multi-Buy）&#10;' + escHtml(matTitle(r)) + '">'
         + r.mats.length + ' 项 ' + iskShort(r.matCost) + '</span>'
         + (r.matUnknown ? ' <span class="lp-warn" title="有材料查不到行情，成本偏低">?</span>' : '')
+        + (r.matEst ? ' <span class="lp-warn" title="只按站内前五档估算，而且五档不够覆盖本批材料；填拟兑换次数可拉完整档位">估</span>' : '')
         + (r.matShort ? ' <span class="lp-warn" title="站内挂卖档位不够，超出部分按最高可见价估，实际成本会更高">!</span>' : '')
         + '<button type="button" class="lp-mat-refresh" data-lp-matrefresh="' + escHtml(key) + '" title="刷新这几项材料的最新价格">' + LP_REFRESH_ICON + '</button>'
       : '—';
@@ -1043,7 +1143,7 @@
         + '<div><span class="lp-k">收</span>' + (r.buy > 0 ? iskShort(r.buy) : '—') + '</div>'
         + '<div><span class="lp-k">售</span>' + (r.sell > 0 ? iskShort(r.sell) : '—') + '</div>'
         + '<div><span class="lp-k">换得</span>x' + iskN(o.quantity) + '</div>'
-        + (r.contracts.length ? '<div class="lp-contract"><span class="lp-k">合同</span>' + iskShort(r.contracts[0].unit) + '</div>' : '')
+        + (r.contracts.length ? '<div class="lp-contract"><span class="lp-k">合同</span>' + iskShort(r.contractUnit === null ? r.contracts[0].unit : r.contractUnit) + '</div>' : '')
       + '</td>'
       + '<td class="num lp-c-gain">' + nowCell + '</td>'
       + '<td class="num lp-c-gain">'
@@ -1083,7 +1183,9 @@
       + '<th>单价</th><th>合同价</th><th>数量</th><th>说明</th><th>地点</th><th>到期</th>'
       + '</tr></thead><tbody>';
     list.forEach(function (c) {
-      var note = c.bpc ? ('BPC ' + iskN(c.runs) + ' run · ME' + iskN(c.me) + ' TE' + iskN(c.te)) : '成品';
+      var note = c.bpc
+        ? ('BPC ' + iskN(c.runs) + ' run · 每 run ' + iskN(num(c.unit) / Math.max(1, num(c.runs))) + ' · ME' + iskN(c.me) + ' TE' + iskN(c.te))
+        : '成品';
       html += '<tr><td class="num">' + iskN(c.unit) + '</td>'
         + '<td class="num">' + iskN(c.price) + '</td>'
         + '<td class="num">' + iskN(c.qty) + '</td>'
@@ -1093,10 +1195,12 @@
     });
     html += '</tbody></table>';
     var c0 = list[0];
-    var rev = num(c0.unit) * r.offer.quantity;
+    var cUnit = num(c0.unit);
+    if (c0.bpc && num(c0.runs) > 1) cUnit = cUnit / num(c0.runs);
+    var rev = cUnit * r.offer.quantity;
     var profit = rev * (1 - salesTaxPct() / 100) - r.cost;
     var per = r.offer.lp_cost > 0 ? profit / r.offer.lp_cost : null;
-    html += '<div class="lp-detail-msg">按最低合同单价：毛收入 ' + iskShort(rev)
+    html += '<div class="lp-detail-msg">按最低合同单价（BPC 按每 run 折算）：毛收入 ' + iskShort(rev)
       + '，扣 ' + salesTaxPct().toFixed(2) + '% 销售税与 ISK/材料成本后净收益 ' + iskShort(profit)
       + '，折合 <b>' + perLp(per) + ' ISK/LP</b></div>';
     return html + '</div>';
@@ -1165,9 +1269,10 @@
   }
 
   function lpReload(force) {
-    if (_lp.loading) return;
+    if (_lp.loading) { _lp.reloadPending = true; return; }
     if (!Object.keys(_lp.offers).length) { start(force); return; }
     _lp.loading = true;
+    _lp.loadToken = _lp.regionToken;
     if (force) { _lp.depth = {}; _lp.depthRegion = 0; }
     _lp.forceDepth = !!force;
     loadPrices(force);
@@ -1204,6 +1309,7 @@
   function refreshBook(typeId, btn) {
     if (_lp.bookBusy[typeId]) return;
     _lp.bookBusy[typeId] = 1;
+    var token = _lp.regionToken;
     var t0 = Date.now();
     var nm = typeName(typeId);
     if (btn) bookBtnText(btn, '刷新中…');
@@ -1214,6 +1320,7 @@
     apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + '&force=1', function (res) {
       clearInterval(tick);
       delete _lp.bookBusy[typeId];
+      if (token !== _lp.regionToken) return;
       var ms = Date.now() - t0;
       var ok = !!(res && (res.buy || res.sell));
       _lp.books[typeId] = ok ? res : { error: 1 };
@@ -1231,8 +1338,10 @@
   function loadBook(typeId, force) {
     if (_lp.bookBusy[typeId]) return;
     _lp.bookBusy[typeId] = 1;
+    var token = _lp.regionToken;
     apiGet('lp.php?action=book&region=' + _lp.region + '&station=' + _lp.station + '&type_id=' + typeId + (force ? '&force=1' : ''), function (res) {
       delete _lp.bookBusy[typeId];
+      if (token !== _lp.regionToken) return;
       var ok = !!(res && (res.buy || res.sell));
       _lp.books[typeId] = ok ? res : { error: 1 };
       if (ok && res.cachedAt) _lp.bookMeta[typeId] = { at: res.cachedAt * 1000, ms: 0 };
@@ -1240,10 +1349,9 @@
     });
   }
 
-  function lpSetRegion(v) {
-    var id = parseInt(v, 10);
-    if (!id || id === _lp.region) return;
-    _lp.region = id;
+  // 换区域/空间站时把按区域、按站缓存的行情全部清掉，避免旧枢纽数据混进新枢纽。
+  function resetRegionData() {
+    _lp.regionToken++;
     _lp.prices = {};
     _lp.books = {};
     _lp.matLevels = {};
@@ -1252,11 +1360,25 @@
     _lp.bookMeta = {};
     _lp.depth = {};
     _lp.depthRegion = 0;
+    _lp.depthLoading = false;
+    _lp.depthAt = 0;
+    _depthCallbacks = [];
     _lp.contracts = {};
     _lp.contractsRegion = 0;
+    _lp.contractsLoading = false;
+    _lp.contractsAt = 0;
     _lp.history = {};
     _lp.historyLoaded = false;
+    _lp.historyLoading = false;
+    _lp.historyAt = 0;
     _lp.pricesAt = 0;
+  }
+
+  function lpSetRegion(v) {
+    var id = parseInt(v, 10);
+    if (!id || id === _lp.region) return;
+    _lp.region = id;
+    resetRegionData();
     lpReload(false);
   }
 
@@ -1268,17 +1390,7 @@
     if (!st || id === _lp.station) return;
     _lp.station = id;
     _lp.region = st.region;
-    _lp.prices = {};
-    _lp.books = {};
-    _lp.matLevels = {};
-    _lp.bookBusy = {};
-    _lp.matBusy = {};
-    _lp.bookMeta = {};
-    _lp.depth = {};
-    _lp.depthRegion = 0;
-    _lp.contracts = {};
-    _lp.contractsRegion = 0;
-    _lp.pricesAt = 0;
+    resetRegionData();
     lpReload(false);
   }
 
@@ -1299,6 +1411,19 @@
   function lpSetTaxLevel(v) {
     var n = parseInt(v, 10);
     _lp.fee.taxLevel = (isFinite(n) && n >= 0 && n <= 5) ? n : 4;
+    scheduleRender();
+  }
+
+  // 中介费 = 3% − 0.3% × Broker Relations 等级（声望再降低，最低 1%）
+  function lpSetBrokerLevel(v) {
+    var n = parseInt(v, 10);
+    if (!isFinite(n) || n < 0 || n > 5) n = 4;
+    _lp.brokerLevel = n;
+    _lp.fee.broker = Math.round((3 - 0.3 * n) * 100) / 100;
+    var inp = $('lpFeeBroker');
+    var sel = $('lpFeeBrokerLevel');
+    if (sel) sel.value = String(n);
+    if (inp) inp.value = _lp.fee.broker;
     scheduleRender();
   }
 
@@ -1499,6 +1624,7 @@
   window.lpSetLp = lpSetLp;
   window.lpSetFee = lpSetFee;
   window.lpSetTaxLevel = lpSetTaxLevel;
+  window.lpSetBrokerLevel = lpSetBrokerLevel;
   window.lpSetFaction = lpSetFaction;
   window.lpSetSort = lpSetSort;
   window.lpSetSearch = lpSetSearch;

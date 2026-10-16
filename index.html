@@ -1478,7 +1478,17 @@
           <option value="4" selected>Accounting 4 级 · 4.20%</option>
           <option value="5">Accounting 5 级 · 3.38%</option>
         </select></label>
-        <label>中介费 <input type="number" id="lpFeeBroker" value="1.8" min="0" max="100" step="0.1" oninput="lpSetFee('broker', this.value)">%</label>
+        <label title="Broker Relations 等级按 3% 基础费率计算；势力/军团声望会进一步降低，最低 1%">中介费
+          <select id="lpFeeBrokerLevel" onchange="lpSetBrokerLevel(this.value)">
+            <option value="0">BR 0 · 3.00%</option>
+            <option value="1">BR 1 · 2.70%</option>
+            <option value="2">BR 2 · 2.40%</option>
+            <option value="3">BR 3 · 2.10%</option>
+            <option value="4" selected>BR 4 · 1.80%</option>
+            <option value="5">BR 5 · 1.50%</option>
+          </select>
+          <input type="number" id="lpFeeBroker" value="1.8" min="0" max="100" step="0.01" oninput="lpSetFee('broker', this.value)" title="可直接改写；已计入声望折扣时填实际值">%
+        </label>
         <label>安全税 <input type="number" id="lpFeeSafe" value="0" min="0" max="100" step="0.1" oninput="lpSetFee('safe', this.value)">%</label>
       </span>
       <button class="btn btn-go" onclick="lpReload(true)"><i data-lucide="search"></i>刷新行情</button>
@@ -5208,6 +5218,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=9c2ceae2"></script>
+<script src="lp.js?v=7eb8b536"></script>
 </body>
 </html>
