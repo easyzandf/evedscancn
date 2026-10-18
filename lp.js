@@ -1266,6 +1266,11 @@
       });
       st.value = String(_lp.station);
     }
+    // 浏览器会恢复表单控件上一次的值，这里按真实状态同步一次，避免显示与实际费率不一致
+    var bs = $('lpFeeBrokerLevel');
+    if (bs) bs.value = String(_lp.brokerLevel);
+    var ts = $('lpFeeSalesLevel');
+    if (ts) ts.value = String(_lp.fee.taxLevel);
   }
 
   function lpInit() {
