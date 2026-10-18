@@ -1480,6 +1480,7 @@
         </select></label>
         <label title="Broker Relations 等级按 3% 基础费率计算；势力/军团声望会进一步降低，最低 1%">中介费
           <select id="lpFeeBrokerLevel" onchange="lpSetBrokerLevel(this.value)">
+            <option value="-1">0 中介费 · 0.00%</option>
             <option value="0">BR 0 · 3.00%</option>
             <option value="1">BR 1 · 2.70%</option>
             <option value="2">BR 2 · 2.40%</option>
@@ -5217,6 +5218,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=18483ec9"></script>
+<script src="lp.js?v=6fbe48e8"></script>
 </body>
 </html>
