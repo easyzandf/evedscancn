@@ -1123,13 +1123,14 @@
         : '<div class="lp-val" title="' + escHtml(depthTitle) + '">' + iskN(r.depUse) + ' 次</div>'
           + '<div class="lp-sub' + (num(r.depProfit) < 0 ? ' lp-sub-neg' : '') + '">' + (r.depProfit === null ? '—' : iskShort(r.depProfit)) + '</div>');
 
-    var html = '<tr class="' + cls + '" data-lp-key="' + escHtml(key) + '" data-lp-type="' + o.type_id + '">'
     // 填了「拟兑换次数」就补一行整批体积（体积按换得的数量×次数算）
     var volBatch = r.batch > 1
       ? '<div class="lp-sub">整批 ' + volFmt(r.volTotal * r.batch) + ' m³</div>'
       : '';
     var volTitle = '单个 ' + volFmt(r.volUnit) + ' m³'
       + (r.batch > 1 ? ' · 整批 ' + volFmt(r.volTotal * r.batch) + ' m³' : '');
+
+    var html = '<tr class="' + cls + '" data-lp-key="' + escHtml(key) + '" data-lp-type="' + o.type_id + '">'
       + '<td class="lp-c-item"><div class="lp-name">'
         + '<span class="lp-tag lp-tag-' + r.store.key.toLowerCase() + '">' + r.store.key + '</span>'
         + escHtml(r.name) + (r.isBp ? ' <span class="lp-mini">蓝图</span>' : '') + '</div>'
