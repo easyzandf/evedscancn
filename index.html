@@ -983,6 +983,34 @@
   #buyResult .qty-have { color: var(--green); }
   #buyResult .qty-buy { color: var(--red); font-weight: 700; }
   #buyResult .qty-zero { color: var(--dim); }
+  #buyResult .buy-price-summary {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    margin: 0 0 14px; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  }
+  #buyResult .buy-price-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  #buyResult .buy-price-head span { color: var(--muted); font-size: 12px; font-weight: 600; }
+  #buyResult .buy-price-head b { color: var(--brand-2); font-size: 20px; font-weight: 700; }
+  #buyResult .buy-price-meta { flex: 1 1 280px; color: var(--dim); font-size: 12px; }
+  #buyResult .buy-price-refresh {
+    flex: 0 0 auto; padding: 7px 12px; font-size: 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--muted); font-weight: 600; cursor: pointer; border-radius: var(--radius);
+  }
+  #buyResult .buy-price-refresh svg { width: 14px; height: 14px; }
+  #buyResult .buy-price-refresh:disabled { opacity: .55; cursor: default; }
+  #buyResult .buy-price-loading { color: var(--dim); font-size: 12px; }
+  #buyResult .buy-price-missing { color: var(--red); font-size: 12px; }
+  #buyResult .buy-price-note { color: var(--dim); font-size: 11px; margin-top: 2px; }
+  .tbl-wrap table.buy-tbl { min-width: 900px; table-layout: fixed; }
+  #buyResult .buy-tbl .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  @media (max-width: 700px) {
+    #buyResult .buy-price-summary { align-items: flex-start; }
+    #buyResult .buy-price-head b { font-size: 18px; }
+    #buyResult .buy-price-meta { flex-basis: 100%; }
+  }
 
   /* doc */
   .doc { line-height: 1.8; }
@@ -1670,7 +1698,7 @@
         <li><b>ECM 建议</b> — 扫描结果与浏览器中按舰船势力推荐 ECM 干扰（雷达 / 引力 / 磁力 / 光雷达 / 多谱式）</li>
         <li><b>舰船浏览器</b> — 浏览全部 531 艘舰船的中文数据，支持搜索 / 分类 / 科技等级 / 排序，每行附 ECM 建议；点船名查看详情</li>
         <li><b>舰船详情弹窗</b> — 空船属性（质量 / 槽位 / HP / 电容 / 无人机等）+ 船体加成（中文 traits）</li>
-        <li><b>装备购买 Buy List</b> — 粘贴现有资产、当前舰船配装和新配装 → 扣除可复用装备 → 生成切换方案所需的购买清单</li>
+        <li><b>装备购买 Buy List</b> — 粘贴现有资产、当前舰船配装和新配装 → 扣除可复用装备 → 生成切换方案所需的购买清单，并按 Jita IV-4 当前最低卖单计算补购总价</li>
         <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名或角色 ID 按时间存档；名单标注国民卫队；点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
         <li><b>ESI 查询</b> — 粘贴角色名列表，自动查询军团 / 联盟 / 头衔</li>
         <li><b>会战报告</b> — 把击杀流水自动切成一场场会战，每场给出双方对比（人数 / 损失 / 击毁 / 效率 + <b>联盟构成</b>）、舰船编成、累计损失曲线、<b>时间轴</b>、<b>参战名单</b>；星系可多选筛选，且筛选会重算整份报告</li>
@@ -1682,11 +1710,11 @@
         <li>游戏内 <b>资产 / 机库窗口</b> 全选 → 复制 → 粘贴到「装备购买」①（支持中英文，可多段 / 多角色拼一起）</li>
         <li>资产支持制表符或空格分隔；「名称 数量」「数量 名称」「名称 xN」都能识别</li>
         <li>复制当前舰船的装配 → 粘贴到②；不填则只按机库资产抵扣</li>
-        <li>复制想切换到的<b>新配装</b>（游戏内复制 / Pyfa / EVE Workbench）→ 粘贴到③</li>
+        <li>复制想切换到的<b>新配装</b>（游戏内复制 / Pyfa / EVE Workbench）→ 粘贴到③；也支持游戏内「名称、数量、分类、槽位」多列清单</li>
         <li>在④填要装的<b>艘数</b> → 点「计算购买清单」</li>
-        <li>结果按需购买数排序（装备、弹药、无人机、船体都会算）；点「复制购买清单(Multi-Buy)」回游戏批量购买直接粘贴，或点「截图复制」存图</li>
+        <li>结果按需购买数排序（装备、弹药、无人机、船体都会算），并显示 Jita IV-4 均价、小计和总价；可点「刷新最新价格」重拉站内卖单，再复制 Multi-Buy 清单或截图</li>
       </ol>
-      <p style="color:#777;font-size:12px">原理：通过 typeID 物品词典把中文物品统一归并；需购买 = 新配装需求 − 当前舰船可拆下复用 − 机库已有。同一船型的当前舰船会自动抵扣一艘目标船体；弹药 / 无人机按新配装里的 xN 计算。</p>
+      <p style="color:#777;font-size:12px">原理：通过 typeID 物品词典把中文物品统一归并；需购买 = 新配装需求 − 当前舰船可拆下复用 − 机库已有。同一船型的当前舰船会自动抵扣一艘目标船体；弹药 / 无人机按新配装里的 xN 计算。Jita 价格只取 IV-4 站内卖单，并按实际补购数量从最低价逐档吃单；库存不足时会标记缺货，并把总价标为已知下限。</p>
 
       <h2>30人本 / 战斗记录怎么用</h2>
       <p>「30人本」与「战斗」是<b>两个独立的记录页</b>：同一套界面和统计，但记录、同步码、服务器数据三者完全分开，互不影响。下面以 30人本 为例，战斗页操作完全相同。</p>
@@ -2853,6 +2881,19 @@ function parseAssets(text) {
 // -- parse EFT-format fit (handles Module, Charge inline, /offline, "Name xN") --
 function parseFit(text) {
   var ship = '', modules = {};
+  var lines = (text || '').split(/\r?\n/).filter(function(line) { return line.trim(); });
+  var tabLines = lines.filter(function(line) {
+    var cells = line.split('\t');
+    var first = cells[0] ? cells[0].trim().replace(/\*+$/, '').trim() : '';
+    return cells.length >= 2 && !!(lookupItemId(first) || lookupShip(first));
+  });
+  if (tabLines.length && tabLines.length >= Math.ceil(lines.length * 0.6)) {
+    parseAssets(text).forEach(function(entry) {
+      if (!ship && lookupShip(entry.name)) ship = entry.name;
+      else add(entry.name, entry.qty);
+    });
+    return { ship: ship, modules: modules };
+  }
   function add(name, qty) { if (name) modules[name] = (modules[name] || 0) + qty; }
   (text || '').split(/\r?\n/).forEach(function(raw) {
     var line = raw.trim();
@@ -3053,12 +3094,275 @@ function renderBuy(assets, fit, count, currentFit) {
     + '<button class="btn btn-clr" onclick="clearBuy()">清空</button></div>';
   el.innerHTML = html;
   _lastBuy = { rows: rows, hull: hull, count: count };
+  initBuyPriceView();
   if (buyTotal === 0 && hull && hull.buy === 0) {
     el.querySelector('h3').textContent += '（全部已有，无需购买）';
   }
 }
 
 var _lastBuy = null;
+var _buyPriceGen = 0;
+
+function _buyHullTypeId(name) {
+  var ship = lookupShip(name);
+  return ship && ship.attr ? ship.attr.typeID : null;
+}
+
+function _buyIsk(v) {
+  return typeof fmtIsk === 'function' ? fmtIsk(v) : String(Math.round(v));
+}
+
+function _buyExactIsk(v) {
+  return Math.round(v).toLocaleString('en-US') + ' ISK';
+}
+
+function _appendBuyPriceCells(tr, target) {
+  var unit = document.createElement('td');
+  var sub = document.createElement('td');
+  var unitText = document.createElement('span');
+  var note = document.createElement('div');
+  unit.className = 'num buy-price-cell';
+  sub.className = 'num buy-subtotal-cell';
+  note.className = 'buy-price-note';
+  if (target.qty <= 0) {
+    unitText.textContent = '\u2014';
+    sub.textContent = '\u2014';
+  } else if (!target.id) {
+    unitText.className = 'buy-price-missing';
+    unitText.textContent = '未识别';
+    sub.textContent = '\u2014';
+  } else {
+    unitText.className = 'buy-price-loading';
+    unitText.textContent = '查询中…';
+    sub.textContent = '查询中…';
+  }
+  unit.appendChild(unitText);
+  unit.appendChild(note);
+  tr.appendChild(unit);
+  tr.appendChild(sub);
+  target.unitEl = unitText;
+  target.noteEl = note;
+  target.subEl = sub;
+}
+
+function _setBuyPriceBusy(busy) {
+  var btn = document.getElementById('buyPriceRefresh');
+  if (btn) btn.disabled = !!busy;
+}
+
+function _setBuyPriceMeta(text) {
+  var el = document.getElementById('buyPriceMeta');
+  if (el) el.textContent = text;
+}
+
+function initBuyPriceView() {
+  var lb = _lastBuy;
+  var el = document.getElementById('buyResult');
+  if (!lb || !el) return;
+  _buyPriceGen++;
+  var table = el.querySelector('table.ship-tbl');
+  if (!table) return;
+  table.classList.add('buy-tbl');
+
+  var wrap = document.createElement('div');
+  wrap.className = 'tbl-wrap';
+  table.parentNode.insertBefore(wrap, table);
+  wrap.appendChild(table);
+
+  var summary = document.createElement('div');
+  summary.className = 'buy-price-summary';
+  summary.innerHTML = '<div class="buy-price-head"><span>Jita IV-4 立即购买总价</span><b id="buyPriceTotal">正在查询…</b></div>'
+    + '<div class="buy-price-meta" id="buyPriceMeta">按站内最低卖单和实际补购数量逐档计算</div>'
+    + '<button type="button" class="btn btn-clr buy-price-refresh" id="buyPriceRefresh" onclick="refreshBuyPrices(this)">'
+    + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>刷新最新价格</button>';
+  wrap.parentNode.insertBefore(summary, wrap);
+
+  var head = table.querySelector('thead tr');
+  if (head) {
+    var thUnit = document.createElement('th');
+    var thSub = document.createElement('th');
+    thUnit.className = 'num';
+    thSub.className = 'num';
+    thUnit.textContent = 'Jita 均价';
+    thSub.textContent = '小计';
+    thUnit.style.width = '11%';
+    thSub.style.width = '10%';
+    head.appendChild(thUnit);
+    head.appendChild(thSub);
+  }
+
+  var trs = table.querySelectorAll('tbody tr');
+  var targets = [];
+  var rowIndex = 0;
+  if (lb.hull && trs[rowIndex]) {
+    var hullTarget = {
+      kind: 'hull', id: _buyHullTypeId(lb.hull.ship), qty: lb.hull.buy || 0,
+      name: lb.hull.ship
+    };
+    _appendBuyPriceCells(trs[rowIndex], hullTarget);
+    if (hullTarget.qty > 0) targets.push(hullTarget);
+    rowIndex++;
+  }
+  lb.rows.forEach(function(r) {
+    var tr = trs[rowIndex++];
+    if (!tr) return;
+    var target = { kind: 'item', id: r.id || null, qty: r.buy || 0, name: r.name };
+    _appendBuyPriceCells(tr, target);
+    if (target.qty > 0) targets.push(target);
+  });
+  lb.priceTargets = targets;
+  loadBuyPrices();
+}
+
+function _consumeSellLevels(rec, qty) {
+  var out = { qty: qty, cost: 0, bought: 0, min: 0, high: 0, avg: null, short: true, unavailable: false, usedLevels: 0 };
+  var levels = rec && rec.lv ? rec.lv : [];
+  if (!levels.length) { out.unavailable = true; return out; }
+  var left = qty;
+  levels.forEach(function(lv) {
+    if (left <= 0) return;
+    var p = parseFloat(lv.p);
+    var v = parseInt(lv.v, 10);
+    if (!(p > 0) || !(v > 0)) return;
+    var take = Math.min(left, v);
+    if (!out.min) out.min = p;
+    out.cost += take * p;
+    out.bought += take;
+    out.high = p;
+    out.usedLevels++;
+    left -= take;
+  });
+  out.avg = out.bought > 0 ? out.cost / out.bought : null;
+  out.short = out.bought < qty;
+  return out;
+}
+
+function _paintBuyPriceTarget(target) {
+  if (!target || !target.unitEl) return;
+  if (target.qty <= 0) return;
+  var c = target.calc;
+  if (!c || c.error) {
+    target.unitEl.className = 'buy-price-missing';
+    target.unitEl.textContent = '查询失败';
+    target.subEl.textContent = '\u2014';
+    target.noteEl.textContent = '';
+    return;
+  }
+  if (c.unavailable || c.avg === null) {
+    target.unitEl.className = 'buy-price-missing';
+    target.unitEl.textContent = '无卖单';
+    target.subEl.textContent = '\u2014';
+    target.noteEl.textContent = '';
+    return;
+  }
+  target.unitEl.className = 'buy-price-unit';
+  target.unitEl.textContent = _buyIsk(c.avg);
+  target.subEl.textContent = (c.short ? '至少 ' : '') + _buyIsk(c.cost);
+  target.noteEl.textContent = c.short ? ('缺 ' + (c.qty - c.bought) + ' 件') : (c.usedLevels > 1 ? (c.usedLevels + ' 档成交') : '');
+  var title = '最低单价 ' + _buyExactIsk(c.min)
+    + '\n最高成交档 ' + _buyExactIsk(c.high)
+    + '\n已覆盖 ' + c.bought + ' / ' + c.qty + ' 件';
+  target.unitEl.title = title;
+  target.subEl.title = title;
+}
+
+function renderBuyPriceResult(gen) {
+  if (gen !== _buyPriceGen || !_lastBuy) return;
+  var targets = _lastBuy.priceTargets || [];
+  var totalEl = document.getElementById('buyPriceTotal');
+  var known = 0, priced = 0, complete = 0, short = 0, failed = 0, unknown = 0;
+  targets.forEach(function(target) {
+    _paintBuyPriceTarget(target);
+    if (!target.id) { unknown++; return; }
+    var c = target.calc;
+    if (!c || c.error) { failed++; return; }
+    if (c.avg !== null) { known += c.cost; priced++; }
+    if (!c.short && c.avg !== null) complete++; else short++;
+  });
+
+  var allComplete = targets.length > 0 && complete === targets.length;
+  if (!targets.length) {
+    if (totalEl) totalEl.textContent = '0 ISK';
+    _setBuyPriceMeta('没有需要购买的物品');
+    var refresh = document.getElementById('buyPriceRefresh');
+    if (refresh) refresh.disabled = true;
+    return;
+  }
+  if (totalEl) {
+    if (priced) {
+      totalEl.textContent = (allComplete ? '' : '至少 ') + _buyIsk(known) + ' ISK';
+      totalEl.title = _buyExactIsk(known) + (allComplete ? '' : '（已知下限）');
+    } else {
+      totalEl.textContent = '\u2014';
+      totalEl.removeAttribute('title');
+    }
+  }
+  var now = new Date();
+  var clock = now.toLocaleTimeString('zh-CN', { hour12: false });
+  var meta = 'Jita IV-4 · 当前最低卖单逐档计算 · ' + clock + ' · ' + complete + '/' + targets.length + ' 项完整报价';
+  if (!allComplete) meta += ' · 部分物品无卖单、库存不足或查询失败，总价为已知下限';
+  if (!priced) meta = 'Jita IV-4 · 未能取得可用价格，请稍后刷新重试';
+  _setBuyPriceMeta(meta);
+  _lastBuy.priceAt = now.getTime();
+  _lastBuy.priceKnown = known;
+  _lastBuy.priceComplete = allComplete;
+  _setBuyPriceBusy(false);
+}
+
+function loadBuyPrices() {
+  var lb = _lastBuy;
+  if (!lb || !lb.priceTargets) return;
+  var gen = ++_buyPriceGen;
+  var targets = lb.priceTargets;
+  var byId = {}, ids = [], idTargets = [];
+  targets.forEach(function(target) {
+    target.calc = null;
+    if (!target.id) return;
+    if (!byId[target.id]) { byId[target.id] = true; ids.push(target.id); }
+    idTargets.push(target);
+  });
+  _setBuyPriceBusy(true);
+  if (!targets.length) { renderBuyPriceResult(gen); return; }
+  if (!ids.length) { renderBuyPriceResult(gen); return; }
+  var chunks = [];
+  for (var i = 0; i < ids.length; i += 20) chunks.push(ids.slice(i, i + 20));
+  var done = 0;
+  function nextChunk(index) {
+    if (gen !== _buyPriceGen) return;
+    if (index >= chunks.length) { renderBuyPriceResult(gen); return; }
+    _setBuyPriceMeta('正在查询 Jita IV-4 卖单 ' + done + ' / ' + ids.length + '…');
+    var url = 'lp.php?action=matlevels&region=10000002&station=60003760&ids=' + chunks[index].join(',') + '&max=800&force=1';
+    _fetch('GET', url, null, function(res) {
+      if (gen !== _buyPriceGen) return;
+      var levels = res && res.levels ? res.levels : null;
+      chunks[index].forEach(function(id) {
+        var rec = levels ? levels[id] : null;
+        idTargets.forEach(function(target) {
+          if (target.id !== id) return;
+          target.calc = rec ? _consumeSellLevels(rec, target.qty) : { error: true };
+        });
+      });
+      done += chunks[index].length;
+      nextChunk(index + 1);
+    });
+  }
+  nextChunk(0);
+}
+
+function refreshBuyPrices(btn) {
+  if (btn) btn.disabled = true;
+  loadBuyPrices();
+}
+function initBuyCopyText() {
+  var fitInput = document.getElementById('fitInput');
+  if (!fitInput) return;
+  var label = fitInput.previousElementSibling;
+  if (label) label.innerHTML = '③ 粘贴<strong>想切换的新配装</strong>（EFT 或游戏内多列清单，中英文均可）';
+  fitInput.placeholder = '把要切换到的装配复制到这里，例如：\n[Ferox, New Fit]\nDamage Control II\nHeavy Missile Launcher II x7\n\n也可以直接粘贴游戏内多列清单：\n损伤控制 II\t1\t损伤控制\t装备\t低能量槽';
+  var hint = document.querySelector('.buy-bar .hint2');
+  if (hint) hint.textContent = '需购买 = 新配装需求 - 当前配装可复用 - 已有资产；Jita 价格按 IV-4 当前最低卖单和实际补购数量逐档计算';
+}
+initBuyCopyText();
 function _copyText(t, btn, ok) {
   var ta = document.createElement('textarea');
   ta.value = t; ta.style.position = 'fixed'; ta.style.left = '-9999px';
@@ -3116,6 +3420,7 @@ function screenshotBuy(btn) {
 }
 
 function clearBuy() {
+  _buyPriceGen++;
   document.getElementById('assetInput').value = '';
   document.getElementById('currentFitInput').value = '';
   document.getElementById('fitInput').value = '';
