@@ -1471,12 +1471,12 @@
       <label class="lp-lpinput lp-g"><span class="lp-dot"></span>盖伦特 LP <input type="number" id="lpAmtG" min="0" step="1000" placeholder="0" oninput="lpSetLp('G', this.value)"></label>
       <span class="lp-fee">
         <label>销售税 <select id="lpFeeSalesLevel" onchange="lpSetTaxLevel(this.value)">
-          <option value="0" selected>Accounting 0 级 · 7.50%</option>
+          <option value="0">Accounting 0 级 · 7.50%</option>
           <option value="1">Accounting 1 级 · 6.68%</option>
           <option value="2">Accounting 2 级 · 5.85%</option>
           <option value="3">Accounting 3 级 · 5.03%</option>
           <option value="4">Accounting 4 级 · 4.20%</option>
-          <option value="5">Accounting 5 级 · 3.38%</option>
+          <option value="5" selected>Accounting 5 级 · 3.38%</option>
         </select></label>
         <label title="Broker Relations 等级按 3% 基础费率计算；势力/军团声望会进一步降低，最低 1%">中介费
           <select id="lpFeeBrokerLevel" onchange="lpSetBrokerLevel(this.value)">
@@ -5218,6 +5218,6 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
-<script src="lp.js?v=06215f74"></script>
+<script src="lp.js?v=93d1160d"></script>
 </body>
 </html>
