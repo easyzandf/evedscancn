@@ -1655,7 +1655,7 @@
       </div>
 
       <div class="browbar">
-        <input type="text" id="brInput" placeholder="军团 / 联盟 / 角色（留空则聚合 PLA-F、P.L.A 与 Goonswarm）"
+        <input type="text" id="brInput" placeholder="军团 / 联盟 / 角色（留空则只看 PLA-F 与 P.L.A 参与的战斗）"
                onkeydown="if(event.key==='Enter')brLoad()">
         <select id="brDays" onchange="brLoad()">
           <option value="1" selected>最近 24 小时</option>
@@ -1744,14 +1744,14 @@
 
       <h2>会战报告怎么用</h2>
       <ol class="doc-steps">
-        <li>点导航栏「<b>会战报告</b>」→ 默认聚合 <code>PLA Fleet</code>、<code>P.L.A</code> 和整个 <code>Goonswarm Federation</code> 联盟近 24 小时的数据。也可以输入其他军团 / 联盟 / 角色的名称或缩写（<code>PLA-F</code> 这类 ticker 也行），直接粘贴 zKillboard 链接同样可以</li>
+        <li>点导航栏「<b>会战报告</b>」→ 默认只识别 <code>PLA Fleet</code> 与 <code>P.L.A</code> 参与的战斗。战斗里出现的 Goonswarm 成员算本方；没有这两个军团参与的 Goonswarm 单独战斗不会出现。也可以输入其他军团 / 联盟 / 角色，或粘贴 zKillboard 链接</li>
         <li>列表里每一条就是一场会战（时间 / 时长 / 星系 / 双方击毁与被毁 / 效率），<b>点任意一场</b>看报告</li>
         <li>报告自上而下：<b>双方对比卡片</b>（含联盟构成）→ <b>累计损失曲线</b> → <b>时间轴</b> → <b>舰船编成</b> → <b>参战名单</b></li>
         <li>右上角有<b>两张截图</b>：上半（总览 → 时间轴）和下半（编成 · 名单），因为整份报告太长，一张截不全也看不清</li>
       </ol>
 
       <h3>本方 / 敌对怎么分</h3>
-      <p>本方包括 <code>PLA-F</code>（PLA Fleet）、<code>P.L.A</code>（Peoples Liberation Army）两个军团，以及整个 <code>Goonswarm Federation</code> 联盟。名单分别写在 <code>kb.php</code> 的 <code>$KB_HOME_ALLIANCES</code> / <code>$KB_HOME_CORPS</code> 和 <code>index.html</code> 的 <code>BR_HOME_ALLIANCES</code> / <code>BR_HOME_CORPS</code> 中，<b>要改必须两处一起改</b>。</p>
+      <p>默认只从 <code>PLA-F</code>（PLA Fleet）与 <code>P.L.A</code>（Peoples Liberation Army）两个军团的击杀/损失中发现会战。分边时，整个 <code>Goonswarm Federation</code> 联盟以及这两个军团都算本方。因此 Goonswarm 可以出现在本方统计里，但<b>没有 PLA-F 或 P.L.A 参与的 Goonswarm 战斗不会被识别</b>。</p>
 
       <h3>筛选会重算整份报告</h3>
       <p>上方的筛选里，<b>星系可多选</b>（每个带击杀数），价值单选。改筛选不只是过滤某一块 —— 双方统计、编成、曲线、时间轴、名单<b>全部只算选中的那部分</b>，屏幕上始终只有一个结果集。</p>
@@ -4780,7 +4780,7 @@ var _br = { list: null, cur: null, names: {}, tgt: null, fsys: 0, fval: 0,
 // 改一处要改两处。注意 P.L.A 是军团不是联盟，它挂在 Goonswarm Federation 下。
 var BR_HOME_ALLIANCES = [1354830081];              // Goonswarm Federation is also home.
 var BR_HOME_CORPS     = [98764551, 98190062];     // PLA-F (PLA Fleet) · P.L.A (Peoples Liberation Army)
-var BR_HOME_TARGET    = { type: 'home', id: 0 };   // Aggregate Goonswarm plus both home corps.
+var BR_HOME_TARGET    = { type: 'home', id: 0 };   // Discover both home corps; Goonswarm only affects side.
 
 // 是不是本方。参战方带 alliance_id 可以直接判；受害者没有，只能拿 corp 反查联盟
 // （_kbCorpDict 在 brOpen 里已经批量拉过了）。

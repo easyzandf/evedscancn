@@ -262,7 +262,7 @@ ESI 的 `/universe/names/` 在**请求里只要有一个无效 ID**（删号、�
 
 ### 会战识别怎么做的
 
-默认拉取 `PLA Fleet`、`P.L.A` 两个本方军团以及整个 `Goonswarm Federation` 联盟近 7 天的 kills + losses，分别缓存后合并去重。会战识别**先按星系分组**，再在该星系内按 `killmail_time` 切段：相邻两条差超过 20 分钟就断开成新的一场，少于 5 条的片段丢掉。这样大型联盟在其他星系的持续击杀不会把全球活动串成一场超长会战。
+默认只拉取 `PLA Fleet`、`P.L.A` 两个本方军团近 7 天的 kills + losses，分别缓存后合并去重。会战识别**先按星系分组**，再在该星系内按 `killmail_time` 切段：相邻两条差超过 20 分钟就断开成新的一场，少于 5 条的片段丢掉。Goonswarm 不参与会战发现，只在已识别战斗里参与本方/敌对分边。
 
 ### 本方 / 敌对怎么定
 
@@ -271,7 +271,7 @@ $KB_HOME_ALLIANCES = [1354830081];             // Goonswarm Federation 整条联
 $KB_HOME_CORPS     = [98764551, 98190062];     // PLA-F（PLA Fleet）· P.L.A（Peoples Liberation Army）
 ```
 
-> ⚠️ `P.L.A` 是**军团**不是联盟缩写。默认会战查询使用 `type=home` 聚合 `PLA Fleet`、`P.L.A` 两个军团以及整个 `Goonswarm Federation` 联盟。`index.html` 里有一份同样的常量（`BR_HOME_ALLIANCES` / `BR_HOME_CORPS`），**改一处必须改两处**。
+> ⚠️ `P.L.A` 是**军团**不是联盟缩写。默认会战查询使用 `type=home`，只聚合 `PLA Fleet` 与 `P.L.A` 两个军团。`Goonswarm Federation` 只用于分边，因此没有这两个军团参与的 Goonswarm 单独战斗不会被识别。`index.html` 里有一份同样的常量（`BR_HOME_ALLIANCES` / `BR_HOME_CORPS`），**改一处必须改两处**。
 
 - 参战方自带 `alliance_id`，直接比 `$KB_HOME_ALLIANCES`
 - **受害者没有 `alliance_id`**（zKillboard 不给），先比 `$KB_HOME_CORPS`，不在名单里就拿 `corporation_id` 反查联盟（`kbCorpMap()`，批量并行 + `cp:` 缓存）

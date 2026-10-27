@@ -66,6 +66,7 @@ $KB_TYPES = ['home', 'corporationID', 'allianceID', 'characterID'];
 
 // The home side includes Goonswarm Federation plus the two fixed home corporations.
 // PLA Fleet and P.L.A remain explicitly included even if their alliance changes.
+// Discovery is corp-only. Goonswarm is used only when classifying sides inside those battles.
 // Keep this in sync with BR_HOME_CORPS in index.html.
 $KB_HOME_ALLIANCES = [1354830081];
 $KB_HOME_CORPS     = [98764551, 98190062];
@@ -642,12 +643,10 @@ function kbBattleSummary($kms, $home, $corpMap) {
 // 重新拉取整份数据 -> 聚类 -> 写回缓存。上游失败返回 null（调用方决定怎么处理），
 // 失败时**绝不写缓存** —— 宁可下次再来，也不能把残缺数据固化下来。
 function kbRefreshHomeBattles($pdo, $key, $days, $gap) {
-    global $KB_HOME_CORPS, $KB_HOME_ALLIANCES;
+    global $KB_HOME_CORPS;
 
+    // Home discovery is corp-only. Goonswarm is used for side classification, not discovery.
     $sources = [];
-    foreach (array_unique(array_map('intval', $KB_HOME_ALLIANCES)) as $alliance) {
-        if ($alliance > 0) $sources[] = ['allianceID', $alliance];
-    }
     foreach (array_unique(array_map('intval', $KB_HOME_CORPS)) as $corp) {
         if ($corp > 0) $sources[] = ['corporationID', $corp];
     }
