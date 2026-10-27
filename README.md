@@ -262,16 +262,16 @@ ESI 的 `/universe/names/` 在**请求里只要有一个无效 ID**（删号、�
 
 ### 会战识别怎么做的
 
-拉「本方联盟近 7 天的 kills + losses」（约 800 条，分页并行），按 `killmail_time` 排序后**按时间间隔切段**：相邻两条差超过 20 分钟就断开成新的一场，少于 5 条的片段丢掉（避免把零星摩擦当会战）。7 天实测切出约 49 场。
+默认拉取 `PLA Fleet` 与 `P.L.A` 两个本方军团近 7 天的 kills + losses，分别缓存后再合并去重、按 `killmail_time` 排序并**按时间间隔切段**：相邻两条差超过 20 分钟就断开成新的一场，少于 5 条的片段丢掉（避免把零星摩擦当会战）。
 
 ### 本方 / 敌对怎么定
 
 ```php
-$KB_HOME_ALLIANCES = [99014027, 1354830081];  // People's Liberation Alliance · Goonswarm Federation
-$KB_HOME_CORPS     = [98764551, 98190062];    // PLA-F（PLA Fleet）· P.L.A（Peoples Liberation Army）
+$KB_HOME_ALLIANCES = [];                       // 只按军团判定，不把上级联盟整条算本方
+$KB_HOME_CORPS     = [98764551, 98190062];     // PLA-F（PLA Fleet）· P.L.A（Peoples Liberation Army）
 ```
 
-> ⚠️ `P.L.A` 是**军团**不是联盟缩写，它挂在 **Goonswarm Federation** 下。`index.html` 里有一份同样的常量（`BR_HOME_ALLIANCES` / `BR_HOME_CORPS`），**改一处必须改两处**。
+> ⚠️ `P.L.A` 是**军团**不是联盟缩写。默认会战查询使用 `type=home` 聚合这两个军团，不把 Goonswarm 或其他上级联盟整条算作本方。`index.html` 里有一份同样的常量（`BR_HOME_ALLIANCES` / `BR_HOME_CORPS`），**改一处必须改两处**。
 
 - 参战方自带 `alliance_id`，直接比 `$KB_HOME_ALLIANCES`
 - **受害者没有 `alliance_id`**（zKillboard 不给），先比 `$KB_HOME_CORPS`，不在名单里就拿 `corporation_id` 反查联盟（`kbCorpMap()`，批量并行 + `cp:` 缓存）

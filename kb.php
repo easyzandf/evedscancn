@@ -62,13 +62,12 @@ define('KB_REGRESS_GUARD', 900); // Only reject an older upstream page while the
 $UA = 'EVE-DScan-CN/1.0 (+https://dscan.dpdns.org/)';
 
 // type 会被拼进上游 URL，必须白名单
-$KB_TYPES = ['corporationID', 'allianceID', 'characterID'];
+$KB_TYPES = ['home', 'corporationID', 'allianceID', 'characterID'];
 
-// 「本方」是谁 —— 会战报告的「本方 / 敌对」按这个判断，和 30人本 页面的 LOG_HOME_CORPS 对应。
-//   PLA Fleet (PLA-F)            -> People's Liberation Alliance
-//   Peoples Liberation Army (P.L.A) -> Goonswarm Federation
-// 要加友军就往这两个数组里加 ID。前端 index.html 里有一份同样的常量，两处要一起改。
-$KB_HOME_ALLIANCES = [99014027, 1354830081];
+// The home side is defined by corporations only. Do not treat a parent alliance as home.
+// PLA Fleet (PLA-F) and Peoples Liberation Army (P.L.A) are the two fixed home corps.
+// Keep this in sync with BR_HOME_CORPS in index.html.
+$KB_HOME_ALLIANCES = [];
 $KB_HOME_CORPS     = [98764551, 98190062];
 
 function fail($msg, $http = 400) {
@@ -438,7 +437,9 @@ function kbHomeSide($pdo, $type, $id) {
     $alliances = $KB_HOME_ALLIANCES;
     $corps     = $KB_HOME_CORPS;
 
-    if ($type === 'allianceID') {
+    if ($type === 'home') {
+        // Home is defined by the fixed corporation list only, not their parent alliances.
+    } elseif ($type === 'allianceID') {
         $alliances[] = (int)$id;
         $key = 'ac:' . (int)$id;   // 联盟的军团列表，很少变，缓存 7 天
         $cached = cacheGet($pdo, $key, KB_NAME_TTL);
@@ -626,7 +627,44 @@ function kbBattleSummary($kms, $home, $corpMap) {
 // ---- 会战列表 ----
 // 重新拉取整份数据 -> 聚类 -> 写回缓存。上游失败返回 null（调用方决定怎么处理），
 // 失败时**绝不写缓存** —— 宁可下次再来，也不能把残缺数据固化下来。
+function kbRefreshHomeBattles($pdo, $key, $days, $gap) {
+    global $KB_HOME_CORPS;
+
+    $kms = [];
+    foreach (array_unique(array_map('intval', $KB_HOME_CORPS)) as $corp) {
+        if ($corp <= 0) continue;
+        $corpKey = 'bt:corporationID:' . $corp . ':' . $days . ':' . $gap;
+        $part = kbRefreshBattles($pdo, $corpKey, 'corporationID', $corp, $days, $gap);
+        if ($part === null) $part = cacheGet($pdo, $corpKey, 31536000);
+        if ($part === null || !isset($part['battles'])) return null;
+        foreach ($part['battles'] as $battle) {
+            foreach ($battle['kms'] as $km) $kms[] = $km;
+        }
+    }
+
+    $home = kbHomeSide($pdo, 'home', 0);
+    $clusters = kbCluster(kbDedupe($kms), $gap * 60, 5);
+    $battles = [];
+    foreach ($clusters as $cluster) {
+        $battles[] = ['id' => (int)$cluster[0]['id'], 'kms' => $cluster];
+    }
+    $data = ['type' => 'home', 'id' => 0, 'days' => $days, 'gap' => $gap,
+             'home' => $home, 'battles' => $battles];
+
+    $prevAt = 0;
+    $prev = cacheGet($pdo, $key, 31536000, $prevAt);
+    if ($prev && isset($prev['battles']) && (time() - $prevAt) <= KB_REGRESS_GUARD
+        && kbNewestKm($battles) < kbNewestKm($prev['battles'])) {
+        return null;
+    }
+
+    cachePut($pdo, $key, $data);
+    cachePrune($pdo);
+    return $data;
+}
+
 function kbRefreshBattles($pdo, $key, $type, $id, $days, $gap) {
+    if ($type === 'home') return kbRefreshHomeBattles($pdo, $key, $days, $gap);
     // 分页拉。一页 200 条，7 天约 900 条，所以两侧各要几页。
     //   · 逐轮翻页，只继续拉还有下一页的那一侧
     //   · 任何一页失败先重试一次，仍失败就整份作废
@@ -720,7 +758,8 @@ if ($action === 'battles') {
     $type = isset($_GET['type']) ? (string)$_GET['type'] : '';
     if (!in_array($type, $KB_TYPES, true)) fail('invalid type');
     $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-    if ($id <= 0) fail('invalid id');
+    if ($type === 'home') $id = 0;
+    elseif ($id <= 0) fail('invalid id');
 
     $days = isset($_GET['days']) ? (int)$_GET['days'] : 7;
     if ($days < 1 || $days > 7) $days = 7;
@@ -789,7 +828,8 @@ if ($action === 'report') {
     $type = isset($_GET['type']) ? (string)$_GET['type'] : '';
     if (!in_array($type, $KB_TYPES, true)) fail('invalid type');
     $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-    if ($id <= 0) fail('invalid id');
+    if ($type === 'home') $id = 0;
+    elseif ($id <= 0) fail('invalid id');
     $bid = isset($_GET['bid']) ? (int)$_GET['bid'] : 0;
     if ($bid <= 0) fail('invalid bid');
 
