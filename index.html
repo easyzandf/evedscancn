@@ -1218,6 +1218,30 @@
   /* 伤害占比条已随 KB 页一起删除（会战报告用的是 .bar-fill） */
 
   /* 会战报告 */
+  .br-summary {
+    margin: 12px 0 18px; padding: 14px 16px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  }
+  .br-summary-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .br-summary-kicker { display: block; color: var(--muted); font-size: 11px; font-weight: 600; }
+  .br-summary-head b { display: block; margin-top: 3px; color: var(--brand-2); font-size: 20px; font-weight: 700; }
+  .br-summary-time { color: var(--dim); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
+  .br-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .br-summary-item { min-width: 0; padding: 9px 11px; background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 6px; }
+  .br-summary-item span { display: block; color: var(--muted); font-size: 11px; }
+  .br-summary-item b { display: block; margin-top: 3px; color: var(--text); font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .br-summary-item b.home { color: var(--cyan); }
+  .br-summary-item b.foe { color: var(--red); }
+  .br-summary-foot { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 11px; color: var(--muted); font-size: 11.5px; }
+  .br-summary-foot b { color: var(--text); font-weight: 600; }
+  .br-summary-foot .home { color: var(--cyan); }
+  .br-summary-foot .foe { color: var(--red); }
+  .br-summary-foot .sys { color: var(--brand-2); }
+  @media (max-width: 700px) {
+    .br-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .br-summary-time { width: 100%; text-align: left; }
+  }
   .br-row {
     display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin-bottom: 8px;
     background: var(--surface); border: 1px solid var(--border-soft); border-radius: var(--radius);
@@ -4888,6 +4912,57 @@ function brLoad(force) {
   });
 }
 
+function brBuildListSummary(bs, d, names) {
+  var totalValue = 0, totalKills = 0, homeDestroyed = 0, homeLost = 0;
+  var homePilots = 0, foePilots = 0, minT = 0, maxT = 0, maxBattle = null, maxBattleValue = 0;
+  var systems = {};
+
+  bs.forEach(function (b) {
+    var battleValue = Number(b.iskTotal);
+    if (!isFinite(battleValue)) battleValue = Number(b.home.iskDestroyed || 0) + Number(b.foe.iskDestroyed || 0);
+    totalValue += battleValue;
+    totalKills += Number(b.killmails || 0);
+    homeDestroyed += Number(b.home.iskDestroyed || 0);
+    homeLost += Number(b.home.iskLost || 0);
+    homePilots += Number(b.home.pilots || 0);
+    foePilots += Number(b.foe.pilots || 0);
+    if (!minT || b.t0 < minT) minT = b.t0;
+    if (b.t1 > maxT) maxT = b.t1;
+    if (!maxBattle || b.killmails > maxBattle.killmails || (b.killmails === maxBattle.killmails && battleValue > maxBattleValue)) {
+      maxBattle = b;
+      maxBattleValue = battleValue;
+    }
+    (b.systems || []).forEach(function (s) {
+      var sid = Number(s[0]);
+      systems[sid] = (systems[sid] || 0) + Number(s[1] || 0);
+    });
+  });
+
+  var sysIds = Object.keys(systems).sort(function (a, b) { return systems[b] - systems[a]; });
+  var topSystems = sysIds.slice(0, 3).map(function (id) { return esc(_kbName(names, id)); }).join(' / ');
+  var maxSys = maxBattle && maxBattle.systems && maxBattle.systems.length
+    ? esc(_kbName(names, maxBattle.systems[0][0])) : '—';
+  var denom = homeDestroyed + homeLost;
+  var efficiency = denom > 0 ? homeDestroyed / denom * 100 : 0;
+  var range = minT && maxT ? fmtDateTime(minT * 1000) + ' 至 ' + fmtDateTime(maxT * 1000) : '—';
+
+  return '<div class="br-summary">'
+    + '<div class="br-summary-head"><div><span class="br-summary-kicker">近 ' + d.days + ' 天会战汇总</span><b>' + bs.length + ' 场 · ' + totalKills + ' 条击杀</b></div>'
+    + '<span class="br-summary-time">' + range + '</span></div>'
+    + '<div class="br-summary-grid">'
+    + '<div class="br-summary-item"><span>总战斗价值</span><b>' + fmtIsk(totalValue) + '</b></div>'
+    + '<div class="br-summary-item"><span>本方击毁</span><b class="home">' + fmtIsk(homeDestroyed) + '</b></div>'
+    + '<div class="br-summary-item"><span>本方损失</span><b class="foe">' + fmtIsk(homeLost) + '</b></div>'
+    + '<div class="br-summary-item"><span>综合效率</span><b>' + efficiency.toFixed(1) + '%</b></div>'
+    + '</div>'
+    + '<div class="br-summary-foot">'
+    + '<span>活跃星系 <b>' + sysIds.length + '</b></span>'
+    + '<span>参战人次 <b class="home">' + homePilots + '</b> 本方 / <b class="foe">' + foePilots + '</b> 敌对</span>'
+    + '<span>最激烈单场 <b class="sys">' + maxSys + '</b> · ' + (maxBattle ? maxBattle.killmails : 0) + ' 条</span>'
+    + (topSystems ? '<span>主要星系 <b>' + topSystems + '</b></span>' : '')
+    + '</div></div>';
+}
+
 function brRenderList() {
   var d = _br.list, bs = (d && d.battles) || [];
   var box = document.getElementById('brList');
@@ -4900,7 +4975,7 @@ function brRenderList() {
 
   kbFetchNames(sids, function (names) {
     kbMergeSystems(sids, names, function () {
-      var html = '<h4 class="kb-h">识别出 ' + bs.length + ' 场会战'
+      var html = brBuildListSummary(bs, d, names) + '<h4 class="kb-h">识别出 ' + bs.length + ' 场会战'
         + ' <em>近 ' + d.days + ' 天 · 点任意一场看报告</em></h4>';
       html += bs.map(function (b) {
         var dur = Math.max(1, Math.round((b.t1 - b.t0) / 60));
