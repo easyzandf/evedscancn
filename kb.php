@@ -508,18 +508,32 @@ function kbDedupe($kms) {
 }
 
 function kbCluster($kms, $gapSec, $minSize) {
-    usort($kms, function ($a, $b) { return strcmp($a['time'], $b['time']); });
-    $out = []; $cur = []; $prev = null;
+    $bySystem = [];
     foreach ($kms as $k) {
-        $ts = strtotime($k['time']);
-        if ($prev !== null && ($ts - $prev) > $gapSec) {
-            if (count($cur) >= $minSize) $out[] = $cur;
-            $cur = [];
-        }
-        $cur[] = $k;
-        $prev = $ts;
+        $sid = isset($k['system']) ? (int)$k['system'] : 0;
+        $bySystem[$sid][] = $k;
     }
-    if (count($cur) >= $minSize) $out[] = $cur;
+
+    $out = [];
+    foreach ($bySystem as $list) {
+        usort($list, function ($a, $b) { return strcmp($a['time'], $b['time']); });
+        $cur = []; $prev = null;
+        foreach ($list as $k) {
+            $ts = strtotime($k['time']);
+            if ($prev !== null && ($ts - $prev) > $gapSec) {
+                if (count($cur) >= $minSize) $out[] = $cur;
+                $cur = [];
+            }
+            $cur[] = $k;
+            $prev = $ts;
+        }
+        if (count($cur) >= $minSize) $out[] = $cur;
+    }
+    usort($out, function ($a, $b) {
+        $ta = strtotime($a[count($a) - 1]['time']);
+        $tb = strtotime($b[count($b) - 1]['time']);
+        return $tb <=> $ta;
+    });
     return $out;
 }
 
