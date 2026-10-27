@@ -4872,7 +4872,7 @@ function brLoad(force) {
     _br.tgt = t;
     var days = document.getElementById('brDays').value;
     _fetch('GET', 'kb.php?action=battles&type=' + encodeURIComponent(t.type)
-      + '&id=' + t.id + '&days=' + days + (force ? '&force=1' : ''), null, function (d) {
+      + '&id=' + t.id + '&days=' + days + (force ? '&force=1&_=' + Date.now() : ''), null, function (d) {
         if (!d || d.error) { box.innerHTML = '<p class="raid-note">会战分析失败，请稍后重试。</p>'; return; }
         _br.list = d;
         _br.retry = 0;

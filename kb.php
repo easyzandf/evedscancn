@@ -14,6 +14,9 @@
 // 上游自己就是 10 分钟量级的缓存，这里对齐，既不浪费请求也没有额外延迟。
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 // 压缩在 PHP 里做：nginx 全局的 gzip_types 里没有 application/json（静态 js 是压的、
 // JSON 不是），而本站 server 块属于共享配置。放这儿还能跟代码一起走版本控制。
@@ -54,6 +57,7 @@ define('KB_SALVAGE_BUDGET', 8.0);
 define('KB_ESI_ERR_FLOOR', 25);
 
 $ESI = 'https://esi.evetech.net/latest';
+define('KB_REGRESS_GUARD', 900); // Only reject an older upstream page while the cache itself is fresh.
 // zKillboard 要求带可识别的 UA（写明用途和站点），别用默认的 PHP UA
 $UA = 'EVE-DScan-CN/1.0 (+https://dscan.dpdns.org/)';
 
@@ -130,7 +134,7 @@ function httpJson($url) {
     $ctx = stream_context_create(['http' => [
         'timeout'       => 12,   // zKillboard 偶发要 8s+
         'ignore_errors' => true, // 让非 200 也返回 body，好判断到底是哪一步挂了
-        'header'        => "Accept: application/json\r\nUser-Agent: $UA\r\n",
+        'header'        => "Accept: application/json\r\nCache-Control: no-cache\r\nPragma: no-cache\r\nUser-Agent: $UA\r\n",
     ]]);
     $d = @file_get_contents($url, false, $ctx);
     if ($d === false || $d === '') return null;
@@ -237,7 +241,7 @@ function httpJsonMulti($urls) {
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 25,   // 实测单页最慢见过 8.5s
-            CURLOPT_HTTPHEADER     => ["Accept: application/json", "User-Agent: $UA"],
+            CURLOPT_HTTPHEADER     => ["Accept: application/json", "Cache-Control: no-cache", "Pragma: no-cache", "User-Agent: $UA"],
         ]);
         curl_multi_add_handle($mh, $ch);
         $hs[$k] = $ch;
@@ -673,10 +677,10 @@ function kbRefreshBattles($pdo, $key, $type, $id, $days, $gap) {
 
     // ⚠️ 上游会返回 CDN 缓存的旧页面：实测 page1 少一条时，最新 killmail 会整体退回约 3 分钟。
     // 后台刷新每 2 分钟就一次，很容易拿旧页面把新缓存覆盖掉，会战列表就会来回来去地回退。
-    // 所以写之前先比一下最新 killmail 的时刻，比现有缓存旧就整份放弃（返回 null）。
+    // 所以写之前先比一下最新 killmail 的时刻；只有缓存本身很新时才拒绝更旧的上游页。
     $prevAt = 0;
     $prev = cacheGet($pdo, $key, 31536000, $prevAt);          // 读现有的，不看年龄
-    if ($prev && isset($prev['battles'])
+    if ($prev && isset($prev['battles']) && (time() - $prevAt) <= KB_REGRESS_GUARD
         && kbNewestKm($battles) < kbNewestKm($prev['battles'])) {
         return null;
     }
