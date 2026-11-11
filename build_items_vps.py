@@ -15,8 +15,8 @@ BASE = _args.base          # extracted reference-data
 OUT = _args.output         # output
 
 def main():
-    cats = json.load(open(os.path.join(BASE, 'categories.json')))
-    groups = json.load(open(os.path.join(BASE, 'groups.json')))
+    cats = json.load(open(os.path.join(BASE, 'categories.json'), encoding='utf-8'))
+    groups = json.load(open(os.path.join(BASE, 'groups.json'), encoding='utf-8'))
 
     # 1) needed typeIDs for Module/Charge/Drone categories
     need = set()

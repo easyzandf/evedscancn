@@ -10,7 +10,7 @@
 
 - **D-Scan 解析** — 粘贴 EVE 扫描结果（本地/舰队/D-Scan 均可），自动识别中/英文舰船名，按作战功能分组（后勤/特种/火力/运输）；角色名或角色 ID 会同时查询国民卫队阵营
 - **ECM 建议** — 按扫描到的舰船势力自动推荐 ECM 干扰类型（雷达/引力/磁力/光雷达/多谱式）
-- **舰船浏览器** — 浏览全部 531 艘舰船的中文数据，支持搜索/分类/科技等级/排序筛选，每行附 **ECM 建议**；点击船名查看详情
+- **舰船浏览器** — 浏览全部 551 艘舰船的中文数据，支持搜索/分类/科技等级/排序筛选，每行附 **ECM 建议**；点击船名查看详情
 - **舰船详情弹窗** — 空船属性（质量/槽位/HP/电容/无人机等）+ 船体加成（中文 traits）
 - **装备购买（Buy List）** — 粘贴**现有资产**、**当前舰船配装**和**想切换的新配装**，自动扣除当前可拆下装备与机库已有，生成真正需要补购的清单；按 Jita IV-4 当前最低卖单和实际补购数量逐档计算补购总价，可手动刷新最新价格；一键复制 Multi-Buy 格式回游戏批量购买
 - **LP 兑换** — 对比加达里 / 盖伦特国民卫队 LP 商店，按所选空间站（默认 Jita IV-4）的最高收购价前五与最低出售价前五算“每点 LP 收益”，列出两个卫队各自最划算的兑换物、物品体积、48 小时成交量与均价；表头可点击排序（升降序切换、箭头指示，宽屏下滚动时吸顶）；物品名和每项兑换的材料清单都能一键复制（材料为 Multi-Buy 格式），材料旁可单独刷新材料价，展开行里还能按物品强刷买卖前五
@@ -107,9 +107,9 @@
 ```
 eve-dscan-cn/
 ├── index.html            # 主页面（页面 + CSS + JS 内嵌）
-├── ships-data.js         # 舰船数据 531 艘（CCP SDE + ESI）
-├── traits-data.js        # 船体加成中文数据 517 艘（everef ref-data）
-├── items-data.js         # 物品中英文词典 5976 种（装备购买用，懒加载）
+├── ships-data.js         # 舰船数据 551 艘（CCP SDE + ESI）
+├── traits-data.js        # 船体加成中文数据 537 艘（everef ref-data）
+├── items-data.js         # 物品中英文词典 6087 种（装备购买用，懒加载）
 ├── lp.js                 # LP 兑换页面逻辑（懒加载，页面切换时首次加载数据）
 ├── api.php               # 缓存 API（POST 保存 / GET 加载分享链接）
 ├── esi.php               # ESI 代理（单个查询 + 批量查询）
@@ -196,9 +196,9 @@ location ~ \.php$ {
 
 ## 数据来源
 
-- 舰船数据：CCP EVE Online Static Data Export (latest JSONL) + ESI
+- 舰船数据：CCP EVE Online Static Data Export 2026-11-10（build 3682781）+ ESI
 - 中文翻译：游戏内官方中文
-- 原始 Excel：`EVE舰船分类大全_修正版.xlsx`（423 艘，2026-07-20 更新），后续经 ESI 补充 108 艘缺失船（合计 531 艘）
+- 舰船目录：在 2026-07-20 的基础分类上，按 2026-11-10 的 ESI 舰船类目补齐学院舰、海军战巡及其他可用舰船（合计 551 艘）
 - 物品中英文名：everef reference-data（`reference-data-latest.tar.xz`）
 
 ## 记录 API（`raid.php`，30人本 / 战斗 共用）
@@ -323,7 +323,7 @@ LP 商店报价来自 ESI `/loyalty/stores/{corp}/offers/`，市场行情优先�
 
 ### 舰船/装备中文名从哪来
 
-前端按优先级解析 typeID：`ships-data.js`（531 艘，`attr.typeID` 索引）→ `items-data.js`（5976 项，顶层键就是 typeID）→ `kb.php?action=types`（本地没有的 NPC 舰船/建筑/无人机等，走 ESI `/universe/types/?language=zh`）。所以页面上不会出现裸露的 `#数字`。
+前端按优先级解析 typeID：`ships-data.js`（551 艘，`attr.typeID` 索引）→ `items-data.js`（6087 项，顶层键就是 typeID）→ `kb.php?action=types`（本地没有的 NPC 舰船/建筑/无人机等，走 ESI `/universe/types/?language=zh`）。所以页面上不会出现裸露的 `#数字`。
 
 星系名要单独走 `?action=systems`：ESI 的 `/universe/names/` **没有 `language` 参数、只返回英文**（Alparena），而星系有官方中文译名（阿尔帕伦纳），得打 `/universe/systems/{id}/?language=zh`。角色名和军团名是玩家自取的，本来就没有中文，仍走 `names`。
 

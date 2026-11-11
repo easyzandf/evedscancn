@@ -15,6 +15,7 @@ OUT = _args.output
 with open(INP, encoding='utf-8') as f:
     local = json.load(f)
 local_ids = set(int(re.search(r'typeID[:：]\s*(\d+)', d['note']).group(1)) for d in local)
+local_by_en = {d.get('en', '').strip().lower(): d for d in local}
 
 def esi(url):
     req = urllib.request.Request(url, headers={'User-Agent': 'EVE-DScan-CN/1.0'})
@@ -41,7 +42,7 @@ missing = sorted(esi_ids - local_ids)
 # --- blacklist: NPC / test / obsolete non-player ships ---
 # Note: ESI 'published' is false for Edition/Navy/特别版 ships even though they exist.
 # We keep any player-usable ship; only skip obvious NPC/test/obsolete items.
-BLACKLIST_NAME = ['police', 'polaris', 'soct', 'gfx', 'test site', 'cockroach',
+BLACKLIST_NAME = ['police', 'peacekeeper', 'polaris', 'soct', 'gfx', 'test site', 'cockroach',
                   'immovable', 'npc', 'concord', 'enigma', 'devourer', 'fury',
                   'medusa', 'lynx', 'swordspine', 'blade', 'erinye', 'dagger',
                   'kishar', 'gatherer', 'nation', 'soct ', 'soct1', 'soct2']
@@ -82,7 +83,8 @@ EN_GROUP_TO_SUBCAT = {
     'Destroyer': '驱逐舰', 'Expedition Frigate': '勘探护卫舰',
     'Cruiser': '巡洋舰', 'Logistics': '后勤舰', 'Heavy Assault Cruiser': '重型突击巡洋舰',
     'Heavy Interdiction Cruiser': '重型拦截巡洋舰', 'Strategic Cruiser': '战略巡洋舰',
-    'Combat Recon': '战斗侦察舰', 'Force Recon': '力场侦察舰',
+    'Combat Recon': '战斗侦察舰', 'Combat Recon Ship': '战斗侦察舰',
+    'Force Recon': '力场侦察舰', 'Force Recon Ship': '力场侦察舰',
     'Industrial Command Ship': '工业指挥舰',
     'Battlecruiser': '战地巡洋舰', 'Combat Battlecruiser': '战斗战列巡洋舰',
     'Attack Battlecruiser': '攻击战列巡洋舰',
@@ -146,7 +148,7 @@ for tid in missing:
         if fw.lower() in low:
             faction = fn; break
     if not faction:
-        faction = gname
+        faction = '特殊/未标注'
 
     # role guess
     role = ''
@@ -169,13 +171,26 @@ for tid in missing:
     base = re.sub(r'\s+(?:Tash-Murkon|Kador|Nugoeihuvi|Wiyrkomi|Kaalakiota|Aliastra|Inner Zone Shipping|Quafe|Nefantar|Krusual|Justice|Blood Raider|Serpentis|Guristas|Thukker Tribe|Police|Interbus|ORE Development|Victory|YC117)\s*(?:Edition)?', '', name_en).strip()
     base = re.sub(r'\s*Edition$', '', base).strip()
 
+    # AIR Academy hulls and navy ship variants inherit the faction/category of
+    # the base hull already present in the catalog.
+    family_name = re.sub(r'^Academy\s+', '', name_en, flags=re.I)
+    family_name = re.sub(r'\s+(?:Navy|Fleet)\s+Issue$', '', family_name, flags=re.I).strip()
+    family = local_by_en.get(family_name.lower())
+    cat = family.get('cat') if family else faction
+    inherited_subcat = family.get('subcat') if family else ''
+    inherited_role = family.get('role') if family else ''
+    if name_en.lower().startswith('academy '):
+        tech = 'T1'
+    if re.search(r'\s+(?:Navy|Fleet)\s+Issue$', name_en, flags=re.I):
+        tech = '势力'
+
     records.append({
-        'cat': faction,
-        'subcat': subcat,
+        'cat': cat,
+        'subcat': inherited_subcat or subcat,
         'tech': tech,
         'cn': name_zh,
         'en': name_en,
-        'role': role or '火力/通用',
+        'role': inherited_role or role or '火力/通用',
         'note': f'官方组: {gname} / {gname}；typeID: {tid}'
     })
 

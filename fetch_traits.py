@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fetch ship traits (bonuses) from everef ref-data, generate traits-data.js."""
-import argparse, json, re, sys, urllib.request
+import argparse, json, re, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -14,10 +14,18 @@ INP = _args.input
 OUT = _args.output
 JSON_OUT = _args.json_out
 
-def get(url, t=40):
-    req = urllib.request.Request(url, headers={'User-Agent': 'EVE-DScan-CN/1.0 (ship traits)'})
-    with urllib.request.urlopen(req, timeout=t) as r:
-        return r.read()
+def get(url, t=15):
+    last_error = None
+    for attempt in range(3):
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'EVE-DScan-CN/1.0 (ship traits)'})
+            with urllib.request.urlopen(req, timeout=t) as r:
+                return r.read()
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(0.5 * (attempt + 1))
+    raise last_error
 
 def clean(text):
     """Strip HTML tags like <a href=showinfo:X>Name</a> -> Name"""
@@ -79,12 +87,26 @@ for d in data:
 print(f'提取 {len(typeids)} 艘船的 traits...')
 all_skills = set()
 traits_map = {}
-with ThreadPoolExecutor(max_workers=10) as ex:
+with ThreadPoolExecutor(max_workers=24) as ex:
     results = ex.map(extract_traits, typeids)
     for tid, tr, skills in results:
         if tr:
             traits_map[tid] = tr
             all_skills |= skills
+
+# Under load the first broad pass can hit transient throttling. Retry only the
+# missing typeIDs with lower concurrency so the result is not silently reduced.
+for attempt in range(3):
+    missing = [tid for tid in typeids if tid not in traits_map]
+    if not missing:
+        break
+    print(f'重试缺失 traits: {len(missing)} 艘（第 {attempt + 1} 轮）')
+    time.sleep(1.5 * (attempt + 1))
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        for tid, tr, skills in ex.map(extract_traits, missing):
+            if tr:
+                traits_map[tid] = tr
+                all_skills |= skills
 
 print(f'有 traits: {len(traits_map)} 艘, 涉及技能: {len(all_skills)} 个')
 
@@ -98,7 +120,7 @@ def fetch_skill_zh(skid):
 
 print('查询技能中文名...')
 skill_names = {}
-with ThreadPoolExecutor(max_workers=12) as ex:
+with ThreadPoolExecutor(max_workers=20) as ex:
     for skid, name in ex.map(fetch_skill_zh, all_skills):
         skill_names[skid] = name
 

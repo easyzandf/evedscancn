@@ -1721,7 +1721,7 @@
       <ul>
         <li><b>D-Scan 解析</b> — 粘贴 EVE 扫描结果（本地 / 舰队 / D-Scan），自动识别中英文舰船名并按作战功能分组；角色名或角色 ID 会查询国民卫队阵营</li>
         <li><b>ECM 建议</b> — 扫描结果与浏览器中按舰船势力推荐 ECM 干扰（雷达 / 引力 / 磁力 / 光雷达 / 多谱式）</li>
-        <li><b>舰船浏览器</b> — 浏览全部 531 艘舰船的中文数据，支持搜索 / 分类 / 科技等级 / 排序，每行附 ECM 建议；点船名查看详情</li>
+        <li><b>舰船浏览器</b> — 浏览全部 551 艘舰船的中文数据，支持搜索 / 分类 / 科技等级 / 排序，每行附 ECM 建议；点船名查看详情</li>
         <li><b>舰船详情弹窗</b> — 空船属性（质量 / 槽位 / HP / 电容 / 无人机等）+ 船体加成（中文 traits）</li>
         <li><b>装备购买 Buy List</b> — 粘贴现有资产、当前舰船配装和新配装 → 扣除可复用装备 → 生成切换方案所需的购买清单，并按 Jita IV-4 当前最低卖单计算补购总价</li>
         <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名或角色 ID 按时间存档；名单标注国民卫队；点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
@@ -1808,9 +1808,9 @@
       <h2>项目结构</h2>
       <pre class="doc-pre">eve-dscan-cn/
 ├── index.html          主页面（页面 + CSS + JS 内嵌）
-├── ships-data.js       舰船数据 531 艘（CCP SDE + ESI）
-├── traits-data.js      船体加成中文数据 517 艘（everef ref-data）
-├── items-data.js       物品中英文词典 5976 种（装备购买用，懒加载）
+├── ships-data.js       舰船数据 551 艘（CCP SDE + ESI）
+├── traits-data.js      船体加成中文数据 537 艘（everef ref-data）
+├── items-data.js       物品中英文词典 6087 种（装备购买用，懒加载）
 ├── api.php / esi.php   PHP 分享缓存 / ESI 代理（单查 + 批量）
 ├── raid.php            30人本 & 战斗 记录 API（SQLite）
 ├── raid_data/          SQLite 数据目录（需 777 可写，勿提交）
@@ -1825,7 +1825,7 @@
       <ul>
         <li>舰船数据：CCP EVE Online Static Data Export (latest JSONL) + ESI</li>
         <li>中文翻译：游戏内官方中文</li>
-        <li>原始 Excel：<code>EVE舰船分类大全_修正版.xlsx</code>（423 艘，2026-07-20），后经 ESI 补充 108 艘（合计 531）</li>
+        <li>舰船目录：基础分类更新后，按 2026-11-10 ESI 舰船类目补齐学院舰、海军战巡及其他可用舰船（合计 551）</li>
         <li>物品中英文名：everef reference-data</li>
       </ul>
 
@@ -1846,7 +1846,7 @@
 </div>
 
 <div class="footer">
-  <p>数据来源 CCP EVE Online Static Data Export · 中文翻译整理自游戏数据 · 共 531 艘舰船</p>
+  <p>数据来源 CCP EVE Online Static Data Export 2026-11-10 · 中文翻译整理自游戏数据 · 共 551 艘舰船</p>
   <p>开源项目：<a href="https://gitcode.com/ZANDF/evedscancn" target="_blank">GitCode</a> · <a href="https://github.com/easyzandf/evedscancn" target="_blank">GitHub</a> · 欢迎 Star / Issue</p>
 </div>
 
@@ -1891,8 +1891,8 @@
 
 <!-- 自托管：截图功能不能依赖境外 CDN，见 vendor/ 目录 -->
 <script src="vendor/html2canvas.min.js?v=d7530aa0"></script>
-<script src="ships-data.js?v=2f4527d0"></script>
-<script src="traits-data.js?v=f59d22bf"></script>
+<script src="ships-data.js?v=a604c0f2"></script>
+<script src="traits-data.js?v=ca694155"></script>
 <script>
 // 图标路径取自 lucide（ISC 许可，https://lucide.dev）。
 // HTML 属性由 renderIcons() 补齐，没有引入运行时依赖。
@@ -2805,7 +2805,7 @@ function loadItems(cb) {
   if (_itemsReady) { if (cb) cb(); return; }
   if (window.ITEMS_DATA) { buildItemIndex(); _itemsReady = true; if (cb) cb(); return; }
   var s = document.createElement('script');
-  s.src = 'items-data.js?v=6f4a04b1';
+  s.src = 'items-data.js?v=185b19bd';
   s.onload = function() { buildItemIndex(); _itemsReady = true; if (cb) cb(); };
   s.onerror = function() { if (cb) cb(); };   // dict missing -> fall back to raw-name matching
   document.head.appendChild(s);
@@ -4669,8 +4669,8 @@ function fmtIsk(v) {
   return String(v);
 }
 
-// typeID -> 中文名。本地 ships-data.js（531 艘，带中文）优先；其次 items-data.js
-// （5976 项，顶层键就是 typeID，装备模块靠它）；都没有就退回 #id 而不是空白。
+// typeID -> 中文名。本地 ships-data.js（551 艘，带中文）优先；其次 items-data.js
+// （6087 项，顶层键就是 typeID，装备模块靠它）；都没有就退回 #id 而不是空白。
 var _kbShipIdx = null;
 var _kbTypeDict = {};   // ESI 补来的 typeID -> 中文名（本地词典没有的那些）
 
