@@ -117,7 +117,7 @@ def main():
     f.close()
     sys.stdout.write('extracted: %d\n' % len(out)); sys.stdout.flush()
 
-    js = '// EVE item names (en + zh) for buy-list matching\nconst ITEMS_DATA = ' + json.dumps(out, ensure_ascii=False) + ';\n'
+    js = '// EVE item names (en + zh) for buy-list matching\nvar ITEMS_DATA = ' + json.dumps(out, ensure_ascii=False) + ';\n'
     with open(OUT, 'w', encoding='utf-8') as fo:
         fo.write(js)
     sys.stdout.write('items-data.js: %d bytes\n' % os.path.getsize(OUT))

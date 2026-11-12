@@ -2805,7 +2805,7 @@ function loadItems(cb) {
   if (_itemsReady) { if (cb) cb(); return; }
   if (window.ITEMS_DATA) { buildItemIndex(); _itemsReady = true; if (cb) cb(); return; }
   var s = document.createElement('script');
-  s.src = 'items-data.js?v=185b19bd';
+  s.src = 'items-data.js?v=ec81e108';
   s.onload = function() { buildItemIndex(); _itemsReady = true; if (cb) cb(); };
   s.onerror = function() { if (cb) cb(); };   // dict missing -> fall back to raw-name matching
   document.head.appendChild(s);
