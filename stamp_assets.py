@@ -25,6 +25,7 @@ INDEX = ROOT / 'index.html'
 ASSETS = [
     'vendor/html2canvas.min.js',
     'apple-touch-icon.png',
+    'buy-queue.js',
     'items-data.js',
     'lp.js',
     'ships-data.js',

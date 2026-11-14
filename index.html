@@ -400,6 +400,42 @@
     padding: 6px 8px; font-size: 14px; border-radius: 3px;
   }
   .buy-bar .hint2 { color: #666; font-size: 12px; margin-left: auto; }
+  .buy-plan-card {
+    border: 1px solid #2d3a55; border-radius: 6px; background: #151a24;
+    margin: 10px 0; overflow: hidden;
+  }
+  body.light .buy-plan-card { background: #fff; border-color: #ddd; }
+  .buy-plan-head {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-bottom: 1px solid #263248; background: #171e2b;
+  }
+  body.light .buy-plan-head { background: #f7f7f7; border-color: #eee; }
+  .buy-plan-title { flex: 1; min-width: 0; color: #e6e6e6; }
+  body.light .buy-plan-title { color: #333; }
+  .buy-plan-order { color: #6f86a6; margin-right: 6px; }
+  .buy-plan-count { color: #999; font-size: 12px; margin-left: 8px; }
+  .buy-plan-status {
+    padding: 2px 7px; border-radius: 999px; font-size: 11px;
+    color: #9bb8e0; border: 1px solid #36527b;
+  }
+  .buy-plan-status.confirmed { color: #7fd39b; border-color: #326847; background: #13271c; }
+  body.light .buy-plan-status { color: #315f9c; background: #eef5ff; border-color: #c8dbf5; }
+  body.light .buy-plan-status.confirmed { color: #267344; background: #edf9f1; border-color: #bfe4cc; }
+  .buy-plan-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+  .buy-plan-actions button {
+    padding: 3px 7px; min-height: 0; font-size: 11px; line-height: 1.3;
+  }
+  .buy-plan-details { padding: 0 12px 10px; }
+  .buy-plan-details summary { color: #9fb6d4; cursor: pointer; padding: 8px 0; font-size: 12px; }
+  .buy-plan-details table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .buy-plan-details th, .buy-plan-details td { padding: 5px 7px; border-top: 1px solid #263248; text-align: left; }
+  .buy-plan-details th { color: #8193ad; font-weight: normal; }
+  body.light .buy-plan-details th, body.light .buy-plan-details td { border-color: #eee; }
+  .buy-queue-meta { display: flex; gap: 14px; flex-wrap: wrap; color: #8293ac; font-size: 12px; margin: 8px 0; }
+  .buy-queue-meta b { color: #f0ad4e; }
+  .buy-stock-adjust { margin: 8px 0 12px; color: #9fb6d4; font-size: 12px; }
+  .buy-stock-adjust button { margin-left: 8px; padding: 3px 7px; min-height: 0; }
+  .buy-empty-plan { color: #777; font-size: 12px; padding: 10px 0; }
   #buyResult .qty-need { color: #f0ad4e; font-weight: bold; }
   #buyResult .qty-have { color: #6fae6f; }
   #buyResult .qty-buy { color: #ff7a7a; font-weight: bold; }
@@ -1501,11 +1537,16 @@
 
     <div class="buy-bar">
       <label>④ 新配装要装 <input type="number" id="fitCount" value="1" min="1"> 艘</label>
-      <button class="btn btn-go" onclick="computeBuyList()">计算购买清单</button>
-      <button class="btn btn-clr" onclick="clearBuy()">清空</button>
-      <span class="hint2">需购买 = 新配装需求 − 当前配装可复用 − 已有资产；弹药/无人机按 xN 计算</span>
+      <button class="btn btn-go" id="buyAddPlanBtn">加入采购队列</button>
+      <button class="btn btn-clr" onclick="clearBuy()">清空全部</button>
+      <span class="hint2">按队列顺序占用库存；确认购买的批次会继续占用，避免下一套重复使用</span>
     </div>
 
+    <div class="result-wrap hidden" id="buyQueuePanel">
+      <h3>采购队列 <span id="buyQueueCount"></span></h3>
+      <div class="buy-queue-meta" id="buyQueueMeta"></div>
+      <div id="buyQueueCards"></div>
+    </div>
     <div class="result-wrap hidden" id="buyResult"></div>
   </div>
 
@@ -1723,7 +1764,7 @@
         <li><b>ECM 建议</b> — 扫描结果与浏览器中按舰船势力推荐 ECM 干扰（雷达 / 引力 / 磁力 / 光雷达 / 多谱式）</li>
         <li><b>舰船浏览器</b> — 浏览全部 551 艘舰船的中文数据，支持搜索 / 分类 / 科技等级 / 排序，每行附 ECM 建议；点船名查看详情</li>
         <li><b>舰船详情弹窗</b> — 空船属性（质量 / 槽位 / HP / 电容 / 无人机等）+ 船体加成（中文 traits）</li>
-        <li><b>装备购买 Buy List</b> — 粘贴现有资产、当前舰船配装和新配装 → 扣除可复用装备 → 生成切换方案所需的购买清单，并按 Jita IV-4 当前最低卖单计算补购总价</li>
+        <li><b>装备购买 Buy List</b> — 多套配装加入采购队列，按顺序占用共享资产；确认购买的批次继续占用库存，避免下一套重复使用；相同物品合并后按 Jita IV-4 当前最低卖单计算补购总价</li>
         <li><b>30人本 / 战斗记录</b> — 粘贴本场角色名或角色 ID 按时间存档；名单标注国民卫队；点头衔看该玩家名下所有号及两边参与数据；跨场分析出场次数、小号分布、时段与日期分布</li>
         <li><b>ESI 查询</b> — 粘贴角色名列表，自动查询军团 / 联盟 / 头衔</li>
         <li><b>会战报告</b> — 把击杀流水自动切成一场场会战，每场给出双方对比（人数 / 损失 / 击毁 / 效率 + <b>联盟构成</b>）、舰船编成、累计损失曲线、<b>时间轴</b>、<b>参战名单</b>；星系可多选筛选，且筛选会重算整份报告</li>
@@ -1736,8 +1777,9 @@
         <li>资产支持制表符或空格分隔；「名称 数量」「数量 名称」「名称 xN」都能识别</li>
         <li>复制当前舰船的装配 → 粘贴到②；不填则只按机库资产抵扣</li>
         <li>复制想切换到的<b>新配装</b>（游戏内复制 / Pyfa / EVE Workbench）→ 粘贴到③；也支持游戏内「名称、数量、分类、槽位」多列清单</li>
-        <li>在④填要装的<b>艘数</b> → 点「计算购买清单」</li>
-        <li>结果按需购买数排序（装备、弹药、无人机、船体都会算），并显示 Jita IV-4 均价、小计和总价；可点「刷新最新价格」重拉站内卖单，再复制 Multi-Buy 清单或截图</li>
+        <li>在④填要装的<b>艘数</b> → 点「加入采购队列」；可继续粘贴其他配装并加入同一队列</li>
+        <li>队列按顺序分配资产，当前舰船模块只复用一次；点「确认已购买」后该批次锁定并继续占用库存，「撤销并释放」会把占用和已购买数量重新变为可用库存</li>
+        <li>页面底部合并所有待确认批次，相同物品自动合并，并显示 Jita IV-4 均价、小计和总价；可刷新站内卖单，再复制 Multi-Buy 清单或截图</li>
       </ol>
       <p style="color:#777;font-size:12px">原理：通过 typeID 物品词典把中文物品统一归并；需购买 = 新配装需求 − 当前舰船可拆下复用 − 机库已有。同一船型的当前舰船会自动抵扣一艘目标船体；弹药 / 无人机按新配装里的 xN 计算。Jita 价格只取 IV-4 站内卖单，并按实际补购数量从最低价逐档吃单；库存不足时会标记缺货，并把总价标为已知下限。</p>
 
@@ -5608,6 +5650,7 @@ document.addEventListener('click', function(e) {
   if (t.dataset.raidGoto !== undefined) { closePersonModal(); raidGoto(k, t.dataset.raidGoto); }
 });
 </script>
+<script src="buy-queue.js?v=cbb64e33"></script>
 <script src="lp.js?v=50360cc8"></script>
 </body>
 </html>
